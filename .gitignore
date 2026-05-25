@@ -1,0 +1,43 @@
+# 依赖
+node_modules/
+client/node_modules/
+server/node_modules/
+
+# 构建产物
+client/dist/
+dist-exe/win-unpacked/
+dist-exe/.icon-ico/
+dist-exe/*.blockmap
+dist-exe/builder-debug.yml
+
+# 大文件 exe 通过 Releases 发布，不入库
+dist-exe/*.exe
+
+# 日志
+*.log
+startup.log
+
+# IDE & 系统
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# 数据库 & 用户数据
+*.db
+*.db-journal
+server/data.db
+server/data/
+
+# 临时文件
+*.tmp
+*.bak
+.crystal-marker
+
+# Claude / Agent 私有配置
+.agents/
+.claude/local/
+
+# 环境变量
+.env
+.env.local

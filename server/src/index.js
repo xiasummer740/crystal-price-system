@@ -1,0 +1,159 @@
+import express from 'express'
+import cors from 'cors'
+import multer from 'multer'
+import path from 'path'
+import fs from 'fs'
+import { exec } from 'child_process'
+import { fileURLToPath } from 'url'
+import pricesRouter from './routes/prices.js'
+import samplesRouter from './routes/samples.js'
+import translatorRouter from './routes/translator.js'
+import { exportToExcel, importFromExcel, generateTemplate, generateSampleTemplate } from './utils/export.js'
+import { initDb, saveNow } from './db.js'
+import { triggerBackup, flushPending } from './utils/excelBackup.js'
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
+const app = express()
+const PORT = process.env.PORT || 3266
+
+app.use(cors())
+app.use(express.json())
+
+// 简易鉴权：写操作需 token，读取操作开放
+const AUTH_FILE = path.join(process.env.DATA_DIR || path.join(__dirname, '..'), '.auth_token')
+let authToken = ''
+if (fs.existsSync(AUTH_FILE)) { authToken = fs.readFileSync(AUTH_FILE, 'utf8').trim() }
+if (!authToken) { authToken = 'crystal_' + Math.random().toString(36).slice(2) + Date.now().toString(36); fs.writeFileSync(AUTH_FILE, authToken) }
+app.use((req, res, next) => {
+  if (req.method === 'GET' || req.path === '/api/auth/verify') return next()
+  const token = req.headers['x-auth-token'] || req.query._token || ''
+  if (token === authToken) return next()
+  if (req.originalUrl?.includes('/api/')) return res.status(401).json({ code: 1, msg: '未授权，请刷新页面获取新token' })
+  next()
+})
+app.get('/api/auth/token', (_req, res) => res.json({ code: 0, data: { token: authToken } }))
+app.get('/api/auth/verify', (req, res) => { const t = req.query.token || ''; res.json({ code: t === authToken ? 0 : 1 }) })
+
+// 写操作自动 Excel 备份（节流 30s，FIFO 保留 5 份）
+app.use((req, res, next) => {
+  if (/^(POST|PUT|DELETE|PATCH)$/.test(req.method)) {
+    res.on('finish', () => {
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        if (req.originalUrl.startsWith('/api/prices') || req.originalUrl === '/api/import') {
+          triggerBackup('prices')
+        } else if (req.originalUrl.startsWith('/api/samples')) {
+          triggerBackup('samples')
+        }
+      }
+    })
+  }
+  next()
+})
+
+// API routes
+app.use('/api/prices', pricesRouter)
+app.use('/api/samples', samplesRouter)
+app.use('/api/translator', translatorRouter)
+
+// 导出 Excel
+app.get('/api/export', (req, res) => {
+  try {
+    const buffer = exportToExcel(req.query)
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    const fn = '报价记录.xlsx'
+    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(fn)}"; filename*=UTF-8''${encodeURIComponent(fn)}`)
+    res.send(buffer)
+  } catch (e) {
+    res.status(500).json({ code: 1, msg: e.message })
+  }
+})
+
+// 导入 Excel
+const upload = multer({ storage: multer.memoryStorage() })
+app.post('/api/import', upload.single('file'), (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ code: 1, msg: '请选择文件' })
+    const count = importFromExcel(req.file.buffer)
+    res.json({ code: 0, data: { count }, msg: `成功导入 ${count} 条记录` })
+  } catch (e) {
+    res.status(500).json({ code: 1, msg: e.message })
+  }
+})
+
+// 下载导入模板
+app.get('/api/template', (_req, res) => {
+  try {
+    const buffer = generateTemplate()
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    const fn = '报价导入模板.xlsx'
+    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(fn)}"; filename*=UTF-8''${encodeURIComponent(fn)}`)
+    res.send(buffer)
+  } catch (e) {
+    res.status(500).json({ code: 1, msg: e.message })
+  }
+})
+
+// 规格书上传
+const specDir = path.join(process.env.DATA_DIR || path.join(__dirname, '..'), '规格书')
+if (!fs.existsSync(specDir)) fs.mkdirSync(specDir, { recursive: true })
+app.use('/api/specs', express.static(specDir))
+
+const specUpload = multer({ storage: multer.diskStorage({
+  destination: specDir,
+  filename: (_req, file, cb) => {
+    const ext = path.extname(file.originalname)
+    const base = path.basename(file.originalname, ext)
+    let name = file.originalname
+    let n = 1
+    while (fs.existsSync(path.join(specDir, name))) {
+      name = `${base} (${n})${ext}`
+      n++
+    }
+    cb(null, name)
+  }
+})})
+app.post('/api/upload-spec', specUpload.single('file'), (req, res) => {
+  if (!req.file) return res.status(400).json({ code: 1, msg: '请选择文件' })
+  // 返回规格书访问路径
+  const url = `/api/specs/${encodeURIComponent(req.file.filename)}`
+  res.json({ code: 0, data: { url, filename: req.file.originalname } })
+})
+
+// 打开数据文件夹（仅桌面端有效）
+app.get('/api/open-data-folder', (_req, res) => {
+  const dataDir = process.env.DATA_DIR
+  if (dataDir && process.platform === 'win32') exec(`explorer "${dataDir}"`)
+  res.json({ code: 0 })
+})
+
+// 生产环境托管前端静态文件
+const clientDist = path.join(__dirname, '..', '..', 'client', 'dist')
+app.use(express.static(clientDist))
+app.get('*', (req, res) => {
+  if (req.path.startsWith('/api/')) return res.status(404).json({ code: 1, msg: '接口不存在' })
+  res.sendFile(path.join(clientDist, 'index.html'))
+})
+
+// 初始化数据库
+await initDb()
+
+// 预生成导入模板到模板文件夹
+const templateDir = path.join(process.env.DATA_DIR || path.join(__dirname, '..'), '模板')
+if (!fs.existsSync(templateDir)) fs.mkdirSync(templateDir, { recursive: true })
+try { fs.writeFileSync(path.join(templateDir, '报价导入模板.xlsx'), generateTemplate()) } catch {}
+try { fs.writeFileSync(path.join(templateDir, '样品导入模板.xlsx'), generateSampleTemplate()) } catch {}
+
+// 导出 app 供 Electron 主进程使用
+export default app
+
+// 直接运行时启动监听（非 Electron 模式）
+const isElectron = process.env.ELECTRON_MODE === 'true' || process.argv[1]?.includes('electron')
+if (!isElectron) {
+  app.listen(PORT, () => {
+    console.log(`晶振报价系统已启动: http://localhost:${PORT}`)
+  })
+}
+
+// 退出时保存数据库
+process.on('SIGINT', () => { flushPending(); saveNow(); process.exit() })
+process.on('SIGTERM', () => { flushPending(); saveNow(); process.exit() })

@@ -1,0 +1,34 @@
+appId: com.crystal.price-system
+productName: 晶振报价管理系统
+beforePack: "scripts/clean-dist.js"
+directories:
+  output: dist-exe
+  buildResources: build
+files:
+  - electron/**/*
+  - server/**/*
+  - client/dist/**/*
+  - package.json
+asarUnpack:
+  - node_modules/sql.js/dist/*.wasm
+extraResources: []
+win:
+  icon: client/public/SJK-256.png
+  target:
+    - target: portable
+      arch: [x64]
+    - target: nsis
+      arch: [x64]
+portable:
+  artifactName: 晶振报价管理系统-便携版-v${version}.exe
+nsis:
+  artifactName: 晶振报价管理系统-安装版-v${version}.exe
+  oneClick: false
+  perMachine: false
+  allowElevation: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: 晶振报价管理系统
+  uninstallDisplayName: 晶振报价管理系统
+  include: build/installer.nsh

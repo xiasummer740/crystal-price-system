@@ -1,0 +1,19 @@
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body, #app { height: 100%; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif; }
+body { background: #f0f2f5; -webkit-font-smoothing: antialiased; }
+
+.page-container { min-height: 100vh; }
+.page-header { background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); color: #e0e0e0; padding: 10px 20px; font-size: 16px; font-weight: 500; display: flex; align-items: center; gap: 10px; position: sticky; top: 0; z-index: 99; letter-spacing: 0.5px; }
+.page-header .back-btn { color: #e0e0e0; font-size: 18px; cursor: pointer; }
+.page-content { padding: 0; }
+
+@media (min-width: 768px) {
+  .page-header { padding: 10px 24px; font-size: 17px; }
+}
+
+/* mobile card styling */
+.record-card { background: #fff; border-radius: 8px; padding: 12px; margin-bottom: 10px; box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
+.record-card .row { display: flex; justify-content: space-between; padding: 4px 0; font-size: 14px; }
+.record-card .label { color: #999; flex-shrink: 0; margin-right: 8px; }
+.record-card .value { color: #323233; text-align: right; word-break: break-all; }
+.record-card .price { color: #ee0a24; font-weight: 600; font-size: 15px; }
