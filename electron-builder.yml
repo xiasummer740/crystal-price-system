@@ -11,7 +11,9 @@ files:
   - package.json
 asarUnpack:
   - node_modules/sql.js/dist/*.wasm
-extraResources: []
+extraResources:
+  - from: scripts
+    to: scripts
 win:
   icon: client/public/SJK-256.png
   target:
