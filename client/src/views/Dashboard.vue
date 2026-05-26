@@ -3,6 +3,9 @@
     <header class="topbar">
       <div class="topbar-left"><span class="logo-dot"></span><span class="logo-text">晶振报价系统</span></div>
       <div class="topbar-right">
+        <span class="clock-display" :title="clockDate">
+          <span class="clock-dot"></span>{{ clockTime }}
+        </span>
         <router-link to="/translator" class="nav-btn" style="margin-right:6px;background:#f0f6ff;color:#1565c0;border-color:#bbdefb">规格书翻译</router-link>
         <router-link to="/samples" class="nav-btn" style="margin-right:6px">样品登记</router-link>
         <router-link to="/trash" class="nav-btn" style="margin-right:6px;color:#e53935;border-color:#ffcdd2">回收站</router-link>
@@ -384,7 +387,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { usePriceStore } from '../stores/price.js'
 import { importExcel, http } from '../utils/api.js'
@@ -619,6 +622,20 @@ const settingsTaxRate = ref(Number(localStorage.getItem('crystal_taxRate')) || 1
 const settingsFxRate = ref(Number(localStorage.getItem('crystal_rate')) || 7)
 function saveSettings() { localStorage.setItem('crystal_taxRate', settingsTaxRate.value); localStorage.setItem('crystal_rate', settingsFxRate.value) }
 onMounted(async()=>{store.setFilter('page',1);await store.loadMetaOptions();await store.loadGroupedList();localIp.value=window.electronAPI?window.electronAPI.getLanIp():(window.location.hostname||'127.0.0.1')})
+
+// 实时时钟（每秒刷新）
+const clockTime = ref('')
+const clockDate = ref('')
+let clockTimer = null
+function updateClock() {
+  const d = new Date()
+  const pad = n => String(n).padStart(2, '0')
+  clockTime.value = `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
+  const weekDays = ['日', '一', '二', '三', '四', '五', '六']
+  clockDate.value = `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} 星期${weekDays[d.getDay()]}`
+}
+onMounted(() => { updateClock(); clockTimer = setInterval(updateClock, 1000) })
+onUnmounted(() => { if (clockTimer) clearInterval(clockTimer) })
 </script>
 
 <style scoped>
@@ -628,6 +645,9 @@ onMounted(async()=>{store.setFilter('page',1);await store.loadMetaOptions();awai
 .logo-dot{width:8px;height:8px;border-radius:50%;background:#1989fa}
 .logo-text{font-size:15px;font-weight:600;color:#323233;letter-spacing:.5px}
 .topbar-right{display:flex;align-items:center}
+.clock-display{display:inline-flex;align-items:center;gap:6px;margin-right:12px;padding:4px 12px;background:linear-gradient(135deg,#1a1a2e 0%,#16213e 100%);color:#00ff88;font-family:'Consolas','Courier New',monospace;font-size:14px;font-weight:600;letter-spacing:1px;border-radius:4px;box-shadow:inset 0 0 8px rgba(0,255,136,0.15);user-select:none;cursor:default}
+.clock-dot{width:6px;height:6px;border-radius:50%;background:#00ff88;box-shadow:0 0 6px #00ff88;animation:clockPulse 1s ease-in-out infinite}
+@keyframes clockPulse{0%,100%{opacity:1}50%{opacity:0.3}}
 .main-area{flex:1;overflow:auto;padding:16px 20px;display:flex;flex-direction:column}
 
 /* 工具条 */
