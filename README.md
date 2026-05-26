@@ -6,7 +6,7 @@ PC 端双击 exe 即可运行，手机端通过局域网 WiFi 访问。数据存
 
 ## 下载安装
 
-前往 [Releases](https://github.com/xiasummer740/crystal-price-system/releases) 下载最新版 `晶振报价管理系统-安装版-vX.X.X.exe`，双击安装即可。
+前往 [Releases](https://github.com/xiasummer740/crystal-price-system/releases) 页面，下载最新版 `crystal-price-system-vX.X.X-setup.exe`（标签：晶振报价管理系统安装版），双击安装即可。
 
 ## 功能特性
 
