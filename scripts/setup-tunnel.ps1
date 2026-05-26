@@ -135,15 +135,12 @@ if (-not $ZONES.success -or $ZONES.result.Count -eq 0) {
 $ZONE_ID = $ZONES.result[0].id
 Write-Host "  Zone ID: $ZONE_ID" -ForegroundColor Green
 
-# 获取 Account ID
+# 获取 Account ID（从 Zone 信息直接拿，不需要额外 API 权限）
 Write-Host "  查询账户 ID..."
-$ACCOUNTS = Invoke-RestMethod -Uri "$API_BASE/accounts" -Headers $API_HEADERS -Method Get
-if (-not $ACCOUNTS.success -or $ACCOUNTS.result.Count -eq 0) {
-    Write-Host "  [错误] 找不到 Cloudflare 账户" -ForegroundColor Red
-    Read-Host "按回车退出"
-    exit 1
-}
-$ACCOUNT_ID = $ACCOUNTS.result[0].id
+$ZONE_DETAIL = Invoke-RestMethod -Uri "$API_BASE/zones/$ZONE_ID" -Headers $API_HEADERS -Method Get
+$ACCOUNT_ID = $ZONE_DETAIL.result.account.id
+$ACCOUNT_NAME = $ZONE_DETAIL.result.account.name
+Write-Host "  账户: $ACCOUNT_NAME ($ACCOUNT_ID)" -ForegroundColor Green
 
 # 获取 Tunnel 列表，找 crystal-tunnel
 Write-Host "  查询 Tunnel 信息..."
