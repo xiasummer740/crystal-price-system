@@ -49,3 +49,14 @@ npm run package:installer
 ## 局域网访问
 
 启动桌面端后，手机连接同一 WiFi，浏览器访问 `http://<PC的IP>:3266` 即可查询。
+
+## 外网访问（外地手机也能用）
+
+通过 Cloudflare Tunnel 把电脑上的系统映射到一个固定域名，外网任意网络都能访问，自动 HTTPS。
+
+详细配置步骤：[docs/外网访问教程.md](docs/外网访问教程.md)
+
+一键脚本位于 `scripts/tunnel/`：
+- `install-service.bat` — 安装 cloudflared 为开机自启服务
+- `check-status.bat` — 查看运行状态
+- `uninstall-service.bat` — 卸载服务

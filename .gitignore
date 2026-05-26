@@ -37,6 +37,8 @@ server/data/
 # Claude / Agent 私有配置
 .agents/
 .claude/local/
+.claude/
+skills-lock.json
 
 # 环境变量
 .env
