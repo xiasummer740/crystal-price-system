@@ -16,7 +16,7 @@ PC 端双击 exe 即可运行，手机端通过局域网 WiFi 访问查看。
 
 - **桌面端**: Electron 33 — 包裹 Express 后端 + Vue 前端为一个独立 exe
 - **前端**: Vue 3 + Vite + Vant UI 4 + Pinia + Vue Router
-- **后端**: Node.js + Express + better-sqlite3（内嵌在 Electron 主进程启动）
+- **后端**: Node.js + Express + sql.js（内嵌在 Electron 主进程启动）
 - **移动端**: 手机浏览器访问局域网地址 + PWA 离线缓存
 - **Excel**: SheetJS (xlsx)
 - **打包**: electron-builder (portable exe / nsis installer)
