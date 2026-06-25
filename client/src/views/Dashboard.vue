@@ -1,7 +1,7 @@
 <template>
   <div class="app-wrap">
     <header class="topbar">
-      <div class="topbar-left"><span class="logo-dot"></span><span class="logo-text">晶振报价系统</span></div>
+      <div class="topbar-left"><span class="logo-dot"></span><span class="logo-text">晶振报价系统</span><span v-if="isDev" class="dev-badge">开发版</span></div>
       <div class="topbar-right">
         <span class="clock-display" :title="clockDate">
           <span class="clock-dot"></span>{{ clockTime }}
@@ -400,6 +400,7 @@ const fileInput = ref(null)
 const exporting = ref(false)
 const localIp = ref('127.0.0.1')
 const isElectron = ref(!!window.electronAPI)
+const isDev = ref(new URLSearchParams(window.location.search).get('packaged') === 'false')
 async function openDataFolder() {
   try { await http.get('/open-data-folder') } catch { showToast('此功能仅在桌面端可用') }
 }
@@ -718,7 +719,7 @@ onUnmounted(() => { if (clockTimer) clearInterval(clockTimer) })
 .ps-select:focus{border-color:#1989fa}
 .lan-tip{padding:8px;color:#ad8b00;font-size:11px;text-align:center}
 .nav-btn{background:transparent;color:#666;border:1px solid #d9d9d9;border-radius:4px;padding:4px 10px;font-size:12px;cursor:pointer;font-family:inherit;text-decoration:none;display:inline-block}
-.nav-btn:hover{color:#1989fa;border-color:#1989fa}
+.dev-badge{display:inline-block;padding:1px 6px;border-radius:3px;font-size:10px;font-weight:600;background:#ff6b35;color:#fff;margin-left:6px;line-height:1.4;vertical-align:middle}.nav-btn:hover{color:#1989fa;border-color:#1989fa}
 .pop-inner{padding:16px;overflow-y:auto;height:100%}
 .pop-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
 .pop-head h3{font-size:16px;margin:0}.pbadge{font-size:12px;color:#999;font-weight:400}

@@ -348,7 +348,7 @@ function createWindow(port) {
     return { action: 'deny' }
   })
 
-  const url = `http://localhost:${port}?v=${app.getVersion()}`
+  const url = `http://localhost:${port}?v=${app.getVersion()}&packaged=${app.isPackaged}`
   log(`Loading URL: ${url}`)
   mainWindow.loadURL(url)
 }
