@@ -24,6 +24,7 @@ export const useNotesStore = defineStore('notes', {
   actions: {
     setFilter(key, val) {
       this.filters[key] = val
+      if (key !== 'page') this.filters.page = 1
     },
     resetFilters() {
       this.filters = { page: 1, pageSize: 50, keyword: '', customer: '', category_id: '', status: '', priority: '', reminder: '' }

@@ -116,7 +116,7 @@ if (!fs.existsSync(specDir)) fs.mkdirSync(specDir, { recursive: true })
 app.use('/api/specs', express.static(specDir))
 
 // 记事便签图片上传
-const notesUploadDir = path.join(process.env.DATA_DIR || path.join(__dirname, '..'), 'uploads', 'notes')
+const notesUploadDir = path.join(process.env.DATA_DIR || path.join(__dirname, '..'), '记事图片库')
 if (!fs.existsSync(notesUploadDir)) fs.mkdirSync(notesUploadDir, { recursive: true })
 app.use('/api/uploads/notes', express.static(notesUploadDir))
 

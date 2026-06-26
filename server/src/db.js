@@ -19,7 +19,7 @@ export async function initDb() {
   // 用 locateFile 指定 WASM 路径，确保 Electron 打包后也能找到
   let wasmDir = path.join(__dirname, '..', '..', 'node_modules', 'sql.js', 'dist')
   // asarUnpack 解包后，WASM 文件在 .asar.unpacked 目录下
-  if (wasmDir.includes('.asar')) wasmDir = wasmDir.replace('.asar', '.asar.unpacked')
+  if (wasmDir.includes('.asar') && !wasmDir.includes('.asar.unpacked')) wasmDir = wasmDir.replace('.asar', '.asar.unpacked')
   SQL = await initSqlJs({ locateFile: (file) => path.join(wasmDir, file) })
 
   // 从文件加载已有数据库，否则创建新库
@@ -193,11 +193,20 @@ export function queryOne(sql, params = []) {
   return rows[0] || null
 }
 
+let saveDirty = false
+let saveTimer = null
+function scheduleSave() {
+  if (saveDirty) return
+  saveDirty = true
+  clearTimeout(saveTimer)
+  saveTimer = setTimeout(() => { saveDirty = false; try { saveNow() } catch (e) { console.error('save error:', e) } }, 300)
+}
+
 // 执行写入语句，返回 { changes, lastInsertRowid }
 export function execute(sql, params = []) {
   db.run(sql, params)
   const lastId = db.exec('SELECT last_insert_rowid() as id')[0]?.values[0]?.[0] ?? null
-  saveNow()
+  scheduleSave()
   return { lastInsertRowid: lastId, changes: db.getRowsModified() }
 }
 

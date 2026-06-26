@@ -67,7 +67,9 @@ async function onDelete(cat, i) {
     list.value.splice(i, 1)
     showToast('已删除')
     emit('updated')
-  } catch {}
+  } catch (e) {
+    if (e !== 'cancel' && !e?.message?.includes('cancel')) showToast('删除失败: ' + (e.response?.data?.msg || e.message))
+  }
 }
 </script>
 

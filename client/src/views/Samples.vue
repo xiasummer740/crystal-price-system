@@ -8,7 +8,11 @@
     </header>
     <div class="main-area">
       <div class="toolbar">
-        <van-search v-model="keyword" shape="round" placeholder="搜索..." @search="reload" @clear="reload" class="toolbar-search" />
+        <div class="search-box">
+          <svg class="search-icon" viewBox="0 0 24 24" width="15" height="15" fill="#999"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0016 9.5 6.5 6.5 0 109.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+          <input v-model="keyword" placeholder="搜索编码、名称、品牌…" @input="onSearchDebounced" @keydown.enter="reload" class="search-input" />
+          <span v-if="keyword" class="search-clear" @click="keyword='';reload()">&#10005;</span>
+        </div>
         <van-button v-if="checkedIds.length" type="danger" size="small" @click="batchDelete">删除({{checkedIds.length}})</van-button>
         <van-button type="primary" icon="plus" size="small" @click="openAdd">新增</van-button>
         <van-button icon="orders-o" size="small" @click="handleImport">导入</van-button>
@@ -178,7 +182,7 @@ const colLabels = { brand:'品牌',dimension:'尺寸',pin_count:'PIN脚',frequen
 
 const allChecked = computed(() => list.value.length>0 && checkedIds.value.length===list.value.length)
 function toggleAll(e) { checkedIds.value = e.target.checked ? list.value.map(r=>r.id) : [] }
-async function batchDelete() { if(!checkedIds.value.length)return;try { await showConfirmDialog({title:'批量删除',message:`按当前筛选条件批量删除，共匹配约 ${total.value} 条记录，确定？`}) } catch { return }; try { await http.post('/samples/batch-delete',{keyword:keyword.value,factory:filterFactory.value,brand:filterBrand.value,...columnFilters.value}); checkedIds.value=[]; showToast('已删除'); reload() } catch(e) { showToast('删除失败: '+(e.message||'未知错误')) } }
+async function batchDelete() { if(!checkedIds.value.length)return;try { await showConfirmDialog({title:'批量删除',message:`确定删除已选中的 ${checkedIds.value.length} 条记录？`}) } catch { return }; try { await http.post('/samples/batch-delete',{ids:checkedIds.value}); checkedIds.value=[]; showToast('已删除'); reload() } catch(e) { showToast('删除失败: '+(e.message||'未知错误')) } }
 const form = ref({ material_code:'',material_name:'',material_spec:'',brand:'',dimension:'',pin_count:'',frequency:'',load_cap:'',voltage:'',mode:'',freq_tol:'',price_with_tax:null,cost_price:null,factory_code:'',stock_quantity:0,spec_document:'',remarks:'' })
 
 function fmtP(v) { return v!=null&&v!==''?'¥'+Number(v).toFixed(4):'-' }
@@ -186,6 +190,8 @@ const autoTaxRateS = () => Number(localStorage.getItem('crystal_taxRate')) || 13
 function onPriceWithTaxChangeS() { const v = form.value.price_with_tax; if (v && !form.value.cost_price) { form.value.cost_price = parseFloat((v / (1 + autoTaxRateS()/100)).toFixed(4)) } }
 function onCostPriceChangeS() { const v = form.value.cost_price; if (v && !form.value.price_with_tax) { form.value.price_with_tax = parseFloat((v * (1 + autoTaxRateS()/100)).toFixed(4)) } }
 async function reload() { loadError.value=''; loading.value=true; try { const params={page:page.value,pageSize:pageSize.value,keyword:keyword.value,factory:filterFactory.value,brand:filterBrand.value,...columnFilters.value}; const r=await http.get('/samples',{params}); list.value=r.data.list; total.value=r.data.total } catch(e){ loadError.value='加载失败: '+(e.message||'未知错误') } finally{loading.value=false} }
+let searchTimer = null
+function onSearchDebounced() { clearTimeout(searchTimer); searchTimer = setTimeout(() => { page.value = 1; reload() }, 350) }
 async function loadOptions() { try{const r=await http.get('/samples/meta/options');factoryOptions.value=[{text:'全部工厂',value:''},...r.data.factories.map(f=>({text:f,value:f}))];brandOptions.value=[{text:'全部品牌',value:''},...r.data.brands.map(b=>({text:b,value:b}))]}catch(e){ loadError.value='选项加载失败: '+(e.message||'') } }
 
 // 列筛选
@@ -251,7 +257,13 @@ onMounted(()=>{loadOptions();reload()})
 .row-btn.del{background:#fff;color:#ee0a24;border-color:#ee0a24}
 .main-area{flex:1;overflow:auto;padding:0 10px 16px;display:flex;flex-direction:column}
 .toolbar{display:flex;align-items:center;gap:6px;padding:8px 0 6px}
-.toolbar-search{flex:1;max-width:300px;padding:0!important;background:transparent!important}
+.search-box{display:flex;align-items:center;background:#f5f6f8;border-radius:6px;padding:0 10px;flex:1;max-width:300px;height:34px;gap:6px}
+.search-box:focus-within{background:#fff;box-shadow:0 0 0 1px #1989fa}
+.search-icon{flex-shrink:0}
+.search-input{flex:1;border:none;outline:none;background:transparent;font-size:13px;color:#323233;font-family:inherit;height:100%}
+.search-input::placeholder{color:#bbb}
+.search-clear{cursor:pointer;color:#999;font-size:14px;line-height:1;flex-shrink:0}
+.search-clear:hover{color:#ee0a24}
 .info-row{display:flex;align-items:center;justify-content:space-between;background:#fff;padding:3px 10px;border-radius:6px;margin-bottom:4px;box-shadow:0 1px 2px rgba(0,0,0,.03)}
 .filter-group{display:flex;align-items:center;gap:4px}
 .stat-text{font-size:12px;color:#888}.stat-text b{color:#323233;font-weight:600}

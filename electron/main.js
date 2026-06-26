@@ -263,7 +263,7 @@ async function startServer() {
   // 数据目录：用户配置 → legacy 探测+迁移 → 弹选择器
   const dataDir = await resolveDataDir()
   log(`dataDir: ${dataDir}`)
-  const subdirs = ['数据库', '规格书', '模板', '备份', 'Excel备份']
+  const subdirs = ['数据库', '规格书', '模板', '备份', 'Excel备份', '记事图片库']
   for (const sd of subdirs) {
     const p = path.join(dataDir, sd)
     if (!fs.existsSync(p)) fs.mkdirSync(p, { recursive: true })
@@ -487,6 +487,7 @@ function startReminderPolling(port) {
             })
             // 标记已提醒
             const req = http.request(`http://localhost:${port}/api/notes/${note.id}/reminded`, { method: 'POST' })
+            req.on('error', (e) => log('Reminded POST error: ' + e.message))
             req.end()
           }
         } catch (e) { log('Reminder poll error: ' + e.message) }

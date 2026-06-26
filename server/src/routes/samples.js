@@ -45,7 +45,7 @@ router.get('/template', (_req, res) => {
     const fn = '样品导入模板.xlsx'
     res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(fn)}"; filename*=UTF-8''${encodeURIComponent(fn)}`)
     res.send(buffer)
-  } catch (e) { res.status(500).json({ code:1, msg:e.message }) }
+  } catch (e) { console.error(e); res.status(500).json({ code:1, msg:'模板生成失败' }) }
 })
 
 // 导出（必须在 /:id 之前）
@@ -56,7 +56,7 @@ router.get('/export', (req, res) => {
     const fn = '样品登记.xlsx'
     res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(fn)}"; filename*=UTF-8''${encodeURIComponent(fn)}`)
     res.send(buffer)
-  } catch (e) { res.status(500).json({ code:1, msg:e.message }) }
+  } catch (e) { console.error(e); res.status(500).json({ code:1, msg:'导出失败' }) }
 })
 
 // 导入
@@ -65,7 +65,7 @@ router.post('/import', upload.single('file'), (req, res) => {
     if (!req.file) return res.status(400).json({ code:1, msg:'请选择文件' })
     const count = importSamplesFromExcel(req.file.buffer)
     res.json({ code:0, data:{ count }, msg:`成功导入 ${count} 条记录` })
-  } catch (e) { res.status(500).json({ code:1, msg:e.message }) }
+  } catch (e) { console.error(e); res.status(500).json({ code:1, msg:'导入失败，请检查文件格式' }) }
 })
 
 // 列值查询
@@ -116,6 +116,8 @@ router.post('/batch-delete', (req, res) => {
     execute(`UPDATE material_samples SET is_deleted = 1, updated_at = datetime('now','localtime') WHERE id IN (${placeholders})`, ids)
     return res.json({ code: 0, msg: `已删除 ${ids.length} 条` })
   }
+  const hasFilter = keyword || factory || brand || Object.keys(req.body).some(k => ['dimension','pin_count','frequency','load_cap','voltage','mode','freq_tol','material_code','material_name','material_spec','factory_code'].includes(k))
+  if (!hasFilter) return res.status(400).json({ code: 1, msg: '请指定筛选条件或选择记录' })
   const conditions = ['is_deleted = 0']; const params = []
   if (keyword) { conditions.push('(material_code LIKE ? OR material_name LIKE ? OR brand LIKE ?)'); const kw = `%${keyword}%`; params.push(kw,kw,kw) }
   if (factory) { conditions.push('factory_code = ?'); params.push(factory) }

@@ -24,9 +24,9 @@ const dotClass = computed(() => ({
 
 const labelText = computed(() => {
   if (store.isSaving) return '保存中…'
-  if (store.isFailed) return '保存失败 ⚠ 点击重试'
+  if (store.isFailed) return '保存失败 ⚠'
   if (store.isSaved) return `已保存 ${store.savedAtText}`
-  return '等待保存'
+  return ''
 })
 
 const tipText = computed(() => {
@@ -37,7 +37,6 @@ const tipText = computed(() => {
 
 function onClick() {
   if (!store.isFailed) return
-  // 失败时点击：清除失败状态，允许用户后续操作触发重试
   store.reset()
 }
 </script>

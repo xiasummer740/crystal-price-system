@@ -45,7 +45,7 @@
             图片附件
             <span class="img-count">{{ (form.images || []).length }}/9</span>
           </div>
-          <div class="upload-area" @dragover.prevent @drop.prevent="onDrop">
+          <div class="upload-area" @dragover.prevent @drop.prevent="onDrop" @paste.prevent="onPaste">
             <div class="img-grid">
               <div v-for="(img, i) in form.images" :key="i" class="img-item">
                 <img :src="img" @click="previewImg = i" loading="lazy" />

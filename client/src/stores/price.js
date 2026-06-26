@@ -10,11 +10,11 @@ export const usePriceStore = defineStore('price', {
     metaOptions: { factories: [], quoters: [] },
     filters: { keyword: '', factory: '', quoter: '', currency: '', category: '', startDate: '', endDate: '', sortBy: 'created_at', sortOrder: 'DESC', page: 1, pageSize: Number(localStorage.getItem('crystal_pageSize')) || 50 },
     columnFilters: {},
-    activeColumnFilters: [],
     multiFilter: ''
   }),
   getters: {
-    hasColumnFilters: (state) => Object.keys(state.columnFilters).length > 0
+    hasColumnFilters: (state) => Object.keys(state.columnFilters).length > 0,
+    activeColumnFilters: (state) => Object.entries(state.columnFilters).map(([column, value]) => ({ column, value }))
   },
   actions: {
     async loadList(append = false) {
@@ -47,13 +47,16 @@ export const usePriceStore = defineStore('price', {
     },
     async loadGroupedList() {
       this.loading = true
-      this.list = []
       try {
-        const params = { ...this.filters, ...this.columnFilters, taxRate: 13, fxRate: 7.25 }
+        const taxRate = Number(localStorage.getItem('crystal_taxRate')) || 13
+        const fxRate = Number(localStorage.getItem('crystal_rate')) || 7.25
+        const params = { ...this.filters, ...this.columnFilters, taxRate, fxRate }
         if (this.multiFilter) params.multiFilter = this.multiFilter
         const res = await fetchPricesGrouped(params)
         this.list = res.data.list
         this.total = res.data.total
+      } catch (e) {
+        console.error('loadGroupedList failed:', e)
       } finally {
         this.loading = false
       }
@@ -78,35 +81,24 @@ export const usePriceStore = defineStore('price', {
       this.metaOptions = res.data
     },
     async loadColumnValues(column, keyword = '') {
-      return await getColumnValues(column, keyword)
+      const res = await getColumnValues(column, keyword)
+      return res.data || []
     },
     setFilter(key, value) {
       this.filters[key] = value
       if (key !== 'page') this.filters.page = 1
     },
     setColumnFilter(column, value) {
-      if (value) {
-        this.columnFilters[column] = value
-        if (!this.activeColumnFilters.find(f => f.column === column)) {
-          this.activeColumnFilters.push({ column, value })
-        } else {
-          const idx = this.activeColumnFilters.findIndex(f => f.column === column)
-          this.activeColumnFilters[idx].value = value
-        }
-      } else {
-        delete this.columnFilters[column]
-        this.activeColumnFilters = this.activeColumnFilters.filter(f => f.column !== column)
-      }
+      if (value) this.columnFilters[column] = value
+      else delete this.columnFilters[column]
       this.filters.page = 1
     },
     removeColumnFilter(column) {
       delete this.columnFilters[column]
-      this.activeColumnFilters = this.activeColumnFilters.filter(f => f.column !== column)
       this.filters.page = 1
     },
     clearColumnFilters() {
       this.columnFilters = {}
-      this.activeColumnFilters = []
       this.filters.page = 1
     },
     setPageSize(size) {
@@ -118,7 +110,6 @@ export const usePriceStore = defineStore('price', {
       const ps = this.filters.pageSize
       this.filters = { keyword: '', factory: '', quoter: '', currency: '', category: '', startDate: '', endDate: '', sortBy: 'created_at', sortOrder: 'DESC', page: 1, pageSize: ps }
       this.columnFilters = {}
-      this.activeColumnFilters = []
     }
   }
 })

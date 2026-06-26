@@ -93,7 +93,7 @@
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter, onBeforeRouteLeave } from 'vue-router'
 import { usePriceStore } from '../stores/price.js'
-import { showToast, showLoadingToast, closeToast } from 'vant'
+import { showToast, showLoadingToast, closeToast, showConfirmDialog } from 'vant'
 import { http } from '../utils/api.js'
 
 const route = useRoute()
@@ -128,6 +128,7 @@ function onBeforeUnload(e) {
   if (formDirty.value) { e.preventDefault(); e.returnValue = '' }
 }
 onMounted(() => window.addEventListener('beforeunload', onBeforeUnload))
+onUnmounted(() => window.removeEventListener('beforeunload', onBeforeUnload))
 
 // ===== 快捷选填 =====
 const sugAll = ref({ category:[], factory:[], quoter:[], leadTime:[] })

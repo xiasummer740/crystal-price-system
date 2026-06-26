@@ -118,7 +118,10 @@ const renderedContent = computed(() => {
     .replace(/## (.+)/g, '<h2>$1</h2>')
     .replace(/# (.+)/g, '<h1>$1</h1>')
     .replace(/`([^`]+)`/g, '<code>$1</code>')
-    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>')
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, (m, text, url) => {
+      const safe = url.replace(/^javascript:/i, '').replace(/^data:/i, '')
+      return `<a href="${safe}" target="_blank" rel="noopener">${text}</a>`
+    })
     .replace(/\n/g, '<br/>')
   return html
 })
@@ -139,7 +142,9 @@ async function handleDelete() {
     await deleteNote(note.value.id)
     showToast('已删除')
     router.push('/notes')
-  } catch {}
+  } catch (e) {
+    if (e !== 'cancel' && !e?.message?.includes('cancel')) showToast('删除失败: ' + (e.response?.data?.msg || e.message))
+  }
 }
 
 function goBack() { router.push('/notes') }

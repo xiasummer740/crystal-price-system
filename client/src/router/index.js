@@ -24,7 +24,8 @@ const routes = [
   { path: '/notes', name: 'Notes', component: Notes, meta: { title: '记事便签' } },
   { path: '/notes/add', name: 'AddNote', component: NoteForm, meta: { title: '新增记事' } },
   { path: '/notes/edit/:id', name: 'EditNote', component: NoteForm, meta: { title: '编辑记事' } },
-  { path: '/notes/:id', name: 'NoteDetail', component: NoteDetail, meta: { title: '记事详情' } }
+  { path: '/notes/:id', name: 'NoteDetail', component: NoteDetail, meta: { title: '记事详情' } },
+  { path: '/:pathMatch(.*)*', redirect: '/' }
 ]
 
 const router = createRouter({

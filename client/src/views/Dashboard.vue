@@ -470,7 +470,7 @@ function clearAllColFilters() { store.clearColumnFilters(); reload() }
 function colFilterClosed() { colFilterCol.value = ''; colFilterValues.value = []; colFilterKw.value = '' }
 function downloadTemplate() { const a=document.createElement('a'); a.href='/api/template'; a.download='报价导入模板.xlsx'; a.click() }
 function toggleAll(e) { checkedIds.value = e.target.checked ? store.list.map(r=>r.id) : [] }
-async function batchDelete() { if(!checkedIds.value.length) return; try { const msg = `按当前筛选条件批量删除，共匹配约 ${store.total} 条记录，确定？`; await showConfirmDialog({title:'批量删除',message:msg}); await http.post('/prices/batch-delete',{keyword:store.filters.keyword,factory:store.filters.factory,quoter:store.filters.quoter,currency:store.filters.currency,category:store.filters.category,startDate:store.filters.startDate,endDate:store.filters.endDate,multiFilter:store.multiFilter,...store.columnFilters}); checkedIds.value=[]; showToast('已删除'); reload() } catch(e) { if (e?.message?.includes('cancel') || e === 'cancel') return; showToast('删除失败: '+(e.response?.data?.msg||e.message)) } }
+async function batchDelete() { if(!checkedIds.value.length) return; try { const msg = `确定删除已选中的 ${checkedIds.value.length} 条记录？`; await showConfirmDialog({title:'批量删除',message:msg}); await http.post('/prices/batch-delete',{ids:checkedIds.value}); checkedIds.value=[]; showToast('已删除'); reload() } catch(e) { if (e?.message?.includes('cancel') || e === 'cancel') return; showToast('删除失败: '+(e.response?.data?.msg||e.message)) } }
 function openGroupEdit(item){showDetail(item)}
 // 编辑产品参数
 const showSpecEdit = ref(false); const showSpecTempPicker = ref(false); const specSaving = ref(false)
@@ -647,7 +647,7 @@ function updateClock() {
   clockDate.value = `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} 星期${weekDays[d.getDay()]}`
 }
 onMounted(() => { updateClock(); clockTimer = setInterval(updateClock, 1000) })
-onUnmounted(() => { if (clockTimer) clearInterval(clockTimer); if (colFilterTimer) clearTimeout(colFilterTimer) })
+onUnmounted(() => { if (clockTimer) clearInterval(clockTimer); if (colFilterTimer) clearTimeout(colFilterTimer); if (searchTimer) clearTimeout(searchTimer) })
 </script>
 
 <style scoped>

@@ -9,7 +9,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const router = Router()
 
 // ========== 图片上传 ==========
-const notesUploadDir = path.join(process.env.DATA_DIR || path.join(__dirname, '..', '..'), 'uploads', 'notes')
+const notesUploadDir = path.join(process.env.DATA_DIR || path.join(__dirname, '..', '..'), '记事图片库')
 if (!fs.existsSync(notesUploadDir)) fs.mkdirSync(notesUploadDir, { recursive: true })
 
 const imgUpload = multer({
@@ -221,7 +221,7 @@ router.delete('/categories/:id', (req, res) => {
   const id = Number(req.params.id)
   // 将使用该类型的记事设为未分类
   execute('UPDATE notes SET category_id = 0 WHERE category_id = ?', [id])
-  execute('DELETE FROM note_categories WHERE id = ?', [id])
+  execute('UPDATE note_categories SET is_deleted = 1 WHERE id = ?', [id])
   res.json({ code: 0, msg: '删除成功' })
 })
 

@@ -94,7 +94,7 @@ router.get('/grouped', (req, res) => {
   const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : ''
 
   const matchCols = ['material_code','material_name','material_spec','category','brand','dimension','pin_count','frequency','load_cap','voltage','mode','freq_tol','temperature']
-  const taxRate = Number(req.query.taxRate) || 13
+  const taxRate = Math.max(0, Math.min(100, Number(req.query.taxRate) || 13))
   const fxRate = Number(req.query.fxRate) || 7.25
   const normPrice = (alias) => `CASE WHEN ${alias}.currency='USD' THEN COALESCE(${alias}.price_without_tax, ${alias}.price_with_tax/(1+${taxRate}/100.0), 999999)*${fxRate} ELSE COALESCE(${alias}.price_without_tax, ${alias}.price_with_tax/(1+${taxRate}/100.0), 999999) END`
   const groupCols = matchCols.join(',')
@@ -141,6 +141,8 @@ router.get('/price-logs/:code', (req, res) => {
 router.get('/by-material/:code', (req, res) => {
   const code = req.params.code
   const tfs = ['material_name','material_spec','category','brand','dimension','pin_count','frequency','load_cap','voltage','mode','freq_tol']
+  const hasFilter = keyword || factory || quoter || currency || category || startDate || endDate || multiFilter || Object.keys(req.body).some(k => ['brand','dimension','pin_count','frequency','load_cap','voltage','mode','freq_tol','standard_lead_time','material_code','first_inquiry_customer','material_name','material_spec'].includes(k))
+  if (!hasFilter) return res.status(400).json({ code: 1, msg: '请指定筛选条件或选择记录' })
   const conditions = ['is_deleted = 0']; const params = []
   if (code && code !== '_empty_') { conditions.push('material_code = ?'); params.push(code) }
   for (const tf of tfs) {
@@ -215,6 +217,8 @@ router.post('/batch-update-specs', (req, res) => {
   const b = req.body; const source = b.source || {}
   const matchCols = ['material_code','material_name','material_spec','category','brand','dimension','pin_count','frequency','load_cap','voltage','mode','freq_tol','temperature']
   const techFields = ['material_name','material_spec','category','brand','dimension','pin_count','frequency','load_cap','voltage','mode','freq_tol','temperature']
+  const hasFilter = keyword || factory || quoter || currency || category || startDate || endDate || multiFilter || Object.keys(req.body).some(k => ['brand','dimension','pin_count','frequency','load_cap','voltage','mode','freq_tol','standard_lead_time','material_code','first_inquiry_customer','material_name','material_spec'].includes(k))
+  if (!hasFilter) return res.status(400).json({ code: 1, msg: '请指定筛选条件或选择记录' })
   const conditions = ['is_deleted = 0']; const params = []
   for (const c of matchCols) { conditions.push(`COALESCE(${c},'') = ?`); params.push(source[c] ?? '') }
   const sets = techFields.map(f => `${f} = ?`); const vals = techFields.map(f => b[f] ?? source[f] ?? '')
@@ -232,6 +236,8 @@ router.post('/batch-delete', (req, res) => {
     return res.json({ code: 0, msg: `已删除 ${ids.length} 条` })
   }
   // 方式2：按筛选条件
+  const hasFilter = keyword || factory || quoter || currency || category || startDate || endDate || multiFilter || Object.keys(req.body).some(k => ['brand','dimension','pin_count','frequency','load_cap','voltage','mode','freq_tol','standard_lead_time','material_code','first_inquiry_customer','material_name','material_spec'].includes(k))
+  if (!hasFilter) return res.status(400).json({ code: 1, msg: '请指定筛选条件或选择记录' })
   const conditions = ['is_deleted = 0']; const params = []
   if (keyword) { conditions.push('(material_code LIKE ? OR material_name LIKE ? OR material_spec LIKE ? OR brand LIKE ? OR category LIKE ? OR frequency LIKE ? OR dimension LIKE ? OR factory_code LIKE ? OR first_inquiry_customer LIKE ? OR remarks LIKE ?)'); const kw = `%${keyword}%`; for (let i=0;i<10;i++) params.push(kw) }
   if (factory) { conditions.push('factory_code = ?'); params.push(factory) }

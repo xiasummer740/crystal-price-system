@@ -90,7 +90,7 @@ export function getMetaOptions() {
 }
 
 export function getColumnValues(column, keyword = '') {
-  return http.get(`/prices/column-values/${column}`, { params: { keyword } }).then(r => r.data)
+  return http.get(`/prices/column-values/${column}`, { params: { keyword } })
 }
 
 export function exportExcel(params) {
