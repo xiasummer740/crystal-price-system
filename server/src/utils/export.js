@@ -136,7 +136,46 @@ export function importFromExcel(fileBuffer) {
   return count
 }
 
-// ===== 记事便签导出（ZIP：xlsx + 图片） =====
+// ===== 记事便签导出（纯 xlsx，供自动备份用） =====
+
+export function exportNotes(query = {}) {
+  const { keyword, customer, category_id, status } = query
+  const conditions = ['n.is_deleted = 0']
+  const params = []
+  if (keyword) { conditions.push('(n.title LIKE ? OR n.content LIKE ? OR n.customer LIKE ?)'); const kw=`%${keyword}%`; params.push(kw,kw,kw) }
+  if (customer) { conditions.push('n.customer = ?'); params.push(customer) }
+  if (category_id) { conditions.push('n.category_id = ?'); params.push(Number(category_id)) }
+  if (status) { conditions.push('n.status = ?'); params.push(status) }
+  const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : ''
+  const rows = queryAll(`
+    SELECT n.*, c.name as category_name
+    FROM notes n
+    LEFT JOIN note_categories c ON n.category_id = c.id AND c.is_deleted = 0
+    ${where}
+    ORDER BY n.updated_at DESC
+  `, params)
+  const statusMap = { todo: '待办', in_progress: '进行中', done: '已完成' }
+  const priorityMap = { 1: '低', 2: '中', 3: '高' }
+  const headers = ['编号','标题','内容','客户','分类','优先级','状态','提醒时间','已提醒','是否置顶','创建时间','更新时间']
+  const data = rows.map(r => [
+    r.id, r.title, r.content, r.customer,
+    r.category_name || '',
+    priorityMap[r.priority] || '中',
+    statusMap[r.status] || r.status,
+    r.reminder_at || '',
+    r.is_reminded ? '是' : '否',
+    r.is_pinned ? '是' : '否',
+    r.created_at, r.updated_at
+  ])
+  data.unshift(headers)
+  const wb = XLSX.utils.book_new()
+  const ws = XLSX.utils.aoa_to_sheet(data)
+  XLSX.utils.book_append_sheet(wb, ws, '记事便签')
+  ws['!cols'] = headers.map((_, i) => ({ wch: i === 1 ? 30 : i === 2 ? 50 : 14 }))
+  return XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' })
+}
+
+// ===== 记事便签导出（ZIP：xlsx + 图片，供用户下载） =====
 
 export async function exportNotesPackage(query = {}) {
   const { keyword, customer, category_id, status } = query
