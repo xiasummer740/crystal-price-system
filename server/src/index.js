@@ -8,6 +8,7 @@ import { fileURLToPath } from 'url'
 import pricesRouter from './routes/prices.js'
 import samplesRouter from './routes/samples.js'
 import translatorRouter from './routes/translator.js'
+import notesRouter from './routes/notes.js'
 import { exportToExcel, importFromExcel, generateTemplate, generateSampleTemplate } from './utils/export.js'
 import { initDb, saveNow } from './db.js'
 import { triggerBackup, flushPending } from './utils/excelBackup.js'
@@ -54,6 +55,7 @@ app.use((req, res, next) => {
 app.use('/api/prices', pricesRouter)
 app.use('/api/samples', samplesRouter)
 app.use('/api/translator', translatorRouter)
+app.use('/api/notes', notesRouter)
 
 // 导出 Excel
 app.get('/api/export', (req, res) => {
@@ -97,6 +99,11 @@ app.get('/api/template', (_req, res) => {
 const specDir = path.join(process.env.DATA_DIR || path.join(__dirname, '..'), '规格书')
 if (!fs.existsSync(specDir)) fs.mkdirSync(specDir, { recursive: true })
 app.use('/api/specs', express.static(specDir))
+
+// 记事便签图片上传
+const notesUploadDir = path.join(process.env.DATA_DIR || path.join(__dirname, '..'), 'uploads', 'notes')
+if (!fs.existsSync(notesUploadDir)) fs.mkdirSync(notesUploadDir, { recursive: true })
+app.use('/api/uploads/notes', express.static(notesUploadDir))
 
 const specUpload = multer({ storage: multer.diskStorage({
   destination: specDir,

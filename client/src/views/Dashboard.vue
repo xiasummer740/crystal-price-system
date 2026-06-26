@@ -6,6 +6,7 @@
         <span class="clock-display" :title="clockDate">
           <span class="clock-dot"></span>{{ clockTime }}
         </span>
+        <button class="nav-btn" style="margin-right:6px;background:#fff7e6;color:#d48806;border-color:#ffe58f;cursor:pointer" @click="openNotesWin">📝 记事</button>
         <router-link to="/translator" class="nav-btn" style="margin-right:6px;background:#f0f6ff;color:#1565c0;border-color:#bbdefb">规格书翻译</router-link>
         <router-link to="/samples" class="nav-btn" style="margin-right:6px">样品登记</router-link>
         <router-link to="/trash" class="nav-btn" style="margin-right:6px;color:#e53935;border-color:#ffcdd2">回收站</router-link>
@@ -384,6 +385,7 @@
       </div>
     </van-popup>
   </div>
+
 </template>
 
 <script setup>
@@ -399,10 +401,19 @@ const router = useRouter()
 const fileInput = ref(null)
 const exporting = ref(false)
 const localIp = ref('127.0.0.1')
-const isElectron = ref(!!window.electronAPI)
 const isDev = ref(new URLSearchParams(window.location.search).get('packaged') === 'false')
+const isElectron = ref(!!window.electronAPI)
 async function openDataFolder() {
   try { await http.get('/open-data-folder') } catch { showToast('此功能仅在桌面端可用') }
+}
+function openNotesWin() {
+  const isElectron = navigator.userAgent.indexOf('Electron') !== -1
+  const win = window.open('/#/notes?standalone=1', '_blank')
+  // Electron: setWindowOpenHandler 拦截成功，win 为 null，但已创建桌面窗口
+  // 浏览器: window.open 被拦截或关掉 → 页面内跳转
+  if (!win || win.closed) {
+    if (!isElectron) router.push('/notes')
+  }
 }
 const showPopup = ref(false)
 const md = ref(null)

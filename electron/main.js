@@ -1,6 +1,7 @@
-import { app, BrowserWindow, shell, dialog, Menu } from 'electron'
+import { app, BrowserWindow, shell, dialog, Menu, Notification, ipcMain } from 'electron'
 import path from 'path'
 import fs from 'fs'
+import http from 'http'
 import { execSync } from 'child_process'
 import { fileURLToPath } from 'url'
 import { loadUserConfig, saveUserConfig } from './config.js'
@@ -215,6 +216,7 @@ async function resolveDataDir() {
 }
 
 let mainWindow = null
+let serverPort = BASE_PORT
 let dbSaveNow = null
 let doExportToExcel = null
 let doExportSamples = null
@@ -344,6 +346,11 @@ function createWindow(port) {
   })
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    // 拦截记事浮窗请求，创建桌面窗口
+    if (url.includes('/#/notes') || url.includes('?standalone=1')) {
+      openNotesWindow(serverPort)
+      return { action: 'deny' }
+    }
     shell.openExternal(url)
     return { action: 'deny' }
   })
@@ -391,12 +398,91 @@ function showSplash() {
   return splash
 }
 
+// 记事便签独立浮窗
+let notesWindow = null
+function openNotesWindow(port) {
+  if (notesWindow && !notesWindow.isDestroyed()) { notesWindow.focus(); return }
+  const mainPos = mainWindow?.getBounds()
+  notesWindow = new BrowserWindow({
+    width: 860, height: 640,
+    minWidth: 480, minHeight: 400,
+    x: mainPos ? mainPos.x + 60 : undefined,
+    y: mainPos ? mainPos.y + 60 : undefined,
+    title: '记事便签',
+    frame: true,
+    icon: path.join(__dirname, '..', 'client', 'dist', 'SJK-256.png'),
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true,
+      preload: path.join(__dirname, 'preload.js')
+    }
+  })
+  notesWindow.setMenuBarVisibility(false)
+  const url = `http://localhost:${port}/#/notes?standalone=1&v=${app.getVersion()}&packaged=${app.isPackaged}`
+  notesWindow.loadURL(url)
+  notesWindow.on('closed', () => { notesWindow = null })
+}
+
+// IPC：渲染进程请求打开/关闭记事窗口
+ipcMain.handle('open-notes-window', () => {
+  openNotesWindow(serverPort)
+})
+ipcMain.handle('close-notes-window', () => {
+  if (notesWindow && !notesWindow.isDestroyed()) {
+    notesWindow.close()
+  }
+})
+// 记事提醒轮询（每60秒检查到期提醒）
+function startReminderPolling(port) {
+  const checkReminders = () => {
+    http.get(`http://localhost:${port}/api/notes/reminders`, (res) => {
+      let data = ''
+      res.on('data', chunk => data += chunk)
+      res.on('end', () => {
+        try {
+          const result = JSON.parse(data)
+          if (result.code !== 0 || !result.data?.length) return
+          for (const note of result.data) {
+            // 弹出系统通知
+            const notif = new Notification({
+              title: '⏰ 记事提醒：' + (note.title || '未命名'),
+              body: (note.customer ? '客户: ' + note.customer + '\n' : '') + (note.content ? note.content.slice(0, 100) : '暂无内容'),
+              silent: false,
+              icon: path.join(__dirname, '..', 'client', 'dist', 'SJK-256.png')
+            })
+            notif.show()
+            notif.on('click', () => {
+              if (mainWindow) {
+                if (mainWindow.isMinimized()) mainWindow.restore()
+                mainWindow.focus()
+                mainWindow.webContents.executeJavaScript(
+                  `window.location.hash = '#/notes/${note.id}'`
+                )
+              }
+            })
+            // 标记已提醒
+            const req = http.request(`http://localhost:${port}/api/notes/${note.id}/reminded`, { method: 'POST' })
+            req.end()
+          }
+        } catch (e) { log('Reminder poll error: ' + e.message) }
+      })
+    }).on('error', (e) => { log('Reminder poll HTTP error: ' + e.message) })
+  }
+  // 首次延迟 10 秒等应用启动完成，之后每 60 秒
+  setTimeout(() => {
+    checkReminders()
+    setInterval(checkReminders, 60000)
+  }, 10000)
+  log('Reminder polling started (interval: 60s)')
+}
+
 app.whenReady().then(async () => {
   log('App ready')
   const splash = showSplash()
   try {
     freePort(BASE_PORT)
     const { port } = await startServer()
+    serverPort = port
     const menu = Menu.buildFromTemplate([
       { label: '文件', submenu: [
         { label: '打开数据文件夹', click: () => shell.openPath(process.env.DATA_DIR) },
@@ -410,6 +496,8 @@ app.whenReady().then(async () => {
     ])
     Menu.setApplicationMenu(menu)
     createWindow(port)
+    // 启动记事提醒轮询
+    startReminderPolling(port)
     // 主窗口准备好后关闭闪屏
     mainWindow.once('ready-to-show', () => {
       setTimeout(() => { splash.close() }, 400)
@@ -423,6 +511,7 @@ app.whenReady().then(async () => {
       setTimeout(async () => {
         try {
           const { port } = await startServer()
+          serverPort = port
           createWindow(port)
           mainWindow.once('ready-to-show', () => { splash.close() })
         } catch (e2) {

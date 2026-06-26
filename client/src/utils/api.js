@@ -111,3 +111,46 @@ export function permanentDeleteTrash(id) {
 export function clearTrash(ids) {
   return http.post('/prices/trash/clear', ids ? { ids } : {})
 }
+
+// ====== 记事便签 ======
+export function fetchNotes(params) {
+  return http.get('/notes', { params })
+}
+export function getNote(id) {
+  return http.get(`/notes/${id}`)
+}
+export function createNote(data) {
+  return http.post('/notes', data)
+}
+export function updateNote(id, data) {
+  return http.put(`/notes/${id}`, data)
+}
+export function deleteNote(id) {
+  return http.delete(`/notes/${id}`)
+}
+export function batchDeleteNotes(ids) {
+  return http.post('/notes/batch-delete', { ids })
+}
+export function getDueReminders() {
+  return http.get('/notes/reminders')
+}
+export function markReminded(id) {
+  return http.post(`/notes/${id}/reminded`)
+}
+export function uploadNoteImages(formData) {
+  return http.post('/notes/upload', formData)
+}
+
+// ====== 事项类型 ======
+export function fetchCategories() {
+  return http.get('/notes/categories/list')
+}
+export function createCategory(data) {
+  return http.post('/notes/categories', data)
+}
+export function updateCategory(id, data) {
+  return http.put(`/notes/categories/${id}`, data)
+}
+export function deleteCategory(id) {
+  return http.delete(`/notes/categories/${id}`)
+}

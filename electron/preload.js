@@ -1,5 +1,5 @@
-import { contextBridge } from 'electron'
-import os from 'os'
+const { contextBridge, ipcRenderer } = require('electron')
+const os = require('os')
 
 function getLanIp() {
   const interfaces = os.networkInterfaces()
@@ -16,5 +16,8 @@ function getLanIp() {
 contextBridge.exposeInMainWorld('electronAPI', {
   getLanIp,
   platform: process.platform,
-  openDataFolder: async () => { try { await fetch('/api/open-data-folder') } catch {} }
+  openDataFolder: async () => { try { await fetch('/api/open-data-folder') } catch {} },
+  openNotesWindow: () => ipcRenderer.invoke('open-notes-window'),
+  closeNotesWindow: () => ipcRenderer.invoke('close-notes-window'),
+  toggleNotesPin: () => ipcRenderer.invoke('toggle-notes-pin')
 })

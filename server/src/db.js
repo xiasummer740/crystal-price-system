@@ -128,6 +128,50 @@ export async function initDb() {
     )
   `)
 
+  // 记事便签 — 事项类型
+  db.run(`
+    CREATE TABLE IF NOT EXISTS note_categories (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      name        TEXT NOT NULL,
+      color       TEXT DEFAULT '#1989fa',
+      sort_order  INTEGER DEFAULT 0,
+      is_deleted  INTEGER DEFAULT 0,
+      created_at  DATETIME DEFAULT (datetime('now','localtime'))
+    )
+  `)
+  // 预设事项类型
+  const catCount = queryOne('SELECT COUNT(*) as c FROM note_categories')?.c ?? 0
+  if (catCount === 0) {
+    const defaults = ['报价', '订单', '交期', '来料检验', '样品']
+    defaults.forEach((name, i) => executeBatch('INSERT INTO note_categories (name, color, sort_order) VALUES (?,?,?)', [name, '#1989fa', i]))
+    saveNow()
+  }
+
+  // 记事便签
+  db.run(`
+    CREATE TABLE IF NOT EXISTS notes (
+      id              INTEGER PRIMARY KEY AUTOINCREMENT,
+      title           TEXT NOT NULL,
+      content         TEXT DEFAULT '',
+      customer        TEXT DEFAULT '',
+      category_id     INTEGER DEFAULT 0,
+      images          TEXT DEFAULT '[]',
+      reminder_at     DATETIME,
+      is_reminded     INTEGER DEFAULT 0,
+      priority        INTEGER DEFAULT 2,
+      status          TEXT DEFAULT 'todo',
+      is_pinned       INTEGER DEFAULT 0,
+      is_deleted      INTEGER DEFAULT 0,
+      created_at      DATETIME DEFAULT (datetime('now','localtime')),
+      updated_at      DATETIME DEFAULT (datetime('now','localtime'))
+    )
+  `)
+  try { db.run('CREATE INDEX IF NOT EXISTS idx_notes_customer ON notes(customer)') } catch {}
+  try { db.run('CREATE INDEX IF NOT EXISTS idx_notes_category ON notes(category_id)') } catch {}
+  try { db.run('CREATE INDEX IF NOT EXISTS idx_notes_reminder ON notes(reminder_at, is_reminded)') } catch {}
+  try { db.run('CREATE INDEX IF NOT EXISTS idx_notes_status ON notes(status)') } catch {}
+  try { db.run('CREATE INDEX IF NOT EXISTS idx_notes_deleted ON notes(is_deleted)') } catch {}
+
   return db
 }
 

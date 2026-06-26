@@ -12,7 +12,8 @@
     "start": "electron .",
     "package": "npm run build && electron-builder --win",
     "package:portable": "npm run build && electron-builder --win portable",
-    "package:installer": "npm run build && electron-builder --win nsis"
+    "package:installer": "npm run build && electron-builder --win nsis",
+    "release": "powershell -ExecutionPolicy Bypass -File .\\scripts\\release.ps1"
   },
   "dependencies": {
     "@vitalets/google-translate-api": "^9.2.1",
