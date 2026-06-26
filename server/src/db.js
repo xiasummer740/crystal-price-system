@@ -68,8 +68,6 @@ export async function initDb() {
   // 兼容旧数据库：添加温度列
   try { db.run('ALTER TABLE material_prices ADD COLUMN temperature TEXT') } catch {}
 
-  // 兼容旧数据库：添加品类列
-  try { db.run('ALTER TABLE material_prices ADD COLUMN category TEXT') } catch {}
   // 兼容旧数据库：重命名采购员为报价人
   try { db.run('ALTER TABLE material_prices RENAME COLUMN purchaser TO quoter') } catch {}
   // 兼容旧数据库：添加6个物料技术参数列

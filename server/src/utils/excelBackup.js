@@ -64,7 +64,7 @@ function doFlush(type) {
   }
 }
 
-// 节流触发：写操作发生 → 标记 pending → 30 秒窗口结束后落盘
+// 节流触发：写操作发生 → 标记 pending → 5 秒窗口结束后落盘
 // 窗口期内反复触发只重置定时器，最终只写 1 份
 export function triggerBackup(type) {
   if (type !== 'prices' && type !== 'samples' && type !== 'notes') return

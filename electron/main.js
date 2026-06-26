@@ -222,6 +222,7 @@ let doExportToExcel = null
 let doExportSamples = null
 let doExportNotes = null
 let doFlushBackupPending = null
+let reminderInterval = null
 
 // 启动日志
 function log(msg) {
@@ -277,9 +278,11 @@ async function startServer() {
   const expressApp = mod.default
   log('Server module imported')
 
-  return new Promise((resolve) => {
+  let retryCount = 0
+  const MAX_RETRIES = 30
+  return new Promise((resolve, reject) => {
     const tryListen = (port) => {
-      log(`Trying port ${port}...`)
+      log(`Trying port ${port}... (attempt ${retryCount + 1}/${MAX_RETRIES})`)
       const server = expressApp.listen(port, () => {
         log(`Server started on port ${port}`)
         resolve({ server, port })
@@ -287,11 +290,16 @@ async function startServer() {
       server.on('error', (err) => {
         log(`Port ${port} error: ${err.code} - ${err.message}`)
         server.close()
+        retryCount++
+        if (retryCount >= MAX_RETRIES) {
+          log('Max retries reached, giving up')
+          reject(new Error('端口无法绑定，达到最大重试次数'))
+          return
+        }
         if (err.code === 'EADDRINUSE' && port - BASE_PORT < 20) {
           setTimeout(() => tryListen(port + 1), 500)
         } else {
-          // 兜底：等待旧实例释放端口后重试
-          log('Port conflict, retrying in 2s...')
+          log('Port conflict, retrying BASE_PORT in 2s...')
           setTimeout(() => tryListen(BASE_PORT), 2000)
         }
       })
@@ -476,7 +484,7 @@ function startReminderPolling(port) {
   // 首次延迟 10 秒等应用启动完成，之后每 60 秒
   setTimeout(() => {
     checkReminders()
-    setInterval(checkReminders, 60000)
+    reminderInterval = setInterval(checkReminders, 60000)
   }, 10000)
   log('Reminder polling started (interval: 60s)')
 }
@@ -485,7 +493,7 @@ app.whenReady().then(async () => {
   log('App ready')
   const splash = showSplash()
   try {
-    freePort(BASE_PORT)
+    // tryListen 自动处理 EADDRINUSE，不预先强杀旧进程以防打断退出保存
     const { port } = await startServer()
     serverPort = port
     const menu = Menu.buildFromTemplate([
@@ -536,6 +544,8 @@ app.whenReady().then(async () => {
 // 关闭前保存数据库 + 自动备份（数据库 + Excel）
 app.on('before-quit', () => {
   try {
+    // 停止提醒轮询
+    if (reminderInterval) { clearInterval(reminderInterval); reminderInterval = null }
     if (!dbSaveNow) {
       log('before-quit: dbSaveNow 未初始化（启动失败？），跳过保存')
       return

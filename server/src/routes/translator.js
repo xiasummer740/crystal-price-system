@@ -93,7 +93,8 @@ router.post('/upload', upload.single('file'), async (req, res) => {
     res.json({ code: 0, data: { name: file.originalname, paragraphs: pages } })
   } catch (e) {
     try { fs.unlinkSync(req.file?.path) } catch {}
-    res.json({ code: 1, msg: '解析失败: ' + e.message })
+    console.error('[translator]', e)
+    res.json({ code: 1, msg: '文件解析失败，请确认文件格式正确' })
   }
 })
 
@@ -121,7 +122,8 @@ router.post('/translate', async (req, res) => {
     }
     res.json({ code: 0, data: { translated } })
   } catch (e) {
-    res.json({ code: 1, msg: '翻译失败: ' + e.message })
+    console.error('[translate]', e)
+    res.json({ code: 1, msg: '翻译失败，请检查网络连接后重试' })
   }
 })
 

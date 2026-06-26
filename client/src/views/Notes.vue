@@ -301,6 +301,7 @@ function goBack() {
 }
 function switchMode(mode) {
   store.viewMode = mode
+  store.setFilter('page', 1)
   load()
 }
 

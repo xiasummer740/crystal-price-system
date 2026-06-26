@@ -178,8 +178,8 @@ export function exportSamples(query = {}) {
   if (query.material_spec) { conditions.push('material_spec LIKE ?'); params.push(`%${query.material_spec}%`) }
   const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : ''
   const rows = queryAll(`SELECT * FROM material_samples ${where} ORDER BY created_at DESC`, params)
-  const headers = ['登记时间','品牌','尺寸','频点','负载','模式','物料编码','物料名称','本价含税','工厂','库存数量','备注']
-  const data = rows.map(r => [r.created_at,r.brand,r.dimension,r.frequency,r.load_cap,r.mode,r.material_code,r.material_name,r.cost_price,r.factory_code,r.stock_quantity,r.remarks])
+  const headers = ['登记时间','物料编码','物料名称','物料规格','品牌','尺寸','PIN脚','频点','负载','电压','模式','频偏','含税价','本价含税','工厂','库存数量','规格书','备注']
+  const data = rows.map(r => [r.created_at,r.material_code,r.material_name,r.material_spec,r.brand,r.dimension,r.pin_count,r.frequency,r.load_cap,r.voltage,r.mode,r.freq_tol,r.price_with_tax,r.cost_price,r.factory_code,r.stock_quantity,r.spec_document,r.remarks])
   data.unshift(headers)
   const wb = XLSX.utils.book_new()
   const ws = XLSX.utils.aoa_to_sheet(data)
@@ -189,7 +189,7 @@ export function exportSamples(query = {}) {
 }
 
 export function generateSampleTemplate() {
-  const headers = ['登记时间','品牌','尺寸','频点','负载','模式','物料编码','物料名称','本价含税','工厂','库存数量','备注']
+  const headers = ['登记时间','物料编码','物料名称','物料规格','品牌','尺寸','PIN脚','频点','负载','电压','模式','频偏','含税价','本价含税','工厂','库存数量','规格书','备注']
   const wb = XLSX.utils.book_new()
   const ws = XLSX.utils.aoa_to_sheet([headers])
   ws['!cols'] = headers.map(h => ({ wch: h.length*1.5+4 }))

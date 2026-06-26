@@ -24,11 +24,12 @@ export const usePriceStore = defineStore('price', {
         if (this.multiFilter) params.multiFilter = this.multiFilter
         const res = await fetchPrices(params)
         const newList = res.data.list
-        // 去重：完全相同的记录只保留一条
+        // 去重：完全相同的记录只保留一条（使用不可见分隔符避免字段内容干扰）
         const deduped = []
         const seen = new Set()
+        const SEP = '\x1F'
         for (const item of newList) {
-          const key = [item.material_code,item.material_name,item.material_spec,item.category,item.brand,item.dimension,item.pin_count,item.frequency,item.load_cap,item.voltage,item.mode,item.freq_tol,item.price_with_tax,item.price_without_tax,item.currency,item.factory_code,item.quoter,item.standard_lead_time,item.first_inquiry_customer,item.remarks].map(v=>v??'').join('|')
+          const key = [item.material_code,item.material_name,item.material_spec,item.category,item.brand,item.dimension,item.pin_count,item.frequency,item.load_cap,item.voltage,item.mode,item.freq_tol,item.price_with_tax,item.price_without_tax,item.currency,item.factory_code,item.quoter,item.standard_lead_time,item.first_inquiry_customer,item.remarks].map(v=>v??'').join(SEP)
           if (seen.has(key)) continue
           seen.add(key)
           deduped.push(item)
@@ -37,8 +38,9 @@ export const usePriceStore = defineStore('price', {
           this.list = [...this.list, ...deduped]
         } else {
           this.list = deduped
+          // 仅在首次/刷新时计算去重后的总数，翻页时不变
+          this.total = Math.max(0, res.data.total - (newList.length - deduped.length))
         }
-        this.total = Math.max(0, res.data.total - (newList.length - deduped.length))
       } finally {
         this.loading = false
       }

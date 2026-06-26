@@ -10,7 +10,7 @@ function parseMultiFilter(multiStr, alias = '') {
   if (!multiStr) return { conditions, params }
   let filters = []
   try { filters = JSON.parse(multiStr) } catch { return { conditions, params } }
-  const allowed = ['material_code','material_name','material_spec','category','brand','dimension','pin_count','frequency','load_cap','voltage','mode','freq_tol','price_with_tax','price_without_tax','currency','factory_code','quoter','standard_lead_time','first_inquiry_customer','remarks','created_at']
+  const allowed = ['material_code','material_name','material_spec','category','brand','dimension','pin_count','frequency','load_cap','voltage','mode','freq_tol','temperature','price_with_tax','price_without_tax','currency','factory_code','quoter','standard_lead_time','min_package','first_inquiry_customer','remarks','created_at']
   for (const f of filters) {
     if (!f.field || !allowed.includes(f.field)) continue
     const col = pfix + f.field; const v = f.value || ''
@@ -97,7 +97,6 @@ router.get('/grouped', (req, res) => {
   const taxRate = Number(req.query.taxRate) || 13
   const fxRate = Number(req.query.fxRate) || 7.25
   const normPrice = (alias) => `CASE WHEN ${alias}.currency='USD' THEN COALESCE(${alias}.price_without_tax, ${alias}.price_with_tax/(1+${taxRate}/100.0), 999999)*${fxRate} ELSE COALESCE(${alias}.price_without_tax, ${alias}.price_with_tax/(1+${taxRate}/100.0), 999999) END`
-  const matchOn = (a, b) => matchCols.map(c => `COALESCE(${a}.${c},'') = COALESCE(${b}.${c},'')`).join(' AND ')
   const groupCols = matchCols.join(',')
 
   // 分组统计 + 逐条取最低价记录

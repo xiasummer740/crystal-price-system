@@ -284,13 +284,17 @@ async function showMaterialSummary(code) {
 
 function goDetail(id) { showSummaryPopup.value = false; router.push('/detail/' + id) }
 
+function onVisibilityChange() {
+  if (document.hidden) { stopAutoRefresh() } else if (autoRefresh.value) { startAutoRefresh() }
+}
 onMounted(async () => {
   page = 1; store.setFilter('page', 1)
   await store.loadMetaOptions()
   await store.loadList()
   startAutoRefresh()
+  document.addEventListener('visibilitychange', onVisibilityChange)
 })
-onUnmounted(() => { stopAutoRefresh() })
+onUnmounted(() => { stopAutoRefresh(); document.removeEventListener('visibilitychange', onVisibilityChange) })
 </script>
 
 <style scoped>

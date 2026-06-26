@@ -18,6 +18,5 @@ contextBridge.exposeInMainWorld('electronAPI', {
   platform: process.platform,
   openDataFolder: async () => { try { await fetch('/api/open-data-folder') } catch {} },
   openNotesWindow: () => ipcRenderer.invoke('open-notes-window'),
-  closeNotesWindow: () => ipcRenderer.invoke('close-notes-window'),
-  toggleNotesPin: () => ipcRenderer.invoke('toggle-notes-pin')
+  closeNotesWindow: () => ipcRenderer.invoke('close-notes-window')
 })

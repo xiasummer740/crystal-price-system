@@ -91,7 +91,7 @@
 
 <script setup>
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { useRoute, useRouter, onBeforeRouteLeave } from 'vue-router'
 import { usePriceStore } from '../stores/price.js'
 import { showToast, showLoadingToast, closeToast } from 'vant'
 import { http } from '../utils/api.js'
@@ -114,6 +114,20 @@ const form = ref({
   factory_code:'', quoter:'', standard_lead_time:'', min_package:'', spec_document:'',
   first_inquiry_customer:'', remarks:''
 })
+
+// ===== 未保存检测 =====
+const formDirty = ref(false)
+watch(form, () => { formDirty.value = true }, { deep: true })
+onBeforeRouteLeave((_to, _from, next) => {
+  if (!formDirty.value) return next()
+  showConfirmDialog({ title: '未保存', message: '有未保存的修改，确定离开吗？' })
+    .then(() => next())
+    .catch(() => next(false))
+})
+function onBeforeUnload(e) {
+  if (formDirty.value) { e.preventDefault(); e.returnValue = '' }
+}
+onMounted(() => window.addEventListener('beforeunload', onBeforeUnload))
 
 // ===== 快捷选填 =====
 const sugAll = ref({ category:[], factory:[], quoter:[], leadTime:[] })
@@ -236,12 +250,13 @@ async function onSubmit() {
   try {
     if (isEdit.value) { await store.edit(route.params.id, form.value); showToast('修改成功') }
     else { await store.add(form.value); showToast('新增成功') }
+    formDirty.value = false
 router.back()
   } catch (e) { showToast(e.message||'操作失败') } finally { submitting.value = false }
 }
 async function onSubmitNew() {
   submittingNew.value = true
-  try { await store.add(form.value); showToast('新记录已创建，原记录保留'); router.back() }
+  try { await store.add(form.value); formDirty.value = false; showToast('新记录已创建，原记录保留'); router.back() }
   catch (e) { showToast(e.message||'操作失败') } finally { submittingNew.value = false }
 }
 </script>

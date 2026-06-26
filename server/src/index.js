@@ -18,7 +18,16 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const app = express()
 const PORT = process.env.PORT || 3266
 
-app.use(cors())
+app.use(cors({
+  origin: (origin, cb) => {
+    // 允许无来源请求（同源、curl、Electron）
+    if (!origin) return cb(null, true)
+    // 允许局域网常见前缀
+    const allowed = ['http://localhost', 'http://127.0.0.1', 'http://192.168.', 'http://10.', 'http://172.']
+    if (allowed.some(p => origin.startsWith(p))) return cb(null, true)
+    cb(null, false)
+  }
+}))
 app.use(express.json())
 
 // 简易鉴权：写操作需 token，读取操作开放
@@ -69,7 +78,8 @@ app.get('/api/export', (req, res) => {
     res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(fn)}"; filename*=UTF-8''${encodeURIComponent(fn)}`)
     res.send(buffer)
   } catch (e) {
-    res.status(500).json({ code: 1, msg: e.message })
+    console.error('[export]', e)
+    res.status(500).json({ code: 1, msg: '导出失败' })
   }
 })
 
@@ -81,7 +91,8 @@ app.post('/api/import', upload.single('file'), (req, res) => {
     const count = importFromExcel(req.file.buffer)
     res.json({ code: 0, data: { count }, msg: `成功导入 ${count} 条记录` })
   } catch (e) {
-    res.status(500).json({ code: 1, msg: e.message })
+    console.error('[import]', e)
+    res.status(500).json({ code: 1, msg: '导入失败，请检查文件格式' })
   }
 })
 
@@ -94,7 +105,8 @@ app.get('/api/template', (_req, res) => {
     res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(fn)}"; filename*=UTF-8''${encodeURIComponent(fn)}`)
     res.send(buffer)
   } catch (e) {
-    res.status(500).json({ code: 1, msg: e.message })
+    console.error('[template]', e)
+    res.status(500).json({ code: 1, msg: '模板生成失败' })
   }
 })
 
@@ -133,11 +145,16 @@ const specUpload = multer({
     cb(new Error('不支持的文件类型，仅允许: PDF/图片/Office/Zip'))
   }
 })
-app.post('/api/upload-spec', specUpload.single('file'), (req, res) => {
-  if (!req.file) return res.status(400).json({ code: 1, msg: '请选择文件' })
-  // 返回规格书访问路径
-  const url = `/api/specs/${encodeURIComponent(req.file.filename)}`
-  res.json({ code: 0, data: { url, filename: req.file.originalname } })
+app.post('/api/upload-spec', (req, res) => {
+  specUpload.single('file')(req, res, (err) => {
+    if (err) {
+      console.error('[specUpload]', err)
+      return res.status(400).json({ code: 1, msg: err instanceof multer.MulterError ? '文件上传失败: ' + err.message : err.message })
+    }
+    if (!req.file) return res.status(400).json({ code: 1, msg: '请选择文件' })
+    const url = `/api/specs/${encodeURIComponent(req.file.filename)}`
+    res.json({ code: 0, data: { url, filename: req.file.originalname } })
+  })
 })
 
 // 打开数据文件夹（仅桌面端有效）
