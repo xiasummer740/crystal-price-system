@@ -101,7 +101,7 @@
 import { ref, reactive, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { showToast, showConfirmDialog } from 'vant'
-import { getNote, createNote, updateNote, uploadNoteImages, fetchCategories, fetchNoteCustomers } from '../utils/api.js'
+import { getNote, createNote, updateNote, uploadNoteImages, deleteNoteImage, fetchCategories, fetchNoteCustomers } from '../utils/api.js'
 import NoteCategories from './NoteCategories.vue'
 
 const route = useRoute()
@@ -336,7 +336,14 @@ async function uploadFiles(files) {
   }
 }
 
-function removeImg(i) {
+async function removeImg(i) {
+  const url = form.images[i]
+  // 通知服务器删除文件（不等待结果，不影响用户体验）
+  if (url) {
+    const parts = url.split('/')
+    const filename = parts[parts.length - 1]
+    deleteNoteImage(filename).catch(() => {})
+  }
   form.images.splice(i, 1)
   trackChange()
 }

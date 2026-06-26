@@ -3,10 +3,13 @@
 // - FIFO 保留 5 份滚动
 import path from 'path'
 import fs from 'fs'
+import { fileURLToPath } from 'url'
 import { exportToExcel, exportSamples, exportNotes } from './export.js'
 
 const THROTTLE_MS = 5 * 1000
 const KEEP = 5
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 const state = {
   prices: { pending: false, timer: null, lastFlush: 0 },
@@ -21,8 +24,7 @@ function ts() {
 }
 
 function backupDir() {
-  const dataDir = process.env.DATA_DIR
-  if (!dataDir) return null
+  const dataDir = process.env.DATA_DIR || path.join(__dirname, '..')
   const dir = path.join(dataDir, 'Excel备份')
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
   return dir

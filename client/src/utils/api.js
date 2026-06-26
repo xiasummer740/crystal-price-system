@@ -149,6 +149,9 @@ export function markReminded(id) {
 export function uploadNoteImages(formData) {
   return http.post('/notes/upload', formData)
 }
+export function deleteNoteImage(filename) {
+  return http.delete(`/notes/upload/${encodeURIComponent(filename)}`)
+}
 export function fetchNoteCustomers() {
   return http.get('/notes/customers/list')
 }

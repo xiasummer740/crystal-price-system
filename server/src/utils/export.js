@@ -114,8 +114,16 @@ export function importFromExcel(fileBuffer) {
     const now = formatLocal(new Date())
     const createdAt = r.created_at || now
     const updatedAt = r.updated_at || createdAt
-    executeBatch(`INSERT INTO material_prices (created_at,updated_at,material_code,material_name,material_spec,category,brand,dimension,pin_count,frequency,load_cap,voltage,mode,freq_tol,temperature,price_with_tax,price_without_tax,currency,factory_code,quoter,standard_lead_time,min_package,spec_document,first_inquiry_customer,remarks) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    const ins = executeBatch(`INSERT INTO material_prices (created_at,updated_at,material_code,material_name,material_spec,category,brand,dimension,pin_count,frequency,load_cap,voltage,mode,freq_tol,temperature,price_with_tax,price_without_tax,currency,factory_code,quoter,standard_lead_time,min_package,spec_document,first_inquiry_customer,remarks) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       [createdAt,updatedAt,r.material_code||'',r.material_name||'',r.material_spec||'',r.category||'',r.brand||'',r.dimension||'',r.pin_count||'',r.frequency||'',r.load_cap||'',r.voltage||'',r.mode||'',r.freq_tol||'',r.temperature||'',r.price_with_tax??null,r.price_without_tax??null,r.currency||'CNY',r.factory_code||'',r.quoter||'',r.standard_lead_time||'',r.min_package||'',r.spec_document||'',r.first_inquiry_customer||'',r.remarks||''])
+    // 记录导入时的初始价格日志
+    const recordId = ins.lastInsertRowid
+    if (recordId && (r.price_with_tax != null || r.price_without_tax != null)) {
+      const logFields = [['price_with_tax', r.price_with_tax], ['price_without_tax', r.price_without_tax], ['currency', r.currency]]
+      for (const [field, val] of logFields) {
+        if (val != null) executeBatch('INSERT INTO price_logs (material_code,record_id,field_name,old_value,new_value) VALUES (?,?,?,?,?)', [r.material_code||'', recordId, field, '', String(val)])
+      }
+    }
     count++
   }
   saveNow()

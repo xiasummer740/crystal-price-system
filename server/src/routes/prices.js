@@ -251,8 +251,8 @@ router.post('/batch-delete', (req, res) => {
   }
   if (req.body.material_name) { conditions.push('material_name LIKE ?'); params.push(`%${req.body.material_name}%`) }
   if (req.body.material_spec) { conditions.push('material_spec LIKE ?'); params.push(`%${req.body.material_spec}%`) }
-  execute(`UPDATE material_prices SET is_deleted = 1, updated_at = datetime('now','localtime') WHERE ${conditions.join(' AND ')}`, params)
-  res.json({ code: 0, msg: '已批量删除' })
+  const result = execute(`UPDATE material_prices SET is_deleted = 1, updated_at = datetime('now','localtime') WHERE ${conditions.join(' AND ')}`, params)
+  res.json({ code: 0, msg: `已删除 ${result.changes} 条` })
 })
 
 // 回收站列表

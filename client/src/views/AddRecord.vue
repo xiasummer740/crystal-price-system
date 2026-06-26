@@ -32,8 +32,8 @@
         </van-cell-group>
 
         <van-cell-group inset title="价格信息">
-          <van-field v-model.number="form.price_with_tax" label="含税价" placeholder="如：1.5000" type="number" @change="onPriceWithTaxChange" />
-          <van-field v-model.number="form.price_without_tax" label="未税价" placeholder="如：1.2000" type="number" @change="onPriceWithoutTaxChange" />
+          <van-field v-model.number="form.price_with_tax" label="含税价" placeholder="如：1.5000" type="number" :rules="[{ validator: v => v===null||v===''||v>=0, message:'价格不能为负' }]" @change="onPriceWithTaxChange" />
+          <van-field v-model.number="form.price_without_tax" label="未税价" placeholder="如：1.2000" type="number" :rules="[{ validator: v => v===null||v===''||v>=0, message:'价格不能为负' }]" @change="onPriceWithoutTaxChange" />
           <van-field v-model="form.currency" label="币种" readonly is-link placeholder="CNY" @click="showCurrencyPicker=true" />
         </van-cell-group>
 

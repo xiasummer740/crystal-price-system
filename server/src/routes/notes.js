@@ -35,6 +35,19 @@ router.post('/upload', imgUpload.array('files', 9), (req, res) => {
   res.json({ code: 0, data: urls })
 })
 
+// 删除已上传的图片
+router.delete('/upload/:filename', (req, res) => {
+  const filename = req.params.filename
+  // 防止路径遍历：只允许删除 uploads/notes 目录下的文件
+  if (filename.includes('/') || filename.includes('\\') || filename === '' || filename === '.') {
+    return res.status(400).json({ code: 1, msg: '非法的文件名' })
+  }
+  const filePath = path.join(notesUploadDir, filename)
+  if (!fs.existsSync(filePath)) return res.status(404).json({ code: 1, msg: '文件不存在' })
+  try { fs.unlinkSync(filePath); res.json({ code: 0, msg: '已删除' }) }
+  catch (e) { res.status(500).json({ code: 1, msg: '删除失败' }) }
+})
+
 // ========== 记事 CRUD ==========
 
 // 返回已有客户名列表（去重、非空、按使用次数排序）
