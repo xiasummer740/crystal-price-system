@@ -21,7 +21,12 @@ const imgUpload = multer({
       cb(null, name)
     }
   }),
-  limits: { fileSize: 10 * 1024 * 1024 } // 10MB
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
+  fileFilter: (_req, file, cb) => {
+    const allowedMimes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/bmp']
+    if (allowedMimes.includes(file.mimetype)) return cb(null, true)
+    cb(new Error('仅支持图片文件（JPEG/PNG/GIF/WebP）'))
+  }
 })
 
 router.post('/upload', imgUpload.array('files', 9), (req, res) => {

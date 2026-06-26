@@ -4,6 +4,7 @@ import multer from 'multer'
 import path from 'path'
 import fs from 'fs'
 import { exec } from 'child_process'
+import crypto from 'crypto'
 import { fileURLToPath } from 'url'
 import pricesRouter from './routes/prices.js'
 import samplesRouter from './routes/samples.js'
@@ -24,10 +25,10 @@ app.use(express.json())
 const AUTH_FILE = path.join(process.env.DATA_DIR || path.join(__dirname, '..'), '.auth_token')
 let authToken = ''
 if (fs.existsSync(AUTH_FILE)) { authToken = fs.readFileSync(AUTH_FILE, 'utf8').trim() }
-if (!authToken) { authToken = 'crystal_' + Math.random().toString(36).slice(2) + Date.now().toString(36); fs.writeFileSync(AUTH_FILE, authToken) }
+if (!authToken) { authToken = 'crystal_' + crypto.randomBytes(24).toString('hex'); fs.writeFileSync(AUTH_FILE, authToken) }
 app.use((req, res, next) => {
   if (req.method === 'GET' || req.path === '/api/auth/verify') return next()
-  const token = req.headers['x-auth-token'] || req.query._token || ''
+  const token = req.headers['x-auth-token'] || ''
   if (token === authToken) return next()
   if (req.originalUrl?.includes('/api/')) return res.status(401).json({ code: 1, msg: '未授权，请刷新页面获取新token' })
   next()
@@ -107,20 +108,31 @@ const notesUploadDir = path.join(process.env.DATA_DIR || path.join(__dirname, '.
 if (!fs.existsSync(notesUploadDir)) fs.mkdirSync(notesUploadDir, { recursive: true })
 app.use('/api/uploads/notes', express.static(notesUploadDir))
 
-const specUpload = multer({ storage: multer.diskStorage({
-  destination: specDir,
-  filename: (_req, file, cb) => {
-    const ext = path.extname(file.originalname)
-    const base = path.basename(file.originalname, ext)
-    let name = file.originalname
-    let n = 1
-    while (fs.existsSync(path.join(specDir, name))) {
-      name = `${base} (${n})${ext}`
-      n++
+const specUpload = multer({
+  storage: multer.diskStorage({
+    destination: specDir,
+    filename: (_req, file, cb) => {
+      const ext = path.extname(file.originalname)
+      const base = path.basename(file.originalname, ext)
+      // 移除可能导致路径遍历的字符
+      const safeBase = base.replace(/\.\./g, '').replace(/[/\\]/g, '_')
+      let name = safeBase + ext
+      let n = 1
+      while (fs.existsSync(path.join(specDir, name))) {
+        name = `${safeBase} (${n})${ext}`
+        n++
+      }
+      cb(null, name)
     }
-    cb(null, name)
+  }),
+  limits: { fileSize: 50 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const allowedExts = ['.pdf', '.png', '.jpg', '.jpeg', '.gif', '.doc', '.docx', '.xlsx', '.xls', '.zip', '.rar']
+    const ext = path.extname(file.originalname).toLowerCase()
+    if (allowedExts.includes(ext)) return cb(null, true)
+    cb(new Error('不支持的文件类型，仅允许: PDF/图片/Office/Zip'))
   }
-})})
+})
 app.post('/api/upload-spec', specUpload.single('file'), (req, res) => {
   if (!req.file) return res.status(400).json({ code: 1, msg: '请选择文件' })
   // 返回规格书访问路径

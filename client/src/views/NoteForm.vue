@@ -98,7 +98,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted, onBeforeUnmount } from 'vue'
+import { ref, reactive, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { showToast, showConfirmDialog } from 'vant'
 import { getNote, createNote, updateNote, uploadNoteImages, fetchCategories, fetchNoteCustomers } from '../utils/api.js'
@@ -211,6 +211,9 @@ onMounted(async () => {
     originalForm.value = JSON.parse(JSON.stringify(form))
   }
 })
+
+// 深度监听 form 所有字段变化（包括 v-model 直接修改的 title/content）
+watch(form, trackChange, { deep: true })
 
 // 监听表单变化
 function trackChange() {

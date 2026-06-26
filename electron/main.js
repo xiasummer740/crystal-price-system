@@ -353,7 +353,10 @@ function createWindow(port) {
       openNotesWindow(serverPort)
       return { action: 'deny' }
     }
-    shell.openExternal(url)
+    // 仅允许 http/https 外部链接通过系统浏览器打开
+    if (url.startsWith('http://') || url.startsWith('https://')) {
+      shell.openExternal(url)
+    }
     return { action: 'deny' }
   })
 
@@ -458,7 +461,7 @@ function startReminderPolling(port) {
                 if (mainWindow.isMinimized()) mainWindow.restore()
                 mainWindow.focus()
                 mainWindow.webContents.executeJavaScript(
-                  `window.location.hash = '#/notes/${note.id}'`
+                  `window.location.hash = '#/notes/${Number(note.id)}'`
                 )
               }
             })

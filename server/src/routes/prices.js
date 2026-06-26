@@ -108,7 +108,8 @@ router.get('/grouped', (req, res) => {
   for (const grp of paged) {
     const conds = ['is_deleted = 0', ...matchCols.map(c => `COALESCE(${c},'') = ?`)]
     const vals = matchCols.map(c => grp[c] ?? '')
-    const row = queryOne(`SELECT * FROM material_prices WHERE ${conds.join(' AND ')} ORDER BY COALESCE(price_with_tax, price_without_tax, 999999) ASC, id ASC LIMIT 1`, vals)
+    const orderExpr = normPrice('material_prices')
+    const row = queryOne(`SELECT * FROM material_prices WHERE ${conds.join(' AND ')} ORDER BY ${orderExpr} ASC, id ASC LIMIT 1`, vals)
     if (row) { row.record_count = grp.rc; row.factory_count = grp.fc; list.push(row) }
   }
   res.json({ code: 0, data: { list, total, page: Number(page), pageSize: Number(pageSize) } })

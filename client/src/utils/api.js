@@ -46,7 +46,16 @@ http.interceptors.response.use(
     if (method && WRITE_METHODS.includes(method)) {
       try { useSaveStatusStore().setFailed(err) } catch {}
     }
-    if (err.response?.status === 401) { localStorage.removeItem('crystal_auth_token'); ensureToken() }
+    // 401 → 刷新 token 后自动重试一次（避免用户感知到 token 过期）
+    if (err.response?.status === 401 && !err.config?._retry) {
+      localStorage.removeItem('crystal_auth_token')
+      return ensureToken().then(newToken => {
+        if (!newToken) return Promise.reject(new Error('无法获取授权令牌'))
+        err.config._retry = true
+        err.config.headers['x-auth-token'] = newToken
+        return http(err.config)
+      })
+    }
     const msg = err.response?.data?.msg || '网络错误'
     return Promise.reject(new Error(msg))
   }
