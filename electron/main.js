@@ -327,7 +327,7 @@ function createWindow(port) {
     height: 900,
     minWidth: 900,
     minHeight: 600,
-    title: '晶振报价管理系统',
+    title: '晶振报价管理系统 v' + app.getVersion(),
     icon: path.join(__dirname, '..', 'client', 'dist', 'SJK-256.png'),
     webPreferences: {
       nodeIntegration: false,
