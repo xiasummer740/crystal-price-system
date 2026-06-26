@@ -365,17 +365,24 @@ function downloadBlob(blob, filename) {
   URL.revokeObjectURL(url)
 }
 
+function triggerDownload(url) {
+  const a = document.createElement('a')
+  a.href = url; a.style.display = 'none'
+  document.body.appendChild(a); a.click()
+  document.body.removeChild(a)
+}
+
 function handleExport() {
   const p = new URLSearchParams()
   if (store.filters.keyword) p.set('keyword', store.filters.keyword)
   if (store.filters.customer) p.set('customer', store.filters.customer)
   if (store.filters.category_id) p.set('category_id', store.filters.category_id)
   if (store.filters.status) p.set('status', store.filters.status)
-  window.open('/api/notes/export?' + p.toString(), '_blank')
+  triggerDownload('/api/notes/export?' + p.toString())
 }
 
 function handleDownloadTemplate() {
-  window.open('/api/notes/template', '_blank')
+  triggerDownload('/api/notes/template')
 }
 
 let importInput = null
