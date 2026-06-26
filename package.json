@@ -5,9 +5,9 @@
   "type": "module",
   "main": "electron/main.js",
   "scripts": {
-    "dev": "concurrently -n server,electron \"npm run dev:server\" \"npm run dev:electron\"",
+    "dev": "electron .",
     "dev:server": "node server/src/index.js",
-    "dev:electron": "sleep 2 && electron .",
+    "dev:electron": "electron .",
     "build": "cd client && npm run build",
     "start": "electron .",
     "package": "npm run build && electron-builder --win",

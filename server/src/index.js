@@ -44,6 +44,8 @@ app.use((req, res, next) => {
           triggerBackup('prices')
         } else if (req.originalUrl.startsWith('/api/samples')) {
           triggerBackup('samples')
+        } else if (req.originalUrl.startsWith('/api/notes')) {
+          triggerBackup('notes')
         }
       }
     })

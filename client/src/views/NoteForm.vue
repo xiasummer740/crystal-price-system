@@ -2,18 +2,23 @@
   <transition name="page-fade">
     <div class="page-wrap">
       <header class="page-header">
-        <button class="back-btn" @click="goBack">‹ 返回</button>
+        <button class="back-btn" @click="goBack">{{ isEdit ? '‹ 返回' : '取消' }}</button>
         <h3>{{ isEdit ? '编辑记事' : '新增记事' }}</h3>
+        <button v-if="!isEdit" class="save-new-btn" :disabled="saving" @click="saveAndNew">{{ saving ? '保存中…' : '保存并新建' }}</button>
         <button class="save-btn" :disabled="saving" @click="save">{{ saving ? '保存中…' : '保存' }}</button>
       </header>
 
       <div class="page-body">
         <div class="form-section">
-          <van-field v-model="form.title" label="标题" placeholder="输入记事标题" maxlength="200"
-            :rules="[{ required: true, message: '标题不能为空' }]"
-            :error="!!errors.title" :error-message="errors.title" />
+          <van-field v-model="form.title" placeholder="输入记事标题（选填）" maxlength="200" clearable />
 
-          <van-field v-model="form.customer" label="客户" placeholder="关联客户（可选）" clearable />
+          <van-field v-model="form.customer" label="客户" placeholder="关联客户（可选）" clearable
+            @update:model-value="onCustomerInput" @focus="onCustomerFocus" @blur="onCustomerBlur" />
+          <div class="customer-suggest" v-if="showCustomerSuggest && filteredCustomers.length">
+            <div v-for="c in filteredCustomers" :key="c" class="cs-item" @mousedown.prevent="selectCustomer(c)">
+              {{ c }}
+            </div>
+          </div>
 
           <van-field label="事项类型" is-link readonly :model-value="categoryLabel" placeholder="选择事项类型" @click="showCategoryPicker = true" />
 
@@ -60,19 +65,19 @@
       <van-image-preview v-model:show="showPreview" :images="form.images" :start-position="previewImg" @change="previewImg = $event" />
 
       <!-- 事项类型选择 -->
-      <van-popup v-model:show="showCategoryPicker" round position="bottom">
-        <van-picker :columns="categoryColumns" @confirm="onCategoryConfirm" @cancel="showCategoryPicker = false" />
-      </van-popup>
+      <van-action-sheet v-model:show="showCategoryPicker" :actions="categoryActions" cancel-text="取消"
+        @select="onCategoryConfirm" close-on-click-action />
 
       <!-- 优先级选择 -->
-      <van-popup v-model:show="showPriorityPicker" round position="bottom">
-        <van-picker :columns="priorityColumns" @confirm="onPriorityConfirm" @cancel="showPriorityPicker = false" />
-      </van-popup>
+      <van-action-sheet v-model:show="showPriorityPicker" :actions="priorityActions" cancel-text="取消"
+        @select="onPriorityConfirm" close-on-click-action />
 
       <!-- 状态选择 -->
-      <van-popup v-model:show="showStatusPicker" round position="bottom">
-        <van-picker :columns="statusColumns" @confirm="onStatusConfirm" @cancel="showStatusPicker = false" />
-      </van-popup>
+      <van-action-sheet v-model:show="showStatusPicker" :actions="statusActions" cancel-text="取消"
+        @select="onStatusConfirm" close-on-click-action />
+
+      <!-- 事项类型管理 -->
+      <NoteCategories :show="showCatMgr" @close="showCatMgr = false" @updated="onCatMgrUpdated" />
 
       <!-- 提醒时间选择 -->
       <van-popup v-model:show="showReminderPicker" round position="bottom" :style="{ height: '50%' }">
@@ -96,7 +101,8 @@
 import { ref, reactive, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { showToast, showConfirmDialog } from 'vant'
-import { getNote, createNote, updateNote, uploadNoteImages, fetchCategories } from '../utils/api.js'
+import { getNote, createNote, updateNote, uploadNoteImages, fetchCategories, fetchNoteCustomers } from '../utils/api.js'
+import NoteCategories from './NoteCategories.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -107,6 +113,17 @@ const showPreview = ref(false)
 const previewImg = ref(0)
 const categories = ref([])
 const errors = ref({})
+const customerList = ref([])
+const showCustomerSuggest = ref(false)
+const filteredCustomers = computed(() => {
+  const kw = (form.customer || '').trim().toLowerCase()
+  if (!kw) return customerList.value.slice(0, 10)
+  return customerList.value.filter(c => c.toLowerCase().includes(kw)).slice(0, 10)
+})
+function onCustomerInput() { showCustomerSuggest.value = true }
+function onCustomerFocus() { showCustomerSuggest.value = true }
+function onCustomerBlur() { setTimeout(() => { showCustomerSuggest.value = false }, 200) }
+function selectCustomer(name) { form.customer = name; showCustomerSuggest.value = false }
 const hasChanged = ref(false)
 const originalForm = ref(null)
 
@@ -126,6 +143,7 @@ const form = reactive({
 const showCategoryPicker = ref(false)
 const showPriorityPicker = ref(false)
 const showStatusPicker = ref(false)
+const showCatMgr = ref(false)
 const showReminderPicker = ref(false)
 const reminderDate = ref('')
 const reminderTime = ref('')
@@ -138,20 +156,21 @@ const categoryLabel = computed(() => {
   return c ? c.name : '未分类'
 })
 
-const priorityColumns = [
-  { text: '🔴 高', value: 1 },
-  { text: '🟡 中', value: 2 },
-  { text: '🔵 低', value: 3 }
+const priorityActions = [
+  { name: '🔴 高', value: 1 },
+  { name: '🟡 中', value: 2 },
+  { name: '🔵 低', value: 3 }
 ]
-const statusColumns = [
-  { text: '待办', value: 'todo' },
-  { text: '进行中', value: 'in_progress' },
-  { text: '已完成', value: 'done' }
+const statusActions = [
+  { name: '待办', value: 'todo' },
+  { name: '进行中', value: 'in_progress' },
+  { name: '已完成', value: 'done' }
 ]
-const categoryColumns = computed(() => {
-  const cols = categories.value.map(c => ({ text: c.name, value: c.id }))
-  cols.unshift({ text: '未分类', value: 0 })
-  return cols
+const categoryActions = computed(() => {
+  const acts = categories.value.map(c => ({ name: c.name, value: c.id }))
+  acts.unshift({ name: '未分类', value: 0 })
+  acts.push({ name: '🏷️ 管理类型', value: -1 })
+  return acts
 })
 
 onMounted(async () => {
@@ -159,6 +178,10 @@ onMounted(async () => {
     const r = await fetchCategories()
     categories.value = r.data || []
   } catch { categories.value = [] }
+  try {
+    const r = await fetchNoteCustomers()
+    customerList.value = r.data || []
+  } catch {}
 
   if (isEdit.value) {
     try {
@@ -184,6 +207,7 @@ onMounted(async () => {
       router.push('/notes')
     }
   } else {
+    if (route.query.customer) form.customer = route.query.customer
     originalForm.value = JSON.parse(JSON.stringify(form))
   }
 })
@@ -220,18 +244,24 @@ function safeParse(str, def) {
   try { return JSON.parse(str) || def } catch { return def }
 }
 
-function onCategoryConfirm({ selectedOptions }) {
-  form.category_id = selectedOptions[0].value
+function onCategoryConfirm(item) {
+  if (item.value === -1) {
+    // 管理类型 -> emit 打开分类管理
+    showCategoryPicker.value = false
+    showCatMgr.value = true
+    return
+  }
+  form.category_id = item.value
   showCategoryPicker.value = false
   trackChange()
 }
-function onPriorityConfirm({ selectedOptions }) {
-  form.priority = selectedOptions[0].value
+function onPriorityConfirm(item) {
+  form.priority = item.value
   showPriorityPicker.value = false
   trackChange()
 }
-function onStatusConfirm({ selectedOptions }) {
-  form.status = selectedOptions[0].value
+function onStatusConfirm(item) {
+  form.status = item.value
   showStatusPicker.value = false
   trackChange()
 }
@@ -242,6 +272,9 @@ function confirmReminder() {
   }
   showReminderPicker.value = false
   trackChange()
+}
+async function onCatMgrUpdated() {
+  await fetchCategories().then(r => { categories.value = r.data || [] }).catch(() => {})
 }
 function clearReminder() {
   form.reminder_at = ''
@@ -267,8 +300,6 @@ async function onDrop(e) {
 }
 
 async function onPaste(e) {
-  const tag = e.target?.tagName || ''
-  if (tag === 'INPUT' || tag === 'TEXTAREA') return
   const items = e.clipboardData?.items
   if (!items) return
   const imgFiles = []
@@ -279,6 +310,7 @@ async function onPaste(e) {
     }
   }
   if (!imgFiles.length) return
+  // 有图片 → 阻止默认粘贴文本，上传图片
   e.preventDefault()
   showToast(`检测到 ${imgFiles.length} 张截图，上传中…`)
   await uploadFiles(imgFiles)
@@ -307,12 +339,6 @@ function removeImg(i) {
 }
 
 async function save() {
-  errors.value = {}
-  if (!form.title.trim()) {
-    errors.value.title = '标题不能为空'
-    showToast('标题不能为空')
-    return
-  }
   saving.value = true
   try {
     const data = {
@@ -341,6 +367,38 @@ async function save() {
     saving.value = false
   }
 }
+
+async function saveAndNew() {
+  saving.value = true
+  try {
+    const data = {
+      title: form.title.trim(),
+      customer: form.customer,
+      category_id: form.category_id,
+      content: form.content,
+      images: form.images,
+      reminder_at: form.reminder_at || null,
+      priority: form.priority,
+      status: form.status,
+      is_pinned: form.is_pinned
+    }
+    await createNote(data)
+    showToast('已创建')
+    // 重置表单，保留客户名/事项类型
+    const keepCustomer = form.customer
+    const keepCategory = form.category_id
+    Object.assign(form, {
+      title: '', customer: keepCustomer, category_id: keepCategory,
+      content: '', images: [], reminder_at: '', priority: 2, status: 'todo', is_pinned: false
+    })
+    originalForm.value = JSON.parse(JSON.stringify(form))
+    hasChanged.value = false
+  } catch (e) {
+    showToast('保存失败: ' + e.message)
+  } finally {
+    saving.value = false
+  }
+}
 </script>
 
 <style scoped>
@@ -353,6 +411,9 @@ async function save() {
 .save-btn { padding: 6px 18px; border-radius: 6px; border: none; background: #1989fa; color: #fff; font-size: 13px; cursor: pointer; font-family: inherit; transition: background .15s; }
 .save-btn:hover { background: #1676d9; }
 .save-btn:disabled { background: #95c9f9; cursor: not-allowed; }
+.save-new-btn { padding: 6px 14px; border-radius: 6px; border: 1px solid #1989fa; background: #fff; color: #1989fa; font-size: 12px; cursor: pointer; font-family: inherit; margin-right: 6px; transition: all .15s; }
+.save-new-btn:hover { background: #e6f4ff; }
+.save-new-btn:disabled { opacity: .5; cursor: not-allowed; }
 .page-body { flex: 1; overflow-y: auto; padding: 12px 16px; }
 .form-section { background: #fff; border-radius: 10px; padding: 4px 0; margin-bottom: 12px; box-shadow: 0 1px 3px rgba(0,0,0,.04); }
 .section-title { font-size: 13px; font-weight: 600; color: #555; padding: 12px 16px 8px; display: flex; align-items: center; justify-content: space-between; }
@@ -362,6 +423,10 @@ async function save() {
 .content-textarea::placeholder { color: #bbb; }
 .upload-area { padding: 0 16px 16px; }
 .upload-hint { font-size: 10px; color: #ccc; margin: 6px 0 0; }
+.customer-suggest { position: relative; z-index: 20; margin: -12px 16px 8px; background: #fff; border: 1px solid #e0e0e0; border-radius: 0 0 8px 8px; box-shadow: 0 6px 20px rgba(0,0,0,.1); max-height: 200px; overflow-y: auto; }
+.cs-item { padding: 10px 14px; font-size: 13px; color: #323233; cursor: pointer; border-bottom: 1px solid #f5f5f5; transition: background .1s; }
+.cs-item:last-child { border-bottom: none; }
+.cs-item:hover { background: #e6f4ff; color: #1989fa; }
 .img-grid { display: flex; flex-wrap: wrap; gap: 8px; }
 .img-item { position: relative; width: 80px; height: 80px; border-radius: 8px; overflow: hidden; border: 1px solid #f0f0f0; }
 .img-item img { width: 100%; height: 100%; object-fit: cover; cursor: pointer; transition: opacity .2s; }

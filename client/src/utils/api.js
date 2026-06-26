@@ -140,6 +140,9 @@ export function markReminded(id) {
 export function uploadNoteImages(formData) {
   return http.post('/notes/upload', formData)
 }
+export function fetchNoteCustomers() {
+  return http.get('/notes/customers/list')
+}
 
 // ====== 事项类型 ======
 export function fetchCategories() {

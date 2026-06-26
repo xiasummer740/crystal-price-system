@@ -32,6 +32,16 @@ router.post('/upload', imgUpload.array('files', 9), (req, res) => {
 
 // ========== 记事 CRUD ==========
 
+// 返回已有客户名列表（去重、非空、按使用次数排序）
+router.get('/customers/list', (_req, res) => {
+  const rows = queryAll(`
+    SELECT customer, COUNT(*) as cnt FROM notes
+    WHERE is_deleted = 0 AND customer IS NOT NULL AND customer != ''
+    GROUP BY customer ORDER BY cnt DESC LIMIT 200
+  `)
+  res.json({ code: 0, data: rows.map(r => r.customer) })
+})
+
 // 列表 + 搜索 + 分页
 router.get('/', (req, res) => {
   const { page = 1, pageSize = 50, keyword, customer, category_id, status, priority, reminder } = req.query
@@ -58,7 +68,9 @@ router.get('/', (req, res) => {
     FROM notes n
     LEFT JOIN note_categories c ON n.category_id = c.id AND c.is_deleted = 0
     ${where}
-    ORDER BY n.is_pinned DESC, n.updated_at DESC
+    ORDER BY n.is_pinned DESC,
+      CASE n.status WHEN 'todo' THEN 0 WHEN 'in_progress' THEN 1 WHEN 'done' THEN 2 ELSE 3 END,
+      n.updated_at DESC
     LIMIT ? OFFSET ?
   `, [...params, Number(pageSize), offset])
 

@@ -21,20 +21,15 @@
           <input v-model="store.filters.keyword" placeholder="搜索标题、内容、客户…" @input="onSearchDebounced" class="search-input" ref="searchInput" />
           <span v-if="store.filters.keyword" class="search-clear" @click="store.filters.keyword = ''; onSearch()">×</span>
         </div>
-        <select v-model="store.filters.category_id" class="filter-select" @change="onSearch">
-          <option value="">全部分类</option>
-          <option v-for="c in store.categories" :key="c.id" :value="c.id">{{ c.name }}</option>
-        </select>
-        <select v-model="store.filters.status" class="filter-select" @change="onSearch">
-          <option value="">全部状态</option>
-          <option value="todo">待办</option>
-          <option value="in_progress">进行中</option>
-          <option value="done">已完成</option>
-        </select>
-        <select v-model="store.filters.reminder" class="filter-select" @change="onSearch">
-          <option value="">全部提醒</option>
-          <option value="pending">待提醒</option>
-        </select>
+        <div class="filter-btn" :class="{ active: store.filters.category_id }" @click="openFilter('category')">
+          {{ filterLabel('category') }} ▾
+        </div>
+        <div class="filter-btn" :class="{ active: store.filters.status }" @click="openFilter('status')">
+          {{ filterLabel('status') }} ▾
+        </div>
+        <div class="filter-btn" :class="{ active: store.filters.reminder }" @click="openFilter('reminder')">
+          {{ filterLabel('reminder') }} ▾
+        </div>
       </div>
 
       <!-- 骨架屏加载 -->
@@ -58,8 +53,9 @@
           <div v-for="(items, customer) in groupedByCustomer" :key="customer" class="customer-group">
             <div class="customer-header">
               <span class="customer-dot"></span>
-              <span class="customer-name">{{ customer || '未指定客户' }}</span>
+              <span class="customer-name" @click="addNoteFor(customer)" :title="'为「'+customer+'」新增记事'">{{ customer || '未指定客户' }}</span>
               <span class="customer-count">{{ items.length }} 条</span>
+              <span class="customer-add" @click.stop="addNoteFor(customer)" title="为该客户新增记事">＋</span>
             </div>
             <transition-group name="card-stagger" tag="div" class="card-grid">
               <div v-for="item in items" :key="item.id" class="note-card" @click="goDetail(item)" :class="{ pinned: item.is_pinned }">
@@ -75,12 +71,14 @@
                 </div>
                 <h4 class="card-title">{{ item.title }}</h4>
                 <p class="card-desc" v-if="item.content">{{ contentPreview(item.content) }}</p>
+                <div class="card-time">{{ fmtTime(item.updated_at || item.created_at) }}</div>
                 <div class="card-meta">
                   <span v-if="item.customer" class="card-customer">👤 {{ item.customer }}</span>
                   <span class="card-status" :class="item.status">
                     {{ {todo:'待办',in_progress:'进行中',done:'已完成'}[item.status] || '待办' }}
                   </span>
                   <span v-if="hasImages(item)" class="card-img-count">📷 {{ imageCount(item) }}</span>
+                  <span class="card-edit" @click.stop="router.push('/notes/edit/'+item.id)" title="编辑">✎</span>
                 </div>
               </div>
             </transition-group>
@@ -144,6 +142,10 @@
 
       <!-- 事项类型管理 -->
       <NoteCategories :show="showCategoryManager" @close="showCategoryManager = false" @updated="onCategoriesUpdated" />
+
+      <!-- 筛选弹出层（支持滚轮滚动） -->
+      <van-action-sheet v-model:show="showFilterSheet" :actions="filterActions" cancel-text="取消"
+        @select="onFilterSelect" close-on-click-action description="选择筛选条件" />
     </div>
   </transition>
 </template>
@@ -166,6 +168,64 @@ const dragOverCol = ref('')
 const searchInput = ref(null)
 
 const isStandalone = ref(route.query.standalone === '1')
+const showFilterSheet = ref(false)
+const filterType = ref('')
+
+const filterActions = computed(() => {
+  if (filterType.value === 'category') {
+    const opts = [{ name: '全部分类', value: '' }]
+    for (const c of store.categories) {
+      opts.push({ name: c.name, value: c.id })
+    }
+    return opts
+  }
+  if (filterType.value === 'status') {
+    return [
+      { name: '全部状态', value: '' },
+      { name: '待办', value: 'todo' },
+      { name: '进行中', value: 'in_progress' },
+      { name: '已完成', value: 'done' }
+    ]
+  }
+  if (filterType.value === 'reminder') {
+    return [
+      { name: '全部提醒', value: '' },
+      { name: '待提醒', value: 'pending' }
+    ]
+  }
+  return []
+})
+
+const filterLabels = {
+  category: { '': '全部分类' },
+  status: { '': '全部状态', todo: '待办', in_progress: '进行中', done: '已完成' },
+  reminder: { '': '全部提醒', pending: '待提醒' }
+}
+
+function filterLabel(type) {
+  const v = store.filters[type]
+  const map = filterLabels[type]
+  if (!map) return '筛选'
+  if (map[v] !== undefined) return map[v]
+  if (type === 'category' && v) {
+    const c = store.categories.find(c => c.id === Number(v))
+    if (c) return c.name
+  }
+  return '筛选'
+}
+
+function openFilter(type) {
+  filterType.value = type
+  showFilterSheet.value = true
+}
+
+function onFilterSelect(item) {
+  if (filterType.value) {
+    store.setFilter(filterType.value, item.value)
+    onSearch()
+  }
+}
+
 const hasActiveFilter = computed(() =>
   store.filters.keyword || store.filters.category_id || store.filters.status || store.filters.reminder
 )
@@ -195,9 +255,15 @@ const groupedByCustomer = computed(() => {
     if (!groups[key]) groups[key] = []
     groups[key].push(item)
   }
+  // 客户排序：有待办/进行中 > 仅已完成；同优先级按最新更新时间
   const keys = Object.keys(groups).sort((a, b) => {
-    if (!a && !b) return 0; if (!a) return 1; if (!b) return -1
-    return a.localeCompare(b, 'zh-CN')
+    const aAct = groups[a].some(i => i.status === 'todo' || i.status === 'in_progress')
+    const bAct = groups[b].some(i => i.status === 'todo' || i.status === 'in_progress')
+    if (aAct && !bAct) return -1
+    if (!aAct && bAct) return 1
+    const aLast = Math.max(...groups[a].map(i => new Date((i.updated_at||i.created_at||'').replace(' ','T')).getTime()).filter(t => !isNaN(t)))
+    const bLast = Math.max(...groups[b].map(i => new Date((i.updated_at||i.created_at||'').replace(' ','T')).getTime()).filter(t => !isNaN(t)))
+    return bLast - aLast
   })
   const sorted = {}
   for (const k of keys) sorted[k] = groups[k]
@@ -207,6 +273,13 @@ const groupedByCustomer = computed(() => {
 function contentPreview(text) {
   return text.replace(/<[^>]+>/g, '').replace(/\n/g, ' ').slice(0, 80) + (text.length > 80 ? '…' : '')
 }
+function fmtTime(t) {
+  if (!t) return ''
+  const d = new Date(t.replace(' ', 'T'))
+  if (isNaN(d.getTime())) return t.slice(0, 10)
+  const pad = n => String(n).padStart(2, '0')
+  return `${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
 function hasImages(item) {
   try { const imgs = JSON.parse(item.images || '[]'); return imgs.length > 0 } catch { return false }
 }
@@ -215,6 +288,9 @@ function imageCount(item) {
 }
 function goDetail(item) {
   router.push('/notes/' + item.id)
+}
+function addNoteFor(customer) {
+  if (customer) router.push('/notes/add?customer=' + encodeURIComponent(customer))
 }
 function goBack() {
   if (isStandalone.value) {
@@ -331,6 +407,9 @@ onUnmounted(() => {
 .search-clear:hover { color: #666; }
 .filter-select { padding: 4px 8px; border-radius: 6px; border: 1px solid #e0e0e0; font-size: 12px; color: #555; background: #fff; font-family: inherit; outline: none; min-width: 70px; cursor: pointer; transition: border-color .2s; }
 .filter-select:focus { border-color: #1989fa; }
+.filter-btn { padding: 4px 10px; border-radius: 6px; border: 1px solid #e0e0e0; font-size: 12px; color: #555; background: #fff; font-family: inherit; outline: none; cursor: pointer; transition: all .15s; white-space: nowrap; user-select: none; }
+.filter-btn:hover { border-color: #1989fa; color: #1989fa; }
+.filter-btn.active { background: #e6f4ff; border-color: #1989fa; color: #1989fa; }
 
 /* ====== 骨架屏 ====== */
 .skeleton-area { flex: 1; overflow-y: auto; padding: 12px 16px; }
@@ -353,8 +432,11 @@ onUnmounted(() => {
 @keyframes group-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
 .customer-header { display: flex; align-items: center; gap: 8px; padding: 6px 4px 10px; border-bottom: 1px solid #f0f0f0; margin-bottom: 10px; }
 .customer-dot { width: 8px; height: 8px; border-radius: 50%; background: #1989fa; flex-shrink: 0; }
-.customer-name { font-size: 14px; font-weight: 600; color: #323233; }
+.customer-name { font-size: 14px; font-weight: 600; color: #323233; cursor: pointer; transition: color .15s; }
+.customer-name:hover { color: #1989fa; }
 .customer-count { font-size: 11px; color: #bbb; margin-left: auto; }
+.customer-add { font-size: 16px; color: #ccc; cursor: pointer; padding: 0 4px; margin-left: 6px; line-height: 1; transition: color .15s; }
+.customer-add:hover { color: #52c41a; }
 
 /* 卡片网格 */
 .card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
@@ -372,8 +454,11 @@ onUnmounted(() => {
 .card-reminder-icon { font-size: 11px; margin-left: auto; opacity: .7; }
 .card-title { font-size: 15px; font-weight: 600; color: #1a1a2e; margin: 0 0 6px; word-break: break-word; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .card-desc { font-size: 12px; color: #999; margin: 0 0 10px; line-height: 1.5; word-break: break-word; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.card-time { font-size: 10px; color: #ccc; margin: 0 0 6px; }
 .card-meta { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 11px; color: #aaa; }
 .card-customer { color: #666; }
+.card-edit { font-size: 13px; color: #ccc; cursor: pointer; margin-left: auto; padding: 0 2px; line-height: 1; transition: color .15s; }
+.card-edit:hover { color: #1989fa; }
 .card-status { padding: 1px 6px; border-radius: 3px; font-size: 10px; }
 .card-status.todo { background: #f5f5f5; color: #757575; }
 .card-status.in_progress { background: #e3f2fd; color: #1565c0; }

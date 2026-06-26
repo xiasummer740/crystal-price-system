@@ -220,6 +220,7 @@ let serverPort = BASE_PORT
 let dbSaveNow = null
 let doExportToExcel = null
 let doExportSamples = null
+let doExportNotes = null
 let doFlushBackupPending = null
 
 // 启动日志
@@ -266,11 +267,12 @@ async function startServer() {
   log('Starting server import...')
   const mod = await import('../server/src/index.js')
   const { saveNow } = await import('../server/src/db.js')
-  const { exportToExcel, exportSamples } = await import('../server/src/utils/export.js')
+  const { exportToExcel, exportSamples, exportNotes } = await import('../server/src/utils/export.js')
   const { flushPending } = await import('../server/src/utils/excelBackup.js')
   dbSaveNow = saveNow
   doExportToExcel = exportToExcel
   doExportSamples = exportSamples
+  doExportNotes = exportNotes
   doFlushBackupPending = flushPending
   const expressApp = mod.default
   log('Server module imported')
@@ -566,6 +568,11 @@ app.on('before-quit', () => {
       try { const buf = doExportSamples({}); fs.writeFileSync(path.join(excelDir, '样品登记-' + ts + '.xlsx'), buf) } catch(e) { log('Samples backup error: ' + e.message) }
       const sf = fs.readdirSync(excelDir).filter(f => f.startsWith('样品登记')).sort()
       while (sf.length > 10) { fs.unlinkSync(path.join(excelDir, sf.shift())) }
+    }
+    if (doExportNotes) {
+      try { const buf = doExportNotes({}); fs.writeFileSync(path.join(excelDir, '记事便签-' + ts + '.xlsx'), buf) } catch(e) { log('Notes backup error: ' + e.message) }
+      const nf = fs.readdirSync(excelDir).filter(f => f.startsWith('记事便签')).sort()
+      while (nf.length > 10) { fs.unlinkSync(path.join(excelDir, nf.shift())) }
     }
     log('before-quit: 保存 + 备份完成')
   } catch (e) {

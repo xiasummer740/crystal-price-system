@@ -72,7 +72,21 @@
           </div>
         </div>
 
-        <van-image-preview v-model:show="showPreview" :images="images" :start-position="previewIdx" @change="previewIdx = $event" />
+        <!-- 自定义图片浏览器（带左右箭头） -->
+        <van-overlay :show="showPreview" z-index="2000">
+          <div class="viewer-wrap" @click="showPreview = false">
+            <div class="viewer-top">
+              <span class="viewer-count">{{ previewIdx + 1 }} / {{ images.length }}</span>
+              <div class="viewer-top-right">
+                <button class="viewer-copy" @click.stop="copyCurrentImage">复制图片</button>
+                <button class="viewer-close" @click="showPreview = false">✕</button>
+              </div>
+            </div>
+            <img :src="images[previewIdx]" class="viewer-img" @click.stop />
+            <button v-if="previewIdx > 0" class="viewer-nav viewer-prev" @click.stop="previewIdx--">‹</button>
+            <button v-if="previewIdx < images.length - 1" class="viewer-nav viewer-next" @click.stop="previewIdx++">›</button>
+          </div>
+        </van-overlay>
       </template>
     </div>
   </transition>
@@ -129,6 +143,24 @@ async function handleDelete() {
 }
 
 function goBack() { router.push('/notes') }
+async function copyCurrentImage() {
+  const url = images.value[previewIdx.value]
+  if (!url) return
+  try {
+    const fullUrl = url.startsWith('http') ? url : window.location.origin + url
+    const resp = await fetch(fullUrl)
+    const blob = await resp.blob()
+    await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })])
+    showToast('图片已复制，可直接粘贴到微信')
+  } catch (e) {
+    // 兜底：复制地址
+    try {
+      const fullUrl = url.startsWith('http') ? url : window.location.origin + url
+      await navigator.clipboard.writeText(fullUrl)
+      showToast('图片地址已复制')
+    } catch { showToast('复制失败') }
+  }
+}
 </script>
 
 <style scoped>
@@ -186,4 +218,20 @@ function goBack() { router.push('/notes') }
 .gallery-item img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform .3s; }
 .gallery-item:hover img { transform: scale(1.08); }
 .gallery-overlay { position: absolute; bottom: 4px; right: 4px; background: rgba(0,0,0,.5); color: #fff; font-size: 10px; padding: 1px 6px; border-radius: 8px; }
+
+/* 自定义图片浏览器 */
+.viewer-wrap { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: #000; z-index: 2001; }
+.viewer-top { position: fixed; top: 0; left: 0; right: 0; display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; z-index: 2002; }
+.viewer-count { color: #fff; font-size: 14px; background: rgba(0,0,0,.4); padding: 4px 12px; border-radius: 12px; }
+.viewer-top-right { display: flex; align-items: center; gap: 8px; }
+.viewer-copy { padding: 6px 14px; border-radius: 6px; border: 1px solid rgba(255,255,255,.3); background: rgba(255,255,255,.1); color: #fff; font-size: 12px; cursor: pointer; font-family: inherit; transition: all .15s; }
+.viewer-copy:hover { background: rgba(255,255,255,.25); border-color: rgba(255,255,255,.5); }
+.viewer-close { width: 32px; height: 32px; border-radius: 50%; border: none; background: rgba(255,255,255,.15); color: #fff; font-size: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: background .15s; }
+.viewer-close:hover { background: rgba(255,255,255,.3); }
+.viewer-img { max-width: 95vw; max-height: 90vh; object-fit: contain; }
+.viewer-nav { position: fixed; top: 50%; transform: translateY(-50%); width: 48px; height: 48px; border-radius: 50%; border: none; background: rgba(255,255,255,.12); color: #fff; font-size: 28px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all .2s; z-index: 2002; line-height: 1; }
+.viewer-nav:hover { background: rgba(255,255,255,.3); transform: translateY(-50%) scale(1.1); }
+.viewer-nav:active { transform: translateY(-50%) scale(.95); }
+.viewer-prev { left: 20px; }
+.viewer-next { right: 20px; }
 </style>
