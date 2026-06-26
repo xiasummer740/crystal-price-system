@@ -155,7 +155,7 @@ export function exportNotes(query = {}) {
     ORDER BY n.updated_at DESC
   `, params)
   const statusMap = { todo: '待办', in_progress: '进行中', done: '已完成' }
-  const priorityMap = { 1: '低', 2: '中', 3: '高' }
+  const priorityMap = { 1: '高', 2: '中', 3: '低' }
   const headers = ['编号','标题','内容','客户','分类','优先级','状态','提醒时间','已提醒','是否置顶','创建时间','更新时间']
   const data = rows.map(r => [
     r.id, r.title, r.content, r.customer,
@@ -194,7 +194,7 @@ export async function exportNotesPackage(query = {}) {
     ORDER BY n.updated_at DESC
   `, params)
   const statusMap = { todo: '待办', in_progress: '进行中', done: '已完成' }
-  const priorityMap = { 1: '低', 2: '中', 3: '高' }
+  const priorityMap = { 1: '高', 2: '中', 3: '低' }
   const headers = ['编号','标题','内容','客户','分类','优先级','状态','提醒时间','已提醒','是否置顶','创建时间','更新时间','图片文件名']
   const data = rows.map(r => {
     let imageNames = ''
@@ -332,11 +332,17 @@ export async function importNotesFromZip(fileBuffer, notesUploadDir) {
     const r = mapRow(item)
     if (!r.title) continue
 
-    // 按分类名查找 category_id
+    // 按分类名查找 category_id，不存在则自动创建
     let categoryId = 0
     if (r.category_name) {
-      const cat = queryOne('SELECT id FROM note_categories WHERE name = ? AND is_deleted = 0', [r.category_name])
-      if (cat) categoryId = cat.id
+      let cat = queryOne('SELECT id FROM note_categories WHERE name = ? AND is_deleted = 0', [r.category_name])
+      if (cat) {
+        categoryId = cat.id
+      } else {
+        // 自动创建缺失的分类
+        const ins = executeBatch('INSERT INTO note_categories (name, color, sort_order) VALUES (?,?,?)', [r.category_name, '#1989fa', 99])
+        categoryId = ins.lastInsertRowid
+      }
     }
 
     const now = formatLocal(new Date())
