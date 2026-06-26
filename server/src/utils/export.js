@@ -248,64 +248,81 @@ export function generateNoteTemplate() {
 }
 
 export async function importNotesFromZip(fileBuffer, notesUploadDir) {
-  const zip = await JSZip.loadAsync(fileBuffer)
+  let xlsxBuf
 
-  // 读 xlsx
-  const xlsxFile = zip.file('记事便签.xlsx')
-  if (!xlsxFile) throw new Error('ZIP 中未找到记事便签.xlsx')
-  const xlsxBuf = await xlsxFile.async('nodebuffer')
+  // 判断：是 ZIP 包（含记事便签.xlsx）还是纯 xlsx
+  try {
+    const zip = await JSZip.loadAsync(fileBuffer)
+    const xlsxFile = zip.file('记事便签.xlsx')
+    if (xlsxFile) {
+      // ZIP 包模式
+      xlsxBuf = await xlsxFile.async('nodebuffer')
+      // 解压 images/
+      const imageFiles = []
+      zip.forEach((relativePath, file) => {
+        if (relativePath.startsWith('images/') && !file.dir) imageFiles.push({ relativePath, file })
+      })
+      for (const { relativePath, file } of imageFiles) {
+        const buf = await file.async('nodebuffer')
+        const name = path.basename(relativePath)
+        let target = path.join(notesUploadDir, name)
+        if (fs.existsSync(target)) {
+          const ext = path.extname(name)
+          const base = path.basename(name, ext)
+          target = path.join(notesUploadDir, `${base}_${Date.now()}${ext}`)
+        }
+        fs.writeFileSync(target, buf)
+      }
+    } else {
+      // 纯 xlsx 模式（用户直接上传填好的模板）
+      xlsxBuf = fileBuffer
+    }
+  } catch {
+    // 不是合法 ZIP，当做纯 xlsx 处理
+    xlsxBuf = fileBuffer
+  }
+
+  // 解析 xlsx
   const wb = XLSX.read(xlsxBuf, { type: 'buffer', cellDates: true })
   const ws = wb.Sheets[wb.SheetNames[0]]
   const rows = XLSX.utils.sheet_to_json(ws)
 
-  // 解压 images/ 到记事图片库
-  const imageFiles = []
-  zip.forEach((relativePath, file) => {
-    if (relativePath.startsWith('images/') && !file.dir) imageFiles.push({ relativePath, file })
-  })
-  for (const { relativePath, file } of imageFiles) {
-    const buf = await file.async('nodebuffer')
-    const name = path.basename(relativePath)
-    // 防重名：已存在则加时间戳前缀
-    let target = path.join(notesUploadDir, name)
-    if (fs.existsSync(target)) {
-      const ext = path.extname(name)
-      const base = path.basename(name, ext)
-      target = path.join(notesUploadDir, `${base}_${Date.now()}${ext}`)
+  // 解析并导入（支持模板带括号的表头和导出表头）
+  function col(r, ...names) {
+    for (const n of names) {
+      const v = r[n]
+      if (v !== undefined && v !== null) return v
     }
-    fs.writeFileSync(target, buf)
+    return ''
   }
 
-  // 解析并导入
   const mapRow = (r) => {
-    const raw = String(r['图片文件名'] || r['images'] || '')
+    const raw = String(col(r, '图片文件名', 'images'))
     const imageNames = raw ? raw.split(',').map(s => s.trim()).filter(Boolean) : []
-    // 重建图片 URL（优先用导入的文件名匹配）
     const images = imageNames.map(n => {
-      // 在 notesUploadDir 中查找匹配文件
       const candidates = fs.readdirSync(notesUploadDir).filter(f => f === n || f.endsWith('_' + n) || f.includes(path.basename(n, path.extname(n))))
       if (candidates.length) return `/api/uploads/notes/${encodeURIComponent(candidates[0])}`
       return ''
     }).filter(Boolean)
 
     return {
-      title: String(r['标题'] ?? r['title'] ?? '未命名'),
-      content: String(r['内容'] ?? r['content'] ?? ''),
-      customer: String(r['客户'] ?? r['customer'] ?? ''),
-      category_name: String(r['分类'] ?? r['category'] ?? ''),
+      title: String(col(r, '标题', 'title') || '未命名'),
+      content: String(col(r, '内容', 'content')),
+      customer: String(col(r, '客户', 'customer')),
+      category_name: String(col(r, '分类', '分类(类型名)', 'category')),
       priority: (() => {
-        const v = String(r['优先级'] ?? r['priority'] ?? '')
+        const v = String(col(r, '优先级', '优先级(高/中/低)', 'priority'))
         if (/高|high|1/.test(v)) return 1
         if (/低|low|3/.test(v)) return 3
         return 2
       })(),
       status: (() => {
-        const v = String(r['状态'] ?? r['status'] ?? '')
+        const v = String(col(r, '状态', '状态(待办/进行中/已完成)', 'status'))
         if (/进行|in_progress/.test(v)) return 'in_progress'
         if (/完成|done/.test(v)) return 'done'
         return 'todo'
       })(),
-      reminder_at: parseExcelDate(r['提醒时间'] ?? r['reminder_at']),
+      reminder_at: parseExcelDate(col(r, '提醒时间', '提醒时间(YYYY-MM-DD HH:mm)', 'reminder_at')),
       images
     }
   }
