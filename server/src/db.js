@@ -125,6 +125,8 @@ export async function initDb() {
       is_deleted        INTEGER DEFAULT 0
     )
   `)
+  // 兼容旧数据库：添加温度列
+  try { db.run('ALTER TABLE material_samples ADD COLUMN temperature TEXT') } catch {}
 
   // 记事便签 — 事项类型
   db.run(`

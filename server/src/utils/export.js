@@ -234,13 +234,12 @@ export function importSamplesFromExcel(fileBuffer) {
   let count = 0
   for (const item of rows) {
     const r = mapRow(item)
-    const allVals = [r.material_code,r.material_name,r.material_spec,r.brand,r.dimension,r.pin_count,r.frequency,r.load_cap,r.voltage,r.mode,r.freq_tol,r.price_with_tax,r.cost_price,r.factory_code,r.stock_quantity,r.spec_document,r.remarks]
-    if (!allVals.some(v => v !== '' && v != null)) continue
+    if (!r.material_code && !r.material_name && !r.material_spec) continue
     const now = formatLocal(new Date())
     const createdAt = r.created_at || now
     const updatedAt = r.updated_at || createdAt
-    executeBatch(`INSERT INTO material_samples (created_at,updated_at,material_code,material_name,material_spec,brand,dimension,pin_count,frequency,load_cap,voltage,mode,freq_tol,price_with_tax,cost_price,factory_code,stock_quantity,spec_document,remarks) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-      [createdAt,updatedAt,r.material_code||'',r.material_name||'',r.material_spec||'',r.brand||'',r.dimension||'',r.pin_count||'',r.frequency||'',r.load_cap||'',r.voltage||'',r.mode||'',r.freq_tol||'',r.price_with_tax??null,r.cost_price??null,r.factory_code||'',r.stock_quantity||0,r.spec_document||'',r.remarks||''])
+    executeBatch(`INSERT INTO material_samples (created_at,updated_at,material_code,material_name,material_spec,brand,dimension,pin_count,frequency,load_cap,voltage,mode,freq_tol,temperature,price_with_tax,cost_price,factory_code,stock_quantity,spec_document,remarks) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      [createdAt,updatedAt,r.material_code||'',r.material_name||'',r.material_spec||'',r.brand||'',r.dimension||'',r.pin_count||'',r.frequency||'',r.load_cap||'',r.voltage||'',r.mode||'',r.freq_tol||'',r.temperature||'',r.price_with_tax??null,r.cost_price??null,r.factory_code||'',r.stock_quantity||0,r.spec_document||'',r.remarks||''])
     count++
   }
   saveNow()

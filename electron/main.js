@@ -204,9 +204,15 @@ async function resolveDataDir() {
     fs.writeFileSync(probe, '')
     fs.unlinkSync(probe)
   } catch (e) {
-    log(`目录无写权限：${chosen}`)
-    dialog.showErrorBox('权限不足', `选定的目录 ${chosen} 无写入权限，将回退到默认位置：${def}`)
+    log(`目录无写权限：${chosen}，尝试回退 ${def}`)
     if (!fs.existsSync(def)) fs.mkdirSync(def, { recursive: true })
+    try {
+      const probe = path.join(def, '.write-test')
+      fs.writeFileSync(probe, ''); fs.unlinkSync(probe)
+    } catch (e) {
+      log(`回退目录也无写权限：${def}`)
+      dialog.showErrorBox('权限不足', `选定的目录和默认位置均无写入权限，应用将无法正常运行。\n\n选定: ${chosen}\n默认: ${def}\n\n请以管理员身份运行或更换安装位置后重试。`)
+    }
     saveUserConfig(def)
     return def
   }
@@ -266,16 +272,22 @@ async function startServer() {
   log(`DATA_DIR: ${dataDir}`)
 
   log('Starting server import...')
-  const mod = await import('../server/src/index.js')
-  const { saveNow } = await import('../server/src/db.js')
-  const { exportToExcel, exportSamples, exportNotes } = await import('../server/src/utils/export.js')
-  const { flushPending } = await import('../server/src/utils/excelBackup.js')
-  dbSaveNow = saveNow
-  doExportToExcel = exportToExcel
-  doExportSamples = exportSamples
-  doExportNotes = exportNotes
-  doFlushBackupPending = flushPending
-  const expressApp = mod.default
+  let expressApp
+  try {
+    const mod = await import('../server/src/index.js')
+    expressApp = mod.default
+    const { saveNow } = await import('../server/src/db.js')
+    const { exportToExcel, exportSamples, exportNotes } = await import('../server/src/utils/export.js')
+    const { flushPending } = await import('../server/src/utils/excelBackup.js')
+    dbSaveNow = saveNow
+    doExportToExcel = exportToExcel
+    doExportSamples = exportSamples
+    doExportNotes = exportNotes
+    doFlushBackupPending = flushPending
+  } catch (e) {
+    log(`Server import failed: ${e.stack || e.message}`)
+    throw new Error('服务模块加载失败: ' + e.message)
+  }
   log('Server module imported')
 
   let retryCount = 0

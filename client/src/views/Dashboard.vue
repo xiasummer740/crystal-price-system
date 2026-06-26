@@ -458,7 +458,7 @@ function onColFilterSearch(kw) {
   clearTimeout(colFilterTimer)
   colFilterTimer = setTimeout(async () => {
     colFilterLoading.value = true
-    try { colFilterValues.value = await store.loadColumnValues(colFilterCol.value, kw) } catch {}
+    try { colFilterValues.value = await store.loadColumnValues(colFilterCol.value, kw) } catch (e) { showToast('筛选加载失败') }
     colFilterLoading.value = false
   }, 300)
 }

@@ -270,15 +270,23 @@ router.post('/trash/clear', (req, res) => {
   const ids = req.body?.ids
   if (ids && Array.isArray(ids) && ids.length) {
     const placeholders = ids.map(() => '?').join(',')
+    execute(`DELETE FROM price_logs WHERE record_id IN (${placeholders})`, ids)
     execute(`DELETE FROM material_prices WHERE id IN (${placeholders})`, ids)
     return res.json({ code: 0, msg: `已彻底删除 ${ids.length} 条` })
+  }
+  const rows = queryAll('SELECT id FROM material_prices WHERE is_deleted = 1')
+  const allIds = rows.map(r => r.id)
+  if (allIds.length) {
+    execute(`DELETE FROM price_logs WHERE record_id IN (${allIds.join(',')})`)
   }
   const result = execute('DELETE FROM material_prices WHERE is_deleted = 1')
   res.json({ code: 0, msg: `已清空 ${result.changes} 条记录` })
 })
 // 彻底删除单条
 router.delete('/trash/:id', (req, res) => {
-  execute('DELETE FROM material_prices WHERE id = ?', [Number(req.params.id)])
+  const id = Number(req.params.id)
+  execute('DELETE FROM price_logs WHERE record_id = ?', [id])
+  execute('DELETE FROM material_prices WHERE id = ?', [id])
   res.json({ code: 0, msg: '已彻底删除' })
 })
 

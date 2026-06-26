@@ -3,7 +3,7 @@ import cors from 'cors'
 import multer from 'multer'
 import path from 'path'
 import fs from 'fs'
-import { exec } from 'child_process'
+import { execFile } from 'child_process'
 import crypto from 'crypto'
 import { fileURLToPath } from 'url'
 import pricesRouter from './routes/prices.js'
@@ -160,7 +160,7 @@ app.post('/api/upload-spec', (req, res) => {
 // 打开数据文件夹（仅桌面端有效）
 app.get('/api/open-data-folder', (_req, res) => {
   const dataDir = process.env.DATA_DIR
-  if (dataDir && process.platform === 'win32') exec(`explorer "${dataDir}"`)
+  if (dataDir && process.platform === 'win32') execFile('explorer', [dataDir])
   res.json({ code: 0 })
 })
 

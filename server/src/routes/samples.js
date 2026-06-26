@@ -70,7 +70,7 @@ router.post('/import', upload.single('file'), (req, res) => {
 
 // 列值查询
 router.get('/column-values/:column', (req, res) => {
-  const allowed = ['brand','dimension','pin_count','frequency','load_cap','voltage','mode','freq_tol','material_code','material_name','material_spec','factory_code']
+  const allowed = ['brand','dimension','pin_count','frequency','load_cap','voltage','mode','freq_tol','temperature','material_code','material_name','material_spec','factory_code']
   const col = req.params.column
   if (!allowed.includes(col)) return res.status(400).json({ code: 1, msg: '无效的列名' })
   const keyword = req.query.keyword || ''
@@ -85,8 +85,8 @@ router.get('/column-values/:column', (req, res) => {
 // 新增
 router.post('/', (req, res) => {
   const b = req.body
-  const r = execute(`INSERT INTO material_samples (material_code,material_name,material_spec,brand,dimension,pin_count,frequency,load_cap,voltage,mode,freq_tol,price_with_tax,cost_price,factory_code,stock_quantity,spec_document,remarks) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-    [b.material_code||'',b.material_name||'',b.material_spec||'',b.brand||'',b.dimension||'',b.pin_count||'',b.frequency||'',b.load_cap||'',b.voltage||'',b.mode||'',b.freq_tol||'',b.price_with_tax??null,b.cost_price??null,b.factory_code||'',b.stock_quantity??0,b.spec_document||'',b.remarks||''])
+  const r = execute(`INSERT INTO material_samples (material_code,material_name,material_spec,brand,dimension,pin_count,frequency,load_cap,voltage,mode,freq_tol,temperature,price_with_tax,cost_price,factory_code,stock_quantity,spec_document,remarks) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    [b.material_code||'',b.material_name||'',b.material_spec||'',b.brand||'',b.dimension||'',b.pin_count||'',b.frequency||'',b.load_cap||'',b.voltage||'',b.mode||'',b.freq_tol||'',b.temperature||'',b.price_with_tax??null,b.cost_price??null,b.factory_code||'',b.stock_quantity??0,b.spec_document||'',b.remarks||''])
   res.json({ code:0, data:{ id:r.lastInsertRowid } })
 })
 
@@ -101,7 +101,7 @@ router.get('/:id', (req, res) => {
 router.put('/:id', (req, res) => {
   const existing = queryOne('SELECT * FROM material_samples WHERE id=? AND is_deleted=0', [Number(req.params.id)])
   if (!existing) return res.status(404).json({ code:1, msg:'记录不存在' })
-  const fields = ['material_code','material_name','material_spec','brand','dimension','pin_count','frequency','load_cap','voltage','mode','freq_tol','price_with_tax','cost_price','factory_code','stock_quantity','spec_document','remarks']
+  const fields = ['material_code','material_name','material_spec','brand','dimension','pin_count','frequency','load_cap','voltage','mode','freq_tol','temperature','price_with_tax','cost_price','factory_code','stock_quantity','spec_document','remarks']
   const sets = fields.map(f=>`${f}=?`)
   const values = fields.map(f=>req.body[f]??existing[f])
   execute(`UPDATE material_samples SET updated_at=datetime('now','localtime'), ${sets.join(',')} WHERE id=?`, [...values, Number(req.params.id)])
