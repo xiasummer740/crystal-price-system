@@ -1,5 +1,11 @@
 import XLSX from 'xlsx'
-import { queryAll, execute, executeBatch, saveNow } from '../db.js'
+import JSZip from 'jszip'
+import fs from 'fs'
+import path from 'path'
+import { fileURLToPath } from 'url'
+import { queryAll, queryOne, execute, executeBatch, saveNow } from '../db.js'
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 // 解析 Excel 中的「登记时间」单元格，返回 SQLite 'YYYY-MM-DD HH:mm:ss' 格式
 // 支持：JS Date / Excel 数字序列号 / ISO 字符串 / 中文 'YYYY年MM月DD日 HH:mm' / 'YYYY/MM/DD' / 空
@@ -130,9 +136,9 @@ export function importFromExcel(fileBuffer) {
   return count
 }
 
-// ===== 记事便签导出 =====
+// ===== 记事便签导出（ZIP：xlsx + 图片） =====
 
-export function exportNotes(query = {}) {
+export async function exportNotesPackage(query = {}) {
   const { keyword, customer, category_id, status } = query
   const conditions = ['n.is_deleted = 0']
   const params = []
@@ -150,23 +156,143 @@ export function exportNotes(query = {}) {
   `, params)
   const statusMap = { todo: '待办', in_progress: '进行中', done: '已完成' }
   const priorityMap = { 1: '低', 2: '中', 3: '高' }
-  const headers = ['编号','标题','内容','客户','分类','优先级','状态','提醒时间','已提醒','是否置顶','创建时间','更新时间']
-  const data = rows.map(r => [
-    r.id, r.title, r.content, r.customer,
-    r.category_name || '',
-    priorityMap[r.priority] || '中',
-    statusMap[r.status] || r.status,
-    r.reminder_at || '',
-    r.is_reminded ? '是' : '否',
-    r.is_pinned ? '是' : '否',
-    r.created_at, r.updated_at
-  ])
+  const headers = ['编号','标题','内容','客户','分类','优先级','状态','提醒时间','已提醒','是否置顶','创建时间','更新时间','图片文件名']
+  const data = rows.map(r => {
+    let imageNames = ''
+    try { imageNames = JSON.parse(r.images || '[]').map(u => decodeURIComponent(u.split('/').pop())).join(', ') } catch {}
+    return [
+      r.id, r.title, r.content, r.customer,
+      r.category_name || '',
+      priorityMap[r.priority] || '中',
+      statusMap[r.status] || r.status,
+      r.reminder_at || '',
+      r.is_reminded ? '是' : '否',
+      r.is_pinned ? '是' : '否',
+      r.created_at, r.updated_at,
+      imageNames
+    ]
+  })
   data.unshift(headers)
   const wb = XLSX.utils.book_new()
   const ws = XLSX.utils.aoa_to_sheet(data)
   XLSX.utils.book_append_sheet(wb, ws, '记事便签')
   ws['!cols'] = headers.map((_, i) => ({ wch: i === 1 ? 30 : i === 2 ? 50 : 14 }))
+  const xlsxBuf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' })
+
+  // 打包 ZIP：xlsx + images/
+  const zip = new JSZip()
+  zip.file('记事便签.xlsx', xlsxBuf)
+
+  const notesUploadDir = path.join(process.env.DATA_DIR || path.join(__dirname, '..', '..'), '记事图片库')
+  const added = new Set()
+  for (const row of rows) {
+    let images = []
+    try { images = JSON.parse(row.images || '[]') } catch {}
+    for (const url of images) {
+      const name = decodeURIComponent(url.split('/').pop())
+      if (added.has(name)) continue
+      added.add(name)
+      const fp = path.join(notesUploadDir, name)
+      if (fs.existsSync(fp)) zip.file(`images/${name}`, fs.readFileSync(fp))
+    }
+  }
+  return zip.generateAsync({ type: 'nodebuffer' })
+}
+
+export function generateNoteTemplate() {
+  const headers = ['标题','内容','客户','分类(类型名)','优先级(高/中/低)','状态(待办/进行中/已完成)','提醒时间(YYYY-MM-DD HH:mm)']
+  const wb = XLSX.utils.book_new()
+  const ws = XLSX.utils.aoa_to_sheet([headers])
+  ws['!cols'] = headers.map(h => ({ wch: h.length * 1.5 + 4 }))
+  XLSX.utils.book_append_sheet(wb, ws, '记事导入模板')
   return XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' })
+}
+
+export async function importNotesFromZip(fileBuffer, notesUploadDir) {
+  const zip = await JSZip.loadAsync(fileBuffer)
+
+  // 读 xlsx
+  const xlsxFile = zip.file('记事便签.xlsx')
+  if (!xlsxFile) throw new Error('ZIP 中未找到记事便签.xlsx')
+  const xlsxBuf = await xlsxFile.async('nodebuffer')
+  const wb = XLSX.read(xlsxBuf, { type: 'buffer', cellDates: true })
+  const ws = wb.Sheets[wb.SheetNames[0]]
+  const rows = XLSX.utils.sheet_to_json(ws)
+
+  // 解压 images/ 到记事图片库
+  const imageFiles = []
+  zip.forEach((relativePath, file) => {
+    if (relativePath.startsWith('images/') && !file.dir) imageFiles.push({ relativePath, file })
+  })
+  for (const { relativePath, file } of imageFiles) {
+    const buf = await file.async('nodebuffer')
+    const name = path.basename(relativePath)
+    // 防重名：已存在则加时间戳前缀
+    let target = path.join(notesUploadDir, name)
+    if (fs.existsSync(target)) {
+      const ext = path.extname(name)
+      const base = path.basename(name, ext)
+      target = path.join(notesUploadDir, `${base}_${Date.now()}${ext}`)
+    }
+    fs.writeFileSync(target, buf)
+  }
+
+  // 解析并导入
+  const mapRow = (r) => {
+    const raw = String(r['图片文件名'] || r['images'] || '')
+    const imageNames = raw ? raw.split(',').map(s => s.trim()).filter(Boolean) : []
+    // 重建图片 URL（优先用导入的文件名匹配）
+    const images = imageNames.map(n => {
+      // 在 notesUploadDir 中查找匹配文件
+      const candidates = fs.readdirSync(notesUploadDir).filter(f => f === n || f.endsWith('_' + n) || f.includes(path.basename(n, path.extname(n))))
+      if (candidates.length) return `/api/uploads/notes/${encodeURIComponent(candidates[0])}`
+      return ''
+    }).filter(Boolean)
+
+    return {
+      title: String(r['标题'] ?? r['title'] ?? '未命名'),
+      content: String(r['内容'] ?? r['content'] ?? ''),
+      customer: String(r['客户'] ?? r['customer'] ?? ''),
+      category_name: String(r['分类'] ?? r['category'] ?? ''),
+      priority: (() => {
+        const v = String(r['优先级'] ?? r['priority'] ?? '')
+        if (/高|high|1/.test(v)) return 1
+        if (/低|low|3/.test(v)) return 3
+        return 2
+      })(),
+      status: (() => {
+        const v = String(r['状态'] ?? r['status'] ?? '')
+        if (/进行|in_progress/.test(v)) return 'in_progress'
+        if (/完成|done/.test(v)) return 'done'
+        return 'todo'
+      })(),
+      reminder_at: parseExcelDate(r['提醒时间'] ?? r['reminder_at']),
+      images
+    }
+  }
+
+  let count = 0
+  for (const item of rows) {
+    const r = mapRow(item)
+    if (!r.title) continue
+
+    // 按分类名查找 category_id
+    let categoryId = 0
+    if (r.category_name) {
+      const cat = queryOne('SELECT id FROM note_categories WHERE name = ? AND is_deleted = 0', [r.category_name])
+      if (cat) categoryId = cat.id
+    }
+
+    const now = formatLocal(new Date())
+    executeBatch(`INSERT INTO notes (title, content, customer, category_id, images, reminder_at, priority, status, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)`, [
+      r.title, r.content, r.customer, categoryId,
+      JSON.stringify(r.images), r.reminder_at || null, r.priority, r.status, now, now
+    ])
+    count++
+  }
+
+  if (count) saveNow()
+  return count
 }
 
 // ===== 样品导入导出 =====

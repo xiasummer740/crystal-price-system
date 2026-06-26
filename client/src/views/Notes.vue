@@ -11,6 +11,9 @@
           <button class="hdr-btn" :class="{active: store.viewMode === 'card'}" @click="switchMode('card')" title="卡片视图">📋</button>
           <button class="hdr-btn" :class="{active: store.viewMode === 'kanban'}" @click="switchMode('kanban')" title="看板视图">📊</button>
           <button class="hdr-btn cat-btn" @click="showCategoryManager = true" title="管理分类">🏷️</button>
+          <button class="action-btn" @click="handleExport" title="导出记事（含图片）">📥 导出</button>
+          <button class="action-btn" @click="handleImport" title="导入记事">📤 导入</button>
+          <button class="action-btn" @click="handleDownloadTemplate" title="下载导入模板">📄 模板</button>
           <router-link to="/notes/add" class="add-btn">＋ 新增</router-link>
           <button class="close-btn" @click="goBack" title="关闭">✕</button>
         </div>
@@ -155,7 +158,7 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { showToast } from 'vant'
 import { useNotesStore } from '../stores/notes.js'
-import { updateNote } from '../utils/api.js'
+import { updateNote, exportNotesPackage, importNotesZip, downloadNoteTemplate } from '../utils/api.js'
 import NoteCategories from './NoteCategories.vue'
 
 const emit = defineEmits(['close'])
@@ -352,7 +355,55 @@ async function onCategoriesUpdated() {
   load()
 }
 
-// 键盘快捷键
+// 导入导出
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url; a.download = filename
+  document.body.appendChild(a); a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
+}
+
+function handleExport() {
+  const p = new URLSearchParams()
+  if (store.filters.keyword) p.set('keyword', store.filters.keyword)
+  if (store.filters.customer) p.set('customer', store.filters.customer)
+  if (store.filters.category_id) p.set('category_id', store.filters.category_id)
+  if (store.filters.status) p.set('status', store.filters.status)
+  window.open('/api/notes/export?' + p.toString(), '_blank')
+}
+
+function handleDownloadTemplate() {
+  window.open('/api/notes/template', '_blank')
+}
+
+let importInput = null
+function handleImport() {
+  if (!importInput) {
+    importInput = document.createElement('input')
+    importInput.type = 'file'
+    importInput.accept = '.zip,.xlsx'
+    importInput.style.display = 'none'
+    document.body.appendChild(importInput)
+    importInput.addEventListener('change', async () => {
+      const file = importInput.files[0]
+      if (!file) return
+      const formData = new FormData()
+      formData.append('file', file)
+      try {
+        const res = await importNotesZip(formData)
+        showToast(res.msg || '导入成功')
+        load()
+      } catch (e) {
+        showToast('导入失败: ' + e.message)
+      }
+      importInput.value = ''
+    })
+  }
+  importInput.click()
+}
+
 function onKeydown(e) {
   if (e.key === 'Escape' && isStandalone.value) {
     window.close()
@@ -393,6 +444,8 @@ onUnmounted(() => {
 .hdr-btn.active { background: #1989fa; border-color: #1989fa; color: #fff; }
 .hdr-btn:hover:not(.active) { border-color: #1989fa; }
 .cat-btn { font-size: 14px; }
+.action-btn { padding: 4px 8px; border-radius: 6px; border: 1px solid #e0e0e0; background: #fff; font-size: 11px; cursor: pointer; white-space: nowrap; transition: all .15s; color: #555; }
+.action-btn:hover { border-color: #1989fa; color: #1989fa; background: #f0f8ff; }
 .add-btn { padding: 6px 14px; border-radius: 6px; border: none; background: #1989fa; color: #fff; font-size: 12px; cursor: pointer; text-decoration: none; white-space: nowrap; transition: background .15s; }
 .add-btn:hover { background: #1676d9; }
 .close-btn { width: 32px; height: 32px; border-radius: 50%; border: none; background: #f5f5f5; color: #999; font-size: 14px; cursor: pointer; display: flex; align-items: center; justify-content: center; margin-left: 4px; transition: all .15s; }

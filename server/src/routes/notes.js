@@ -4,6 +4,7 @@ import path from 'path'
 import fs from 'fs'
 import { fileURLToPath } from 'url'
 import { queryAll, queryOne, execute } from '../db.js'
+import { exportNotesPackage, generateNoteTemplate, importNotesFromZip } from '../utils/export.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const router = Router()
@@ -46,6 +47,49 @@ router.delete('/upload/:filename', (req, res) => {
   if (!fs.existsSync(filePath)) return res.status(404).json({ code: 1, msg: '文件不存在' })
   try { fs.unlinkSync(filePath); res.json({ code: 0, msg: '已删除' }) }
   catch (e) { res.status(500).json({ code: 1, msg: '删除失败' }) }
+})
+
+// ========== 导入导出 ==========
+
+// 导出记事（含图片的 ZIP 包）
+router.get('/export', async (req, res) => {
+  try {
+    const buffer = await exportNotesPackage(req.query)
+    res.setHeader('Content-Type', 'application/zip')
+    const fn = '记事便签导出.zip'
+    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(fn)}"; filename*=UTF-8''${encodeURIComponent(fn)}`)
+    res.send(buffer)
+  } catch (e) {
+    console.error('[notes-export]', e)
+    res.status(500).json({ code: 1, msg: '导出失败: ' + e.message })
+  }
+})
+
+// 下载导入模板
+router.get('/template', (_req, res) => {
+  try {
+    const buffer = generateNoteTemplate()
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    const fn = '记事导入模板.xlsx'
+    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(fn)}"; filename*=UTF-8''${encodeURIComponent(fn)}`)
+    res.send(buffer)
+  } catch (e) {
+    console.error('[notes-template]', e)
+    res.status(500).json({ code: 1, msg: '模板生成失败' })
+  }
+})
+
+// 导入记事 ZIP
+const importUpload = multer({ storage: multer.memoryStorage() })
+router.post('/import', importUpload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ code: 1, msg: '请选择文件' })
+    const count = await importNotesFromZip(req.file.buffer, notesUploadDir)
+    res.json({ code: 0, data: { count }, msg: `成功导入 ${count} 条记事` })
+  } catch (e) {
+    console.error('[notes-import]', e)
+    res.status(500).json({ code: 1, msg: '导入失败: ' + e.message })
+  }
 })
 
 // ========== 记事 CRUD ==========

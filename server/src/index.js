@@ -10,7 +10,7 @@ import pricesRouter from './routes/prices.js'
 import samplesRouter from './routes/samples.js'
 import translatorRouter from './routes/translator.js'
 import notesRouter from './routes/notes.js'
-import { exportToExcel, importFromExcel, generateTemplate, generateSampleTemplate } from './utils/export.js'
+import { exportToExcel, importFromExcel, generateTemplate, generateSampleTemplate, generateNoteTemplate } from './utils/export.js'
 import { initDb, saveNow } from './db.js'
 import { triggerBackup, flushPending } from './utils/excelBackup.js'
 
@@ -180,6 +180,7 @@ const templateDir = path.join(process.env.DATA_DIR || path.join(__dirname, '..')
 if (!fs.existsSync(templateDir)) fs.mkdirSync(templateDir, { recursive: true })
 try { fs.writeFileSync(path.join(templateDir, '报价导入模板.xlsx'), generateTemplate()) } catch {}
 try { fs.writeFileSync(path.join(templateDir, '样品导入模板.xlsx'), generateSampleTemplate()) } catch {}
+try { fs.writeFileSync(path.join(templateDir, '记事导入模板.xlsx'), generateNoteTemplate()) } catch {}
 
 // 导出 app 供 Electron 主进程使用
 export default app

@@ -155,6 +155,15 @@ export function deleteNoteImage(filename) {
 export function fetchNoteCustomers() {
   return http.get('/notes/customers/list')
 }
+export function exportNotesPackage(params) {
+  return http.get('/notes/export', { params, responseType: 'blob' })
+}
+export function importNotesZip(formData) {
+  return http.post('/notes/import', formData)
+}
+export function downloadNoteTemplate() {
+  return http.get('/notes/template', { responseType: 'blob' })
+}
 
 // ====== 事项类型 ======
 export function fetchCategories() {
