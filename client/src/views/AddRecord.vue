@@ -1,6 +1,6 @@
 <template>
   <div class="page-container">
-    <div class="page-header"><van-icon name="arrow-left" class="back-btn" @click="$router.back()" />{{ isEdit ? '编辑报价' : '新增报价' }}</div>
+    <div class="page-header"><van-icon name="arrow-left" class="back-btn" @click="goBack" />{{ isEdit ? '编辑报价' : '新增报价' }}</div>
     <div class="page-content">
       <van-form @submit="onSubmit">
         <van-cell-group inset title="物料信息">
@@ -130,6 +130,11 @@ function onBeforeUnload(e) {
 onMounted(() => window.addEventListener('beforeunload', onBeforeUnload))
 onUnmounted(() => window.removeEventListener('beforeunload', onBeforeUnload))
 
+// 统一返回：router.push 触发 onBeforeRouteLeave 守卫检测未保存
+function goBack() {
+  router.push('/')
+}
+
 // ===== 快捷选填 =====
 const sugAll = ref({ category:[], factory:[], quoter:[], leadTime:[] })
 const sugFiltered = ref({ category:[], factory:[], quoter:[], leadTime:[] })
@@ -252,12 +257,12 @@ async function onSubmit() {
     if (isEdit.value) { await store.edit(route.params.id, form.value); showToast('修改成功') }
     else { await store.add(form.value); showToast('新增成功') }
     formDirty.value = false
-router.back()
+    router.push('/')
   } catch (e) { showToast(e.message||'操作失败') } finally { submitting.value = false }
 }
 async function onSubmitNew() {
   submittingNew.value = true
-  try { await store.add(form.value); formDirty.value = false; showToast('新记录已创建，原记录保留'); router.back() }
+  try { await store.add(form.value); formDirty.value = false; showToast('新记录已创建，原记录保留'); router.push('/') }
   catch (e) { showToast(e.message||'操作失败') } finally { submittingNew.value = false }
 }
 </script>
