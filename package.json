@@ -35,10 +35,16 @@
       "repo": "crystal-price-system"
     },
     "files": [
+      "!**/node_modules",
+      "!build{,/**/*}",
+      "!dist-exe{,/**/*}",
       "electron/**/*",
       "server/**/*",
       "client/dist/**/*",
       "package.json"
+    ],
+    "asarUnpack": [
+      "node_modules/sql.js/dist/sql-wasm.wasm"
     ],
     "win": {
       "icon": "client/public/SJK-256.png",
