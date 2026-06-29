@@ -31,9 +31,9 @@
     "appId": "com.crystal.price-system",
     "productName": "晶振报价管理系统",
     "publish": {
-      "provider": "github",
-      "owner": "xiasummer740",
-      "repo": "crystal-price-system"
+      "provider": "generic",
+      "url": "https://github.com/xiasummer740/crystal-price-system/releases/latest/download",
+      "channel": "latest"
     },
     "files": [
       "!**/node_modules",

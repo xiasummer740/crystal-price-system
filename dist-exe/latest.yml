@@ -1,8 +1,8 @@
 version: 1.0.24
 files:
-  - url: crystal-price-system-setup-1.0.24.exe
-    sha512: iYsAUW3IRNeLWDUydLW345nbzCpFd8n0aF5lfIoboNQldzMUHLiKwVSyubwMpxbudSx+p6b3GUANOdgoXDm8PA==
-    size: 119598373
-path: crystal-price-system-setup-1.0.24.exe
-sha512: iYsAUW3IRNeLWDUydLW345nbzCpFd8n0aF5lfIoboNQldzMUHLiKwVSyubwMpxbudSx+p6b3GUANOdgoXDm8PA==
-releaseDate: '2026-06-29T10:27:52.666Z'
+  - url: 晶振报价管理系统 Setup 1.0.24.exe
+    sha512: x39kBgY+ZrjopVhJm6gv8bX+XSlvlhU7UKKs/HIbQ3PaF/eHilU99rj4klpFU+krfJz2xTe4zspxYlioFW1qJQ==
+    size: 119598429
+path: 晶振报价管理系统 Setup 1.0.24.exe
+sha512: x39kBgY+ZrjopVhJm6gv8bX+XSlvlhU7UKKs/HIbQ3PaF/eHilU99rj4klpFU+krfJz2xTe4zspxYlioFW1qJQ==
+releaseDate: '2026-06-29T10:34:15.514Z'
