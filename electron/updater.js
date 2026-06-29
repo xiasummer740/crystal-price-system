@@ -1,7 +1,8 @@
 // 自动在线升级模块 — 集成 electron-updater
 // 使用 GitHub Releases 作为更新源 (owner: xiasummer740, repo: crystal-price-system)
 
-import { autoUpdater } from 'electron-updater'
+import pkg from 'electron-updater'
+const { autoUpdater } = pkg
 import { app, ipcMain } from 'electron'
 import path from 'path'
 import fs from 'fs'
