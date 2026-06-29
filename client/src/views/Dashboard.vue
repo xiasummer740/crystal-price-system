@@ -10,6 +10,7 @@
         <router-link to="/translator" class="nav-btn" style="margin-right:6px;background:#f0f6ff;color:#1565c0;border-color:#bbdefb">规格书翻译</router-link>
         <router-link to="/samples" class="nav-btn" style="margin-right:6px">样品登记</router-link>
         <router-link to="/trash" class="nav-btn" style="margin-right:6px;color:#e53935;border-color:#ffcdd2">回收站</router-link>
+        <router-link to="/reports" class="nav-btn" style="background:#f9f0ff;color:#722ed1;border-color:#d3adf7">📊 汇报</router-link>
         <router-link to="/mobile" class="nav-btn">手机版</router-link>
 	        <button class="nav-btn" style="margin-left:6px;background:#f6ffed;color:#52c41a;border-color:#b7eb8f" @click="openDataFolder">📁 数据目录</button>
       </div>

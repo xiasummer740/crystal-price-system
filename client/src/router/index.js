@@ -10,6 +10,7 @@ import Translator from '../views/Translator.vue'
 import Notes from '../views/Notes.vue'
 import NoteForm from '../views/NoteForm.vue'
 import NoteDetail from '../views/NoteDetail.vue'
+import Reports from '../views/Reports.vue'
 
 const routes = [
   { path: '/', name: 'Dashboard', component: Dashboard, meta: { title: '晶振报价系统' } },
@@ -25,6 +26,7 @@ const routes = [
   { path: '/notes/add', name: 'AddNote', component: NoteForm, meta: { title: '新增记事' } },
   { path: '/notes/edit/:id', name: 'EditNote', component: NoteForm, meta: { title: '编辑记事' } },
   { path: '/notes/:id', name: 'NoteDetail', component: NoteDetail, meta: { title: '记事详情' } },
+  { path: '/reports', name: 'Reports', component: Reports, meta: { title: '总结汇报' } },
   { path: '/:pathMatch(.*)*', redirect: '/' }
 ]
 
