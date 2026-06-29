@@ -57,6 +57,8 @@ export const usePriceStore = defineStore('price', {
         this.total = res.data.total
       } catch (e) {
         console.error('loadGroupedList failed:', e)
+        // 失败时保留旧数据不清空，避免页面白板
+        import('vant').then(m => m.showToast('加载失败，请重试')).catch(() => {})
       } finally {
         this.loading = false
       }

@@ -5,6 +5,7 @@ import http from 'http'
 import { execSync } from 'child_process'
 import { fileURLToPath } from 'url'
 import { loadUserConfig, saveUserConfig } from './config.js'
+import { initUpdater, checkForUpdates } from './updater.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const BASE_PORT = 3266
@@ -224,9 +225,6 @@ async function resolveDataDir() {
 let mainWindow = null
 let serverPort = BASE_PORT
 let dbSaveNow = null
-let doExportToExcel = null
-let doExportSamples = null
-let doExportNotes = null
 let doFlushBackupPending = null
 let reminderInterval = null
 
@@ -277,12 +275,8 @@ async function startServer() {
     const mod = await import('../server/src/index.js')
     expressApp = mod.default
     const { saveNow } = await import('../server/src/db.js')
-    const { exportToExcel, exportSamples, exportNotes } = await import('../server/src/utils/export.js')
     const { flushPending } = await import('../server/src/utils/excelBackup.js')
     dbSaveNow = saveNow
-    doExportToExcel = exportToExcel
-    doExportSamples = exportSamples
-    doExportNotes = exportNotes
     doFlushBackupPending = flushPending
   } catch (e) {
     log(`Server import failed: ${e.stack || e.message}`)
@@ -517,17 +511,21 @@ app.whenReady().then(async () => {
         { role: 'quit', label: '退出' }
       ]},
       { label: '帮助', submenu: [
+        { label: '检查更新', click: () => { if (mainWindow) { mainWindow.webContents.executeJavaScript('window.__checkUpdate?.()') } } },
+        { type: 'separator' },
         { label: '关于', click: () => dialog.showMessageBox({ type: 'info', title: '关于', message: '晶振报价管理系统 v' + app.getVersion(), detail: '晶振公司内部报价管理与查询系统' }) }
       ]}
     ])
     Menu.setApplicationMenu(menu)
     createWindow(port)
-    // 启动记事提醒轮询
-    startReminderPolling(port)
-    // 主窗口准备好后关闭闪屏
+    // 窗口就绪后：关闪屏 + 初始化升级 + 延迟静默检查
     mainWindow.once('ready-to-show', () => {
       setTimeout(() => { splash.close() }, 400)
+      initUpdater(mainWindow)
+      setTimeout(() => { try { checkForUpdates() } catch {} }, 15000)
     })
+    // 启动记事提醒轮询
+    startReminderPolling(port)
   } catch (e) {
     log(`FATAL ERROR: ${e.stack || e.message}`)
     // EADDRINUSE: 自动杀掉旧进程后重试
@@ -539,7 +537,11 @@ app.whenReady().then(async () => {
           const { port } = await startServer()
           serverPort = port
           createWindow(port)
-          mainWindow.once('ready-to-show', () => { splash.close() })
+          mainWindow.once('ready-to-show', () => {
+            splash.close()
+            initUpdater(mainWindow)
+            setTimeout(() => { try { checkForUpdates() } catch {} }, 15000)
+          })
         } catch (e2) {
           splash.close()
           dialog.showErrorBox('启动失败', '端口被占用，请关闭所有晶振报价系统窗口后重试')
@@ -580,25 +582,6 @@ app.on('before-quit', () => {
       fs.copyFileSync(dbPath, path.join(dbBackupDir, `data-backup-${ts}.db`))
       const files = fs.readdirSync(dbBackupDir).filter(f => f.endsWith('.db')).sort()
       while (files.length > 30) { fs.unlinkSync(path.join(dbBackupDir, files.shift())) }
-    }
-    // Excel 备份（报价+样品各保留10份）
-    const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
-    const excelDir = path.join(dataDir, 'Excel备份')
-    if (!fs.existsSync(excelDir)) fs.mkdirSync(excelDir, { recursive: true })
-    if (doExportToExcel) {
-      try { const buf = doExportToExcel({}); fs.writeFileSync(path.join(excelDir, '报价记录-' + ts + '.xlsx'), buf) } catch(e) { log('Excel backup error: ' + e.message) }
-      const pf = fs.readdirSync(excelDir).filter(f => f.startsWith('报价记录')).sort()
-      while (pf.length > 10) { fs.unlinkSync(path.join(excelDir, pf.shift())) }
-    }
-    if (doExportSamples) {
-      try { const buf = doExportSamples({}); fs.writeFileSync(path.join(excelDir, '样品登记-' + ts + '.xlsx'), buf) } catch(e) { log('Samples backup error: ' + e.message) }
-      const sf = fs.readdirSync(excelDir).filter(f => f.startsWith('样品登记')).sort()
-      while (sf.length > 10) { fs.unlinkSync(path.join(excelDir, sf.shift())) }
-    }
-    if (doExportNotes) {
-      try { const buf = doExportNotes({}); fs.writeFileSync(path.join(excelDir, '记事便签-' + ts + '.xlsx'), buf) } catch(e) { log('Notes backup error: ' + e.message) }
-      const nf = fs.readdirSync(excelDir).filter(f => f.startsWith('记事便签')).sort()
-      while (nf.length > 10) { fs.unlinkSync(path.join(excelDir, nf.shift())) }
     }
     log('before-quit: 保存 + 备份完成')
   } catch (e) {

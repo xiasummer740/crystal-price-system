@@ -1,7 +1,7 @@
 <template>
   <div class="app-wrap">
     <header class="topbar">
-      <div class="topbar-left"><span class="logo-dot"></span><span class="logo-text">晶振报价系统</span><span v-if="isDev" class="dev-badge">开发版</span></div>
+      <div class="topbar-left"><span class="logo-dot"></span><span class="logo-text">晶振报价系统</span><span class="version-badge">v{{ appVersion }}</span><span v-if="isDev" class="dev-badge">开发版</span></div>
       <div class="topbar-right">
         <span class="clock-display" :title="clockDate">
           <span class="clock-dot"></span>{{ clockTime }}
@@ -292,6 +292,16 @@
           <template #extra>1 USD = ? CNY</template>
         </van-field>
         <p class="set-hint">税率用于含税/未税自动换算，汇率用于美金人民币折合显示。修改后即时生效。</p>
+        <div class="set-divider"></div>
+        <h4>版本升级</h4>
+        <div class="update-area">
+          <button class="update-btn" :class="updateBtnClass" @click="onUpdateClick" :title="updateTooltip" :disabled="disabled">
+            <span class="update-icon">{{ updateIcon }}</span>
+            <span class="update-text">{{ updateBtnText }}</span>
+            <span v-if="updatePercent > 0" class="update-pct">{{ updatePercent }}%</span>
+          </button>
+          <p class="set-hint">当前版本 v{{ appVersion }}</p>
+        </div>
       </div>
     </van-popup>
 
@@ -402,6 +412,7 @@ const fileInput = ref(null)
 const exporting = ref(false)
 const localIp = ref('127.0.0.1')
 const isDev = ref(new URLSearchParams(window.location.search).get('packaged') === 'false')
+const appVersion = ref(new URLSearchParams(window.location.search).get('v') || __APP_VERSION__)
 const isElectron = ref(!!window.electronAPI)
 async function openDataFolder() {
   try { await http.get('/open-data-folder') } catch { showToast('此功能仅在桌面端可用') }
@@ -633,6 +644,70 @@ const showSettings = ref(false)
 const settingsTaxRate = ref(Number(localStorage.getItem('crystal_taxRate')) || 13)
 const settingsFxRate = ref(Number(localStorage.getItem('crystal_rate')) || 7)
 function saveSettings() { localStorage.setItem('crystal_taxRate', settingsTaxRate.value); localStorage.setItem('crystal_rate', settingsFxRate.value) }
+
+// 在线升级状态
+const updateStatus = ref('idle') // idle | checking | available | downloading | downloaded | not-available | error
+const updateVersion = ref('')
+const updatePercent = ref(0)
+const updateError = ref('')
+
+const disabled = computed(() => updateStatus.value === 'checking' || updateStatus.value === 'downloading')
+const updateBtnClass = computed(() => {
+  const s = updateStatus.value
+  return { idle: s === 'idle', available: s === 'available', downloading: s === 'downloading', downloaded: s === 'downloaded', checking: s === 'checking', error: s === 'error', latest: s === 'not-available' }
+})
+const updateIcon = computed(() => {
+  const m = { idle: '⬇', available: '🔄', downloading: '⏳', downloaded: '✅', checking: '🔍', error: '⚠️', 'not-available': '✓' }
+  return m[updateStatus.value] || '⬇'
+})
+const updateBtnText = computed(() => {
+  const t = {
+    idle: '检查更新', available: '下载更新 v' + updateVersion.value,
+    downloading: '正在下载...', downloaded: '立即安装',
+    checking: '检查中...', error: '检查失败，点击重试',
+    'not-available': '已是最新版'
+  }
+  return t[updateStatus.value] || '检查更新'
+})
+const updateTooltip = computed(() => {
+  if (updateStatus.value === 'available') return `发现新版本 v${updateVersion.value}，点击下载更新`
+  if (updateStatus.value === 'downloaded') return `新版本 v${updateVersion.value} 已下载，点击安装并重启`
+  if (updateStatus.value === 'error') return updateError.value || '更新检查失败'
+  if (updateStatus.value === 'not-available') return '当前已是最新版本'
+  return ''
+})
+
+function onUpdateClick() {
+  const s = updateStatus.value
+  if (s === 'idle' || s === 'error' || s === 'not-available') {
+    updateStatus.value = 'checking'
+    window.electronAPI?.checkUpdate()
+  } else if (s === 'available') {
+    updateStatus.value = 'downloading'
+    window.electronAPI?.downloadUpdate()
+  } else if (s === 'downloaded') {
+    window.electronAPI?.installUpdate()
+  }
+}
+
+// 监听升级状态事件（来自 Electron 主进程）
+if (window.electronAPI?.onUpdateStatus) {
+  window.electronAPI.onUpdateStatus((data) => {
+    updateStatus.value = data.status
+    if (data.version) updateVersion.value = data.version
+    if (data.percent !== undefined) updatePercent.value = data.percent
+    if (data.message) updateError.value = data.message
+  })
+}
+
+// 暴露检查更新函数供主进程菜单调用
+window.__checkUpdate = () => {
+  if (updateStatus.value === 'idle' || updateStatus.value === 'not-available' || updateStatus.value === 'error') {
+    updateStatus.value = 'checking'
+    window.electronAPI?.checkUpdate()
+  }
+}
+
 onMounted(async()=>{store.setFilter('page',1);await store.loadMetaOptions();await store.loadGroupedList();localIp.value=window.electronAPI?window.electronAPI.getLanIp():(window.location.hostname||'127.0.0.1')})
 
 // 实时时钟（每秒刷新）
@@ -730,7 +805,9 @@ onUnmounted(() => { if (clockTimer) clearInterval(clockTimer); if (colFilterTime
 .ps-select:focus{border-color:#1989fa}
 .lan-tip{padding:8px;color:#ad8b00;font-size:11px;text-align:center}
 .nav-btn{background:transparent;color:#666;border:1px solid #d9d9d9;border-radius:4px;padding:4px 10px;font-size:12px;cursor:pointer;font-family:inherit;text-decoration:none;display:inline-block}
-.dev-badge{display:inline-block;padding:1px 6px;border-radius:3px;font-size:10px;font-weight:600;background:#ff6b35;color:#fff;margin-left:6px;line-height:1.4;vertical-align:middle}.nav-btn:hover{color:#1989fa;border-color:#1989fa}
+.dev-badge{display:inline-block;padding:1px 6px;border-radius:3px;font-size:10px;font-weight:600;background:#ff6b35;color:#fff;margin-left:6px;line-height:1.4;vertical-align:middle}
+.version-badge{display:inline-block;padding:1px 5px;border-radius:3px;font-size:10px;font-weight:500;background:#e8e8e8;color:#888;margin-left:6px;line-height:1.4;vertical-align:middle;user-select:none}
+.nav-btn:hover{color:#1989fa;border-color:#1989fa}
 .pop-inner{padding:16px;overflow-y:auto;height:100%}
 .pop-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
 .pop-head h3{font-size:16px;margin:0}.pbadge{font-size:12px;color:#999;font-weight:400}
@@ -846,6 +923,21 @@ onUnmounted(() => { if (clockTimer) clearInterval(clockTimer); if (colFilterTime
 .set-wrap h3{font-size:18px;font-weight:600;margin:0 0 12px}
 .set-wrap :deep(.van-field){padding:10px 0}
 .set-hint{font-size:11px;color:#999;margin-top:12px;line-height:1.6}
+.set-divider{height:1px;background:#f0f0f0;margin:16px 0}
+.set-wrap h4{font-size:14px;font-weight:600;margin:0 0 8px;color:#555}
+.update-area{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.update-btn{display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:6px;border:1px solid #d9d9d9;font-size:13px;cursor:pointer;font-family:inherit;transition:all .2s;background:#f5f6f8;color:#666}
+.update-btn:hover{border-color:#1989fa;color:#1989fa}
+.update-btn:disabled{opacity:.6;cursor:not-allowed}
+.update-btn.available{background:#fff3e0;border-color:#ffa726;color:#e65100}
+.update-btn.available:hover{background:#ffe0b2}
+.update-btn.downloading{background:#e3f2fd;border-color:#42a5f5;color:#1565c0}
+.update-btn.downloaded{background:#e8f5e9;border-color:#66bb6a;color:#2e7d32}
+.update-btn.error{background:#ffebee;border-color:#ef5350;color:#c62828}
+.update-btn.latest{background:#f5f6f8;border-color:#d9d9d9;color:#999;cursor:default}
+.update-btn.latest:hover{border-color:#d9d9d9;color:#999}
+.update-icon{font-size:16px;line-height:1}
+.update-pct{font-size:11px;color:#666}
 .spec-edit-wrap{padding:16px 20px 20px;overflow-y:auto;height:100%}
 .spec-edit-wrap h3{font-size:18px;font-weight:600;margin:0 0 4px}
 .spec-edit-hint{font-size:11px;color:#e6a23c;margin:0 0 12px}

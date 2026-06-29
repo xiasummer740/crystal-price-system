@@ -63,11 +63,20 @@
 
             <div class="note-content" v-html="renderedContent"></div>
 
-            <div class="img-gallery" v-if="images.length">
-              <div v-for="(img, i) in images" :key="i" class="gallery-item" @click="previewIdx = i; showPreview = true">
+            <!-- 图片附件 -->
+            <div class="img-gallery" v-if="imageList.length">
+              <div v-for="(img, i) in imageList" :key="i" class="gallery-item" @click="previewIdx = i; showPreview = true">
                 <img :src="img" loading="lazy" />
                 <div class="gallery-overlay">{{ i + 1 }}</div>
               </div>
+            </div>
+            <!-- 文件附件 -->
+            <div class="file-list" v-if="fileList.length">
+              <a v-for="(url, i) in fileList" :key="i" :href="url" target="_blank" class="file-item" download>
+                <span class="file-item-icon">{{ fileIcon(url) }}</span>
+                <span class="file-item-name">{{ fileName(url) }}</span>
+                <span class="file-item-dl">⬇</span>
+              </a>
             </div>
           </div>
         </div>
@@ -76,7 +85,7 @@
         <van-overlay :show="showPreview" z-index="2000">
           <div class="viewer-wrap" @click="showPreview = false">
             <div class="viewer-top">
-              <span class="viewer-count">{{ previewIdx + 1 }} / {{ images.length }}</span>
+              <span class="viewer-count">{{ previewIdx + 1 }} / {{ imageList.length }}</span>
               <div class="viewer-top-right">
                 <button class="viewer-copy" @click.stop="copyCurrentImage">复制图片</button>
                 <button class="viewer-close" @click="showPreview = false">✕</button>
@@ -84,7 +93,7 @@
             </div>
             <img :src="images[previewIdx]" class="viewer-img" @click.stop />
             <button v-if="previewIdx > 0" class="viewer-nav viewer-prev" @click.stop="previewIdx--">‹</button>
-            <button v-if="previewIdx < images.length - 1" class="viewer-nav viewer-next" @click.stop="previewIdx++">›</button>
+            <button v-if="previewIdx < imageList.length - 1" class="viewer-nav viewer-next" @click.stop="previewIdx++">›</button>
           </div>
         </van-overlay>
       </template>
@@ -104,8 +113,28 @@ const note = ref(null)
 const showPreview = ref(false)
 const previewIdx = ref(0)
 
-const images = computed(() => {
-  try { return note.value?.images ? JSON.parse(note.value.images) : [] } catch { return [] }
+// 判断 URL 是否为图片
+function isImageUrl(url) {
+  return /\.(jpg|jpeg|png|gif|webp|bmp|svg)(\?|$)/i.test(url)
+}
+function fileIcon(url) {
+  const ext = url.split('?')[0].split('.').pop()?.toLowerCase() || ''
+  if (['pdf'].includes(ext)) return '📄'
+  if (['doc','docx'].includes(ext)) return '📝'
+  if (['xls','xlsx','csv'].includes(ext)) return '📊'
+  if (['zip','rar','7z'].includes(ext)) return '📦'
+  if (['txt','json','xml','md'].includes(ext)) return '📃'
+  return '📎'
+}
+function fileName(url) {
+  return decodeURIComponent(url.split('/').pop() || '')
+    .replace(/^\d{13}-[a-z0-9]{6}-/, '')
+}
+const imageList = computed(() => {
+  try { return (JSON.parse(note.value?.images || '[]')).filter(isImageUrl) } catch { return [] }
+})
+const fileList = computed(() => {
+  try { return (JSON.parse(note.value?.images || '[]')).filter(u => !isImageUrl(u)) } catch { return [] }
 })
 
 const renderedContent = computed(() => {
@@ -149,7 +178,7 @@ async function handleDelete() {
 
 function goBack() { router.push('/notes') }
 async function copyCurrentImage() {
-  const url = images.value[previewIdx.value]
+  const url = imageList.value[previewIdx.value]
   if (!url) return
   try {
     const fullUrl = url.startsWith('http') ? url : window.location.origin + url
@@ -223,6 +252,14 @@ async function copyCurrentImage() {
 .gallery-item img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform .3s; }
 .gallery-item:hover img { transform: scale(1.08); }
 .gallery-overlay { position: absolute; bottom: 4px; right: 4px; background: rgba(0,0,0,.5); color: #fff; font-size: 10px; padding: 1px 6px; border-radius: 8px; }
+
+/* 文件列表 */
+.file-list { margin-top: 16px; display: flex; flex-direction: column; gap: 8px; }
+.file-item { display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: #f7f8fa; border-radius: 8px; text-decoration: none; transition: background .15s; }
+.file-item:hover { background: #eef0f4; }
+.file-item-icon { font-size: 22px; line-height: 1; }
+.file-item-name { flex: 1; font-size: 12px; color: #323233; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.file-item-dl { font-size: 14px; color: #1989fa; }
 
 /* 自定义图片浏览器 */
 .viewer-wrap { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: #000; z-index: 2001; }

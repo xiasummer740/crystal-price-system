@@ -42,13 +42,21 @@
 
         <div class="form-section">
           <div class="section-title">
-            图片附件
+            附件
             <span class="img-count">{{ (form.images || []).length }}/9</span>
           </div>
           <div class="upload-area" @dragover.prevent @drop.prevent="onDrop" @paste.prevent="onPaste">
             <div class="img-grid">
-              <div v-for="(img, i) in form.images" :key="i" class="img-item">
-                <img :src="img" @click="previewImg = i" loading="lazy" />
+              <div v-for="(url, i) in form.images" :key="i" class="img-item">
+                <template v-if="isImageUrl(url)">
+                  <img :src="url" @click="previewImg = i" loading="lazy" />
+                </template>
+                <template v-else>
+                  <div class="file-thumb" @click="previewImg = i">
+                    <span class="file-icon">{{ fileIcon(url) }}</span>
+                    <span class="file-name">{{ fileName(url) }}</span>
+                  </div>
+                </template>
                 <button class="img-del" @click="removeImg(i)">×</button>
               </div>
               <div v-if="(form.images || []).length < 9" class="upload-btn" @click="pickFile">
@@ -56,7 +64,7 @@
                 <span class="upload-text">点击或拖拽上传</span>
               </div>
             </div>
-            <p class="upload-hint">支持 Ctrl+V 粘贴截图</p>
+            <p class="upload-hint">支持 Ctrl+V 粘贴截图，支持任意文件格式</p>
           </div>
         </div>
       </div>
@@ -92,7 +100,7 @@
         </div>
       </van-popup>
 
-      <input ref="fileInput" type="file" multiple accept="image/*" hidden @change="onFileChange" />
+      <input ref="fileInput" type="file" multiple hidden @change="onFileChange" />
     </div>
   </transition>
 </template>
@@ -305,23 +313,44 @@ async function onDrop(e) {
 async function onPaste(e) {
   const items = e.clipboardData?.items
   if (!items) return
-  const imgFiles = []
+  const files = []
   for (const item of items) {
-    if (item.type?.startsWith('image/')) {
+    if (item.type?.startsWith('image/') || item.kind === 'file') {
       const file = item.getAsFile()
-      if (file) imgFiles.push(file)
+      if (file) files.push(file)
     }
   }
-  if (!imgFiles.length) return
-  // 有图片 → 阻止默认粘贴文本，上传图片
+  if (!files.length) return
+  // 有文件 → 阻止默认粘贴行为，上传文件
   e.preventDefault()
-  showToast(`检测到 ${imgFiles.length} 张截图，上传中…`)
-  await uploadFiles(imgFiles)
+  showToast(`检测到 ${files.length} 个文件，上传中…`)
+  await uploadFiles(files)
+}
+
+// 判断 URL 是否为图片
+function isImageUrl(url) {
+  return /\.(jpg|jpeg|png|gif|webp|bmp|svg)(\?|$)/i.test(url)
+}
+// 文件展示图标
+function fileIcon(url) {
+  const ext = url.split('?')[0].split('.').pop()?.toLowerCase() || ''
+  if (['pdf'].includes(ext)) return '📄'
+  if (['doc','docx'].includes(ext)) return '📝'
+  if (['xls','xlsx','csv'].includes(ext)) return '📊'
+  if (['zip','rar','7z'].includes(ext)) return '📦'
+  if (['txt','json','xml','md'].includes(ext)) return '📃'
+  return '📎'
+}
+// 从 URL 提取原始文件名
+function fileName(url) {
+  const name = decodeURIComponent(url.split('/').pop() || '')
+  // 去掉时间戳前缀：如 "1712345678901-abc123-报价单.pdf" → "报价单.pdf"
+  return name.replace(/^\d{13}-[a-z0-9]{6}-/, '')
 }
 
 async function uploadFiles(files) {
   const remaining = 9 - (form.images || []).length
-  if (remaining <= 0) { showToast('最多上传9张图片'); return }
+  if (remaining <= 0) { showToast('最多上传9个文件'); return }
   const toUpload = Array.from(files).slice(0, remaining)
   const fd = new FormData()
   for (const f of toUpload) fd.append('files', f)
@@ -330,7 +359,7 @@ async function uploadFiles(files) {
     const urls = r.data || []
     form.images.push(...urls)
     trackChange()
-    showToast(`已上传 ${urls.length} 张`)
+    showToast(`已上传 ${urls.length} 个文件`)
   } catch (e) {
     showToast('上传失败: ' + (e.response?.data?.msg || e.message))
   }
@@ -447,6 +476,9 @@ async function saveAndNew() {
 .upload-btn:hover { border-color: #1989fa; color: #1989fa; background: #f0f6ff; }
 .upload-icon { font-size: 22px; line-height: 1; }
 .upload-text { font-size: 10px; margin-top: 2px; }
+.file-thumb { width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; background: #fafbfc; cursor: pointer; gap: 2px; }
+.file-icon { font-size: 28px; line-height: 1; }
+.file-name { font-size: 8px; color: #999; max-width: 72px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: center; }
 .reminder-actions { display: flex; align-items: center; gap: 8px; padding: 0 16px 12px; }
 .clear-reminder { background: none; border: none; color: #ee0a24; font-size: 12px; cursor: pointer; padding: 2px 4px; font-family: inherit; }
 .clear-reminder:hover { text-decoration: underline; }

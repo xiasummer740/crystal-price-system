@@ -9,36 +9,35 @@ import { exportNotesPackage, generateNoteTemplate, importNotesFromZip } from '..
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const router = Router()
 
-// ========== 图片上传 ==========
+// ========== 附件上传（图片+文件） ==========
 const notesUploadDir = path.join(process.env.DATA_DIR || path.join(__dirname, '..', '..'), '记事图片库')
 if (!fs.existsSync(notesUploadDir)) fs.mkdirSync(notesUploadDir, { recursive: true })
 
-const imgUpload = multer({
+const fileUpload = multer({
   storage: multer.diskStorage({
     destination: notesUploadDir,
     filename: (_req, file, cb) => {
-      const ext = path.extname(file.originalname) || '.png'
-      const name = Date.now() + '-' + Math.random().toString(36).slice(2, 8) + ext
+      const ext = path.extname(file.originalname) || ''
+      const base = path.basename(file.originalname, ext)
+      // 保留原始文件名（防止中文/特殊字符丢失），前缀时间戳+随机串防冲突
+      const safeBase = base.replace(/[<>:"/\\|?*]/g, '_').slice(0, 80)
+      const name = Date.now() + '-' + Math.random().toString(36).slice(2, 8) + '-' + safeBase + ext
       cb(null, name)
     }
   }),
-  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
-  fileFilter: (_req, file, cb) => {
-    const allowedMimes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/bmp']
-    if (allowedMimes.includes(file.mimetype)) return cb(null, true)
-    cb(new Error('仅支持图片文件（JPEG/PNG/GIF/WebP）'))
-  }
+  limits: { fileSize: 50 * 1024 * 1024 } // 50MB
 })
 
-router.post('/upload', imgUpload.array('files', 9), (req, res) => {
+router.post('/upload', fileUpload.array('files', 9), (req, res) => {
   if (!req.files || !req.files.length) return res.status(400).json({ code: 1, msg: '请选择文件' })
   const urls = req.files.map(f => `/api/uploads/notes/${encodeURIComponent(f.filename)}`)
   res.json({ code: 0, data: urls })
 })
 
-// 删除已上传的图片
+// 删除已上传的附件
 router.delete('/upload/:filename', (req, res) => {
-  const filename = req.params.filename
+  // 文件名可能被双重 URL 编码（服务端存中文 + 客户端 encodeURIComponent），解码还原
+  let filename = decodeURIComponent(req.params.filename)
   // 防止路径遍历：只允许删除 uploads/notes 目录下的文件
   if (filename.includes('/') || filename.includes('\\') || filename === '' || filename === '.') {
     return res.status(400).json({ code: 1, msg: '非法的文件名' })
@@ -140,7 +139,7 @@ router.get('/', (req, res) => {
 })
 
 // 查询到期提醒（供 Electron 轮询）
-router.get('/reminders', (req, res) => {
+router.get('/reminders', (_req, res) => {
   const rows = queryAll(`
     SELECT n.*, c.name as category_name, c.color as category_color
     FROM notes n

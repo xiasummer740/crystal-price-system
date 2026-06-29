@@ -18,5 +18,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   platform: process.platform,
   openDataFolder: async () => { try { await fetch('/api/open-data-folder') } catch {} },
   openNotesWindow: () => ipcRenderer.invoke('open-notes-window'),
-  closeNotesWindow: () => ipcRenderer.invoke('close-notes-window')
+  closeNotesWindow: () => ipcRenderer.invoke('close-notes-window'),
+  // 在线升级
+  checkUpdate: () => ipcRenderer.invoke('check-update'),
+  downloadUpdate: () => ipcRenderer.invoke('download-update'),
+  installUpdate: () => ipcRenderer.invoke('install-update'),
+  onUpdateStatus: (cb) => ipcRenderer.on('update-status', (_event, data) => cb(data))
 })

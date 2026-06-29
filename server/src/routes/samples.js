@@ -8,7 +8,7 @@ const upload = multer({ storage: multer.memoryStorage() })
 
 // 列表
 router.get('/', (req, res) => {
-  const { page=1, pageSize=50, keyword, factory, brand, sortBy='created_at', sortOrder='DESC' } = req.query
+  const { page=1, pageSize=50, keyword, factory, brand, sortBy='created_at', sortOrder='DESC', multiFilter } = req.query
   const conditions = ['is_deleted = 0']
   const params = []
   if (keyword) { conditions.push('(material_code LIKE ? OR material_name LIKE ? OR brand LIKE ?)'); const kw=`%${keyword}%`; params.push(kw,kw,kw) }
@@ -21,6 +21,29 @@ router.get('/', (req, res) => {
   }
   if (req.query.material_name) { conditions.push('material_name LIKE ?'); params.push(`%${req.query.material_name}%`) }
   if (req.query.material_spec) { conditions.push('material_spec LIKE ?'); params.push(`%${req.query.material_spec}%`) }
+  // 高级筛选（multiFilter JSON）
+  if (multiFilter) {
+    try {
+      const filters = JSON.parse(multiFilter)
+      const allowed = ['material_code','material_name','material_spec','brand','dimension','pin_count','frequency','load_cap','voltage','mode','freq_tol','temperature','price_with_tax','cost_price','factory_code','stock_quantity','remarks','created_at']
+      for (const f of filters) {
+        if (!f.field || !allowed.includes(f.field)) continue
+        const v = f.value || ''
+        switch (f.op) {
+          case 'contains': conditions.push(`${f.field} LIKE ?`); params.push(`%${v}%`); break
+          case 'equals': conditions.push(`${f.field} = ?`); params.push(v); break
+          case 'starts': conditions.push(`${f.field} LIKE ?`); params.push(`${v}%`); break
+          case 'ends': conditions.push(`${f.field} LIKE ?`); params.push(`%${v}`); break
+          case 'gt': conditions.push(`${f.field} > ?`); params.push(v); break
+          case 'lt': conditions.push(`${f.field} < ?`); params.push(v); break
+          case 'gte': conditions.push(`${f.field} >= ?`); params.push(v); break
+          case 'lte': conditions.push(`${f.field} <= ?`); params.push(v); break
+          case 'empty': conditions.push(`(${f.field} = '' OR ${f.field} IS NULL)`); break
+          case 'nempty': conditions.push(`(${f.field} != '' AND ${f.field} IS NOT NULL)`); break
+        }
+      }
+    } catch {}
+  }
   const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : ''
   const validSort = ['created_at','material_code','material_name','brand','price_with_tax','stock_quantity'].includes(sortBy) ? sortBy : 'created_at'
   const validOrder = sortOrder.toUpperCase()==='ASC' ? 'ASC' : 'DESC'

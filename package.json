@@ -1,6 +1,6 @@
 {
   "name": "crystal-price-system",
-  "version": "1.0.19",
+  "version": "1.0.20",
   "description": "晶振物料报价记录查询系统",
   "type": "module",
   "main": "electron/main.js",
@@ -18,12 +18,46 @@
   "dependencies": {
     "@vitalets/google-translate-api": "^9.2.1",
     "cors": "^2.8.5",
+    "electron-updater": "^6.8.9",
     "express": "^4.21.0",
     "mammoth": "^1.12.0",
     "multer": "^1.4.5-lts.1",
     "pdfjs-dist": "^4.10.38",
     "sql.js": "^1.11.0",
     "xlsx": "^0.18.5"
+  },
+  "build": {
+    "appId": "com.crystal.price-system",
+    "productName": "晶振报价管理系统",
+    "publish": {
+      "provider": "github",
+      "owner": "xiasummer740",
+      "repo": "crystal-price-system"
+    },
+    "win": {
+      "icon": "client/public/SJK-256.png",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "language": 2052,
+      "installerLanguages": [
+        "zh_CN",
+        "en_US"
+      ]
+    },
+    "portable": {
+      "artifactName": "晶振报价管理系统-便携版-v${version}.${ext}"
+    }
   },
   "devDependencies": {
     "concurrently": "^9.1.0",

@@ -125,10 +125,12 @@ const specUpload = multer({
     destination: specDir,
     filename: (_req, file, cb) => {
       const ext = path.extname(file.originalname)
-      const base = path.basename(file.originalname, ext)
-      // 移除可能导致路径遍历的字符
-      const safeBase = base.replace(/\.\./g, '').replace(/[/\\]/g, '_')
-      let name = safeBase + ext
+      let base = path.basename(file.originalname, ext)
+      // 安全防护：移除路径遍历（递归清掉嵌套 bypass）、null 字节、NTFS 保留字符
+      while (base.includes('..')) base = base.replace(/\.\.+/g, '')
+      base = base.replace(/[\0<>:"|?*/\\]/g, '_').trim()
+      if (!base) base = 'unnamed'
+      let name = base + ext
       let n = 1
       while (fs.existsSync(path.join(specDir, name))) {
         name = `${safeBase} (${n})${ext}`

@@ -3,7 +3,7 @@ import JSZip from 'jszip'
 import fs from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
-import { queryAll, queryOne, execute, executeBatch, saveNow } from '../db.js'
+import { queryAll, queryOne, executeBatch, saveNow } from '../db.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -43,7 +43,7 @@ function formatLocal(d) {
 // ===== 报价导入导出 =====
 
 export function exportToExcel(query = {}) {
-  const { keyword, factory, quoter, currency, category, startDate, endDate } = query
+  const { keyword, factory, quoter, currency, category, startDate, endDate, multiFilter } = query
   const conditions = ['is_deleted = 0']
   const params = []
   if (keyword) { conditions.push('(material_code LIKE ? OR material_name LIKE ? OR material_spec LIKE ? OR first_inquiry_customer LIKE ?)'); const kw=`%${keyword}%`; params.push(kw,kw,kw,kw) }
@@ -60,6 +60,29 @@ export function exportToExcel(query = {}) {
   }
   if (query.material_name) { conditions.push('material_name LIKE ?'); params.push(`%${query.material_name}%`) }
   if (query.material_spec) { conditions.push('material_spec LIKE ?'); params.push(`%${query.material_spec}%`) }
+  // 高级筛选（multiFilter JSON）
+  if (multiFilter) {
+    try {
+      const filters = JSON.parse(multiFilter)
+      const allowed = ['material_code','material_name','material_spec','category','brand','dimension','pin_count','frequency','load_cap','voltage','mode','freq_tol','temperature','price_with_tax','price_without_tax','currency','factory_code','quoter','standard_lead_time','min_package','first_inquiry_customer','remarks','created_at']
+      for (const f of filters) {
+        if (!f.field || !allowed.includes(f.field)) continue
+        const v = f.value || ''
+        switch (f.op) {
+          case 'contains': conditions.push(`${f.field} LIKE ?`); params.push(`%${v}%`); break
+          case 'equals': conditions.push(`${f.field} = ?`); params.push(v); break
+          case 'starts': conditions.push(`${f.field} LIKE ?`); params.push(`${v}%`); break
+          case 'ends': conditions.push(`${f.field} LIKE ?`); params.push(`%${v}`); break
+          case 'gt': conditions.push(`${f.field} > ?`); params.push(v); break
+          case 'lt': conditions.push(`${f.field} < ?`); params.push(v); break
+          case 'gte': conditions.push(`${f.field} >= ?`); params.push(v); break
+          case 'lte': conditions.push(`${f.field} <= ?`); params.push(v); break
+          case 'empty': conditions.push(`(${f.field} = '' OR ${f.field} IS NULL)`); break
+          case 'nempty': conditions.push(`(${f.field} != '' AND ${f.field} IS NOT NULL)`); break
+        }
+      }
+    } catch {}
+  }
   const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : ''
   const rows = queryAll(`SELECT * FROM material_prices ${where} ORDER BY created_at DESC`, params)
   const headers = ['登记时间','物料编码','物料名称','物料规格','品类','品牌','尺寸规格','PIN脚','频点','负载','电压','模式','频偏','温度','含税价','未税价','币种','工厂编号','报价人','标准交期','最小包装','规格书','初次询价客户','备注']
@@ -360,7 +383,7 @@ export async function importNotesFromZip(fileBuffer, notesUploadDir) {
 // ===== 样品导入导出 =====
 
 export function exportSamples(query = {}) {
-  const { keyword, factory, brand } = query
+  const { keyword, factory, brand, multiFilter } = query
   const conditions = ['is_deleted = 0']
   const params = []
   if (keyword) { conditions.push('(material_code LIKE ? OR material_name LIKE ? OR brand LIKE ?)'); const kw=`%${keyword}%`; params.push(kw,kw,kw) }
@@ -372,6 +395,29 @@ export function exportSamples(query = {}) {
   }
   if (query.material_name) { conditions.push('material_name LIKE ?'); params.push(`%${query.material_name}%`) }
   if (query.material_spec) { conditions.push('material_spec LIKE ?'); params.push(`%${query.material_spec}%`) }
+  // 高级筛选（multiFilter JSON）
+  if (multiFilter) {
+    try {
+      const filters = JSON.parse(multiFilter)
+      const allowed = ['material_code','material_name','material_spec','brand','dimension','pin_count','frequency','load_cap','voltage','mode','freq_tol','temperature','price_with_tax','cost_price','factory_code','stock_quantity','remarks','created_at']
+      for (const f of filters) {
+        if (!f.field || !allowed.includes(f.field)) continue
+        const v = f.value || ''
+        switch (f.op) {
+          case 'contains': conditions.push(`${f.field} LIKE ?`); params.push(`%${v}%`); break
+          case 'equals': conditions.push(`${f.field} = ?`); params.push(v); break
+          case 'starts': conditions.push(`${f.field} LIKE ?`); params.push(`${v}%`); break
+          case 'ends': conditions.push(`${f.field} LIKE ?`); params.push(`%${v}`); break
+          case 'gt': conditions.push(`${f.field} > ?`); params.push(v); break
+          case 'lt': conditions.push(`${f.field} < ?`); params.push(v); break
+          case 'gte': conditions.push(`${f.field} >= ?`); params.push(v); break
+          case 'lte': conditions.push(`${f.field} <= ?`); params.push(v); break
+          case 'empty': conditions.push(`(${f.field} = '' OR ${f.field} IS NULL)`); break
+          case 'nempty': conditions.push(`(${f.field} != '' AND ${f.field} IS NOT NULL)`); break
+        }
+      }
+    } catch {}
+  }
   const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : ''
   const rows = queryAll(`SELECT * FROM material_samples ${where} ORDER BY created_at DESC`, params)
   const headers = ['登记时间','物料编码','物料名称','物料规格','品牌','尺寸','PIN脚','频点','负载','电压','模式','频偏','温度','含税价','本价含税','工厂','库存数量','规格书','备注']

@@ -80,7 +80,7 @@
                   <span class="card-status" :class="item.status">
                     {{ {todo:'待办',in_progress:'进行中',done:'已完成'}[item.status] || '待办' }}
                   </span>
-                  <span v-if="hasImages(item)" class="card-img-count">📷 {{ imageCount(item) }}</span>
+                  <span v-if="hasAttachments(item)" class="card-img-count">📎 {{ attachmentCount(item) }}</span>
                   <span class="card-edit" @click.stop="router.push('/notes/edit/'+item.id)" title="编辑">✎</span>
                 </div>
               </div>
@@ -283,10 +283,10 @@ function fmtTime(t) {
   const pad = n => String(n).padStart(2, '0')
   return `${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
-function hasImages(item) {
+function hasAttachments(item) {
   try { const imgs = JSON.parse(item.images || '[]'); return imgs.length > 0 } catch { return false }
 }
-function imageCount(item) {
+function attachmentCount(item) {
   try { return JSON.parse(item.images || '[]').length } catch { return 0 }
 }
 function goDetail(item) {

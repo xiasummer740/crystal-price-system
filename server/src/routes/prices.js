@@ -141,8 +141,11 @@ router.get('/price-logs/:code', (req, res) => {
 router.get('/by-material/:code', (req, res) => {
   const code = req.params.code
   const tfs = ['material_name','material_spec','category','brand','dimension','pin_count','frequency','load_cap','voltage','mode','freq_tol']
-  const hasFilter = keyword || factory || quoter || currency || category || startDate || endDate || multiFilter || Object.keys(req.body).some(k => ['brand','dimension','pin_count','frequency','load_cap','voltage','mode','freq_tol','standard_lead_time','material_code','first_inquiry_customer','material_name','material_spec'].includes(k))
-  if (!hasFilter) return res.status(400).json({ code: 1, msg: '请指定筛选条件或选择记录' })
+  const { keyword, factory, quoter, currency, category, startDate, endDate, multiFilter } = req.query
+  // 有物料编码直接查，没有物料编码时需要其他筛选条件
+  const hasOther = keyword || factory || quoter || currency || category || startDate || endDate || multiFilter ||
+    tfs.some(f => req.query[f]) || ['standard_lead_time','first_inquiry_customer'].some(f => req.query[f])
+  if (!hasOther && (!code || code === '_empty_')) return res.status(400).json({ code: 1, msg: '请指定筛选条件或选择记录' })
   const conditions = ['is_deleted = 0']; const params = []
   if (code && code !== '_empty_') { conditions.push('material_code = ?'); params.push(code) }
   for (const tf of tfs) {
@@ -215,9 +218,11 @@ router.put('/:id', (req, res) => {
 // POST 批量更新同款产品技术参数
 router.post('/batch-update-specs', (req, res) => {
   const b = req.body; const source = b.source || {}
+  const { keyword, factory, quoter, currency, category, startDate, endDate, multiFilter } = b
   const matchCols = ['material_code','material_name','material_spec','category','brand','dimension','pin_count','frequency','load_cap','voltage','mode','freq_tol','temperature']
   const techFields = ['material_name','material_spec','category','brand','dimension','pin_count','frequency','load_cap','voltage','mode','freq_tol','temperature']
-  const hasFilter = keyword || factory || quoter || currency || category || startDate || endDate || multiFilter || Object.keys(req.body).some(k => ['brand','dimension','pin_count','frequency','load_cap','voltage','mode','freq_tol','standard_lead_time','material_code','first_inquiry_customer','material_name','material_spec'].includes(k))
+  const hasFilter = keyword || factory || quoter || currency || category || startDate || endDate || multiFilter ||
+    Object.keys(b).some(k => matchCols.includes(k) || ['standard_lead_time','first_inquiry_customer'].includes(k))
   if (!hasFilter) return res.status(400).json({ code: 1, msg: '请指定筛选条件或选择记录' })
   const conditions = ['is_deleted = 0']; const params = []
   for (const c of matchCols) { conditions.push(`COALESCE(${c},'') = ?`); params.push(source[c] ?? '') }
@@ -283,7 +288,8 @@ router.post('/trash/clear', (req, res) => {
   const rows = queryAll('SELECT id FROM material_prices WHERE is_deleted = 1')
   const allIds = rows.map(r => r.id)
   if (allIds.length) {
-    execute(`DELETE FROM price_logs WHERE record_id IN (${allIds.join(',')})`)
+    const placeholders = allIds.map(() => '?').join(',')
+    execute(`DELETE FROM price_logs WHERE record_id IN (${placeholders})`, allIds)
   }
   const result = execute('DELETE FROM material_prices WHERE is_deleted = 1')
   res.json({ code: 0, msg: `已清空 ${result.changes} 条记录` })

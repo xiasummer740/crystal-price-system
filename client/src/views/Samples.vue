@@ -18,6 +18,7 @@
         <van-button icon="orders-o" size="small" @click="handleImport">导入</van-button>
         <van-button icon="description" size="small" plain @click="downloadTemplate">模板</van-button>
         <van-button icon="down" size="small" @click="handleExport">导出</van-button>
+        <van-button icon="filter-o" size="small" @click="showAdvFilter = true">高级筛选</van-button>
         <input ref="fileInput" type="file" accept=".xlsx,.xls" hidden @change="onFileChange" />
       </div>
       <div class="info-row">
@@ -96,6 +97,23 @@
         </select>
       </div>
     </div>
+
+    <!-- 高级筛选 -->
+    <van-popup v-model:show="showAdvFilter" round position="bottom" :style="{ height:'65%' }" closeable safe-area-inset-bottom>
+      <div class="adv-wrap">
+        <h4 class="adv-title">高级筛选</h4>
+        <div class="adv-rows">
+          <div v-for="(f, i) in advFilters" :key="i" class="adv-row">
+            <select v-model="f.field" class="adv-sel"><option value="">选择字段</option><option v-for="o in advFieldOptions" :key="o.value" :value="o.value">{{ o.label }}</option></select>
+            <select v-model="f.op" class="adv-sel adv-op"><option value="contains">包含</option><option value="equals">等于</option><option value="starts">开头是</option><option value="ends">结尾是</option><option value="gt">&gt;</option><option value="lt">&lt;</option><option value="empty">为空</option><option value="nempty">不为空</option></select>
+            <input v-if="f.op!=='empty'&&f.op!=='nempty'" v-model="f.value" class="adv-input" placeholder="输入值" />
+            <button class="adv-del" @click="advFilters.splice(i,1)">×</button>
+          </div>
+        </div>
+        <button class="adv-add" @click="advFilters.push({field:'',op:'contains',value:''})">＋ 添加条件</button>
+        <div class="adv-btns"><button class="adv-reset" @click="resetAdvFilter">重置</button><button class="adv-apply" @click="applyAdvFilter">应用筛选</button></div>
+      </div>
+    </van-popup>
 
     <!-- 列筛选弹出层 -->
     <van-popup v-model:show="showColFilter" round position="bottom" :style="{ height:'60%' }" closeable @closed="colFilterClosed">
@@ -179,6 +197,30 @@ let colFilterTimer = null
 const columnFilters = ref({})
 const activeFilters = ref([])
 const colLabels = { brand:'品牌',dimension:'尺寸',pin_count:'PIN脚',frequency:'频点',load_cap:'负载',mode:'模式',voltage:'电压',freq_tol:'频偏',material_code:'物料编码',material_name:'物料名称',material_spec:'规格',factory_code:'工厂' }
+// 高级筛选
+const showAdvFilter = ref(false)
+const advFilters = ref([{field:'',op:'contains',value:''}])
+const advMultiFilter = ref('')
+const advFieldOptions = [
+  {label:'物料编码',value:'material_code'},{label:'物料名称',value:'material_name'},{label:'物料规格',value:'material_spec'},
+  {label:'品牌',value:'brand'},{label:'尺寸',value:'dimension'},{label:'频点',value:'frequency'},
+  {label:'负载',value:'load_cap'},{label:'模式',value:'mode'},{label:'含税价',value:'price_with_tax'},
+  {label:'本价',value:'cost_price'},{label:'工厂',value:'factory_code'},{label:'库存',value:'stock_quantity'},{label:'备注',value:'remarks'}
+]
+function applyAdvFilter() {
+  const valid = advFilters.value.filter(f => f.field)
+  advMultiFilter.value = valid.length ? JSON.stringify(valid) : ''
+  showAdvFilter.value = false
+  page.value = 1
+  reload()
+}
+function resetAdvFilter() {
+  advFilters.value = [{field:'',op:'contains',value:''}]
+  advMultiFilter.value = ''
+  showAdvFilter.value = false
+  page.value = 1
+  reload()
+}
 
 const allChecked = computed(() => list.value.length>0 && checkedIds.value.length===list.value.length)
 function toggleAll(e) { checkedIds.value = e.target.checked ? list.value.map(r=>r.id) : [] }
@@ -189,7 +231,7 @@ function fmtP(v) { return v!=null&&v!==''?'¥'+Number(v).toFixed(4):'-' }
 const autoTaxRateS = () => Number(localStorage.getItem('crystal_taxRate')) || 13
 function onPriceWithTaxChangeS() { const v = form.value.price_with_tax; if (v && !form.value.cost_price) { form.value.cost_price = parseFloat((v / (1 + autoTaxRateS()/100)).toFixed(4)) } }
 function onCostPriceChangeS() { const v = form.value.cost_price; if (v && !form.value.price_with_tax) { form.value.price_with_tax = parseFloat((v * (1 + autoTaxRateS()/100)).toFixed(4)) } }
-async function reload() { loadError.value=''; loading.value=true; try { const params={page:page.value,pageSize:pageSize.value,keyword:keyword.value,factory:filterFactory.value,brand:filterBrand.value,...columnFilters.value}; const r=await http.get('/samples',{params}); list.value=r.data.list; total.value=r.data.total } catch(e){ loadError.value='加载失败: '+(e.message||'未知错误') } finally{loading.value=false} }
+async function reload() { loadError.value=''; loading.value=true; try { const params={page:page.value,pageSize:pageSize.value,keyword:keyword.value,factory:filterFactory.value,brand:filterBrand.value,...columnFilters.value}; if(advMultiFilter.value) params.multiFilter=advMultiFilter.value; const r=await http.get('/samples',{params}); list.value=r.data.list; total.value=r.data.total } catch(e){ loadError.value='加载失败: '+(e.message||'未知错误') } finally{loading.value=false} }
 let searchTimer = null
 function onSearchDebounced() { clearTimeout(searchTimer); searchTimer = setTimeout(() => { page.value = 1; reload() }, 350) }
 async function loadOptions() { try{const r=await http.get('/samples/meta/options');factoryOptions.value=[{text:'全部工厂',value:''},...r.data.factories.map(f=>({text:f,value:f}))];brandOptions.value=[{text:'全部品牌',value:''},...r.data.brands.map(b=>({text:b,value:b}))]}catch(e){ loadError.value='选项加载失败: '+(e.message||'') } }
@@ -307,4 +349,22 @@ onMounted(()=>{loadOptions();reload()})
 .cf-pop-item:hover{background:#f5f6f8;color:#1989fa}
 .cf-pop-item:last-child{border-bottom:none}
 .cf-pop-empty{flex:1;display:flex;align-items:center;justify-content:center}
+/* 高级筛选 */
+.adv-wrap{padding:20px 16px;height:100%;display:flex;flex-direction:column}
+.adv-title{font-size:16px;font-weight:600;margin:0 0 12px}
+.adv-rows{flex:1;overflow-y:auto}
+.adv-row{display:flex;gap:6px;margin-bottom:8px}
+.adv-sel{padding:6px 8px;border-radius:4px;border:1px solid #d9d9d9;font-size:12px;font-family:inherit;background:#fff;outline:none}
+.adv-sel:focus{border-color:#1989fa}
+.adv-op{width:80px;flex-shrink:0}
+.adv-input{flex:1;padding:6px 8px;border-radius:4px;border:1px solid #d9d9d9;font-size:12px;outline:none;font-family:inherit;min-width:0}
+.adv-input:focus{border-color:#1989fa}
+.adv-del{width:28px;height:28px;border-radius:4px;border:none;background:#ffebee;color:#c62828;cursor:pointer;font-size:14px;flex-shrink:0;font-family:inherit}
+.adv-del:hover{background:#ffcdd2}
+.adv-add{display:inline-flex;align-items:center;gap:4px;padding:6px 14px;border-radius:4px;border:1px dashed #d9d9d9;background:#fff;color:#1989fa;font-size:12px;cursor:pointer;margin-top:8px;font-family:inherit}
+.adv-add:hover{border-color:#1989fa;background:#e6f4ff}
+.adv-btns{display:flex;gap:10px;margin-top:12px;padding-top:12px;border-top:1px solid #f0f0f0}
+.adv-reset{flex:1;padding:8px;border-radius:6px;border:1px solid #d9d9d9;background:#fff;color:#666;font-size:13px;cursor:pointer;font-family:inherit}
+.adv-apply{flex:1;padding:8px;border-radius:6px;border:none;background:#1989fa;color:#fff;font-size:13px;cursor:pointer;font-family:inherit}
+.adv-apply:hover{background:#1676d9}
 </style>
