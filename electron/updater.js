@@ -73,9 +73,18 @@ export function initUpdater(win) {
   ipcMain.handle('check-update', async () => {
     log('IPC: 检查更新')
     try {
-      autoUpdater.checkForUpdates()
+      // 20 秒超时，避免一直卡在"检查中…"
+      const timeoutId = setTimeout(() => {
+        log('更新检查超时')
+        mainWindow?.webContents.send('update-status', { status: 'error', message: '检查超时，请检查网络连接' })
+      }, 20000)
+      await autoUpdater.checkForUpdates()
+      clearTimeout(timeoutId)
+      // checkForUpdates 成功时，update-available/update-not-available 事件会自行发送
+      // 这里不需要额外处理
     } catch (e) {
       log('checkForUpdates 失败: ' + e.message)
+      mainWindow?.webContents.send('update-status', { status: 'error', message: '检查失败: ' + e.message })
     }
     return true
   })
