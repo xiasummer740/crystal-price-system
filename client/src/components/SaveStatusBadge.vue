@@ -26,7 +26,7 @@ const labelText = computed(() => {
   if (store.isSaving) return '保存中…'
   if (store.isFailed) return '保存失败 ⚠'
   if (store.isSaved) return `已保存 ${store.savedAtText}`
-  return ''
+  return '' // idle 时不显示
 })
 
 const tipText = computed(() => {

@@ -31,7 +31,6 @@
         <button class="tb-btn adv-btn" @click="showAdvFilter = true">高级筛选</button>
         <button class="tb-btn" @click="showSettings = true">⚙</button>
         <button class="tb-btn calc-btn" @click="showCalc = true">&#128290; 报价计算器</button>
-        <SaveStatusBadge />
         <input ref="fileInput" type="file" accept=".xlsx,.xls" hidden @change="onFileChange" />
       </div>
 
@@ -404,7 +403,7 @@ import { useRouter } from 'vue-router'
 import { usePriceStore } from '../stores/price.js'
 import { importExcel, http } from '../utils/api.js'
 import { showToast, showConfirmDialog } from 'vant'
-import SaveStatusBadge from '../components/SaveStatusBadge.vue'
+
 
 const store = usePriceStore()
 const router = useRouter()

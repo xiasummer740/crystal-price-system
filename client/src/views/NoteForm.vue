@@ -52,7 +52,7 @@
                   <img :src="url" @click="previewImg = i" loading="lazy" />
                 </template>
                 <template v-else>
-                  <div class="file-thumb" @click="previewImg = i">
+                  <div class="file-thumb" @click="openFile(url)">
                     <span class="file-icon">{{ fileIcon(url) }}</span>
                     <span class="file-name">{{ fileName(url) }}</span>
                   </div>
@@ -296,6 +296,17 @@ function clearReminder() {
 }
 
 function pickFile() { fileInput.value?.click() }
+// 非图片文件：下载（保留原文件名）
+function openFile(url) {
+  const name = fileName(url)
+  fetch(url).then(r => r.blob()).then(blob => {
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(blob)
+    a.download = name
+    a.click()
+    URL.revokeObjectURL(a.href)
+  }).catch(() => window.open(url, '_blank'))
+}
 
 async function onFileChange(e) {
   const files = e.target.files

@@ -31,6 +31,11 @@ export const useSaveStatusStore = defineStore('saveStatus', {
       if (this.inflight === 0 && this.status !== 'failed') {
         this.status = 'saved'
         this.lastSavedAt = new Date()
+        // 3 秒后自动回到 idle，避免显示过时的时间
+        clearTimeout(this._autoReset)
+        this._autoReset = setTimeout(() => {
+          if (this.inflight === 0 && this.status === 'saved') this.status = 'idle'
+        }, 3000)
       }
     },
     setFailed(err) {
@@ -39,6 +44,7 @@ export const useSaveStatusStore = defineStore('saveStatus', {
       this.lastError = err?.message || String(err) || '未知错误'
     },
     reset() {
+      clearTimeout(this._autoReset)
       this.status = 'idle'
       this.lastSavedAt = null
       this.lastError = null

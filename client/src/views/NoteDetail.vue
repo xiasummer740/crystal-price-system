@@ -72,11 +72,11 @@
             </div>
             <!-- 文件附件 -->
             <div class="file-list" v-if="fileList.length">
-              <a v-for="(url, i) in fileList" :key="i" :href="url" target="_blank" class="file-item" download>
+              <div v-for="(url, i) in fileList" :key="i" class="file-item" @click="downloadFile(url)" :title="'下载 ' + fileName(url)">
                 <span class="file-item-icon">{{ fileIcon(url) }}</span>
                 <span class="file-item-name">{{ fileName(url) }}</span>
                 <span class="file-item-dl">⬇</span>
-              </a>
+              </div>
             </div>
           </div>
         </div>
@@ -177,6 +177,21 @@ async function handleDelete() {
 }
 
 function goBack() { router.push('/notes') }
+// 下载文件，使用原始文件名（去掉时间戳前缀）
+async function downloadFile(url) {
+  try {
+    const resp = await fetch(url)
+    const blob = await resp.blob()
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(blob)
+    a.download = fileName(url)
+    a.click()
+    URL.revokeObjectURL(a.href)
+  } catch (e) {
+    // 兜底：直接用原链接打开
+    window.open(url, '_blank')
+  }
+}
 async function copyCurrentImage() {
   const url = imageList.value[previewIdx.value]
   if (!url) return
@@ -255,11 +270,12 @@ async function copyCurrentImage() {
 
 /* 文件列表 */
 .file-list { margin-top: 16px; display: flex; flex-direction: column; gap: 8px; }
-.file-item { display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: #f7f8fa; border-radius: 8px; text-decoration: none; transition: background .15s; }
+.file-item { display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: #f7f8fa; border-radius: 8px; cursor: pointer; transition: background .15s; }
 .file-item:hover { background: #eef0f4; }
-.file-item-icon { font-size: 22px; line-height: 1; }
-.file-item-name { flex: 1; font-size: 12px; color: #323233; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.file-item-dl { font-size: 14px; color: #1989fa; }
+.file-item:active { transform: scale(.99); }
+.file-item-icon { font-size: 22px; line-height: 1; pointer-events:none }
+.file-item-name { flex: 1; font-size: 12px; color: #323233; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; pointer-events:none }
+.file-item-dl { font-size: 14px; color: #1989fa; flex-shrink: 0; pointer-events:none }
 
 /* 自定义图片浏览器 */
 .viewer-wrap { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: #000; z-index: 2001; }
