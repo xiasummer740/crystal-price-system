@@ -1,6 +1,6 @@
 {
   "name": "crystal-price-system",
-  "version": "1.0.24",
+  "version": "1.0.25",
   "description": "晶振物料报价记录查询系统",
   "type": "module",
   "main": "electron/main.js",
@@ -30,6 +30,9 @@
   "build": {
     "appId": "com.crystal.price-system",
     "productName": "晶振报价管理系统",
+    "directories": {
+      "output": "dist-exe"
+    },
     "publish": {
       "provider": "generic",
       "url": "https://github.com/xiasummer740/crystal-price-system/releases/latest/download",

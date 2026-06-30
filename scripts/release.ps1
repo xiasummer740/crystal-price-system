@@ -60,10 +60,14 @@ Write-Host " │  安装版:   $InstallerNameCN"
 Write-Host ' └──────────────────────────────────────────┘'
 Write-Host ''
 
-$confirm = Read-Host '  确认开始发布? [y/N]'
-if ($confirm -ne 'y' -and $confirm -ne 'Y') {
-    Write-Host '  已取消'
-    exit 0
+if (-not $NewVersion) {
+    $confirm = Read-Host '  确认开始发布? [y/N]'
+    if ($confirm -ne 'y' -and $confirm -ne 'Y') {
+        Write-Host '  已取消'
+        exit 0
+    }
+} else {
+    Write-Host '  [自动] 版本已指定，跳过确认' -ForegroundColor Cyan
 }
 
 # ===== [1/5] 更新版本号 =====
@@ -72,7 +76,7 @@ Write-Host '[1/5] 更新版本号...' -ForegroundColor Cyan
 
 $content = Get-Content $PackageJsonPath -Raw -Encoding UTF8
 $content = $content -replace '"version":\s*"' + $CurrentVersion + '"', '"version": "' + $NewVersion + '"'
-[System.IO.File]::WriteAllText($PackageJsonPath, $content, (New-Object System.Text.UTF8Encoding $true))
+[System.IO.File]::WriteAllText($PackageJsonPath, $content, (New-Object System.Text.UTF8Encoding $false))
 Write-Host "  [OK] package.json: $CurrentVersion -> $NewVersion" -ForegroundColor Green
 
 # ===== [2/5] 构建 + 打包 =====
@@ -90,7 +94,7 @@ if ($LASTEXITCODE -ne 0) {
     # 回滚版本号
     $content = Get-Content $PackageJsonPath -Raw -Encoding UTF8
     $content = $content -replace '"version":\s*"' + $NewVersion + '"', '"version": "' + $CurrentVersion + '"'
-    [System.IO.File]::WriteAllText($PackageJsonPath, $content, (New-Object System.Text.UTF8Encoding $true))
+    [System.IO.File]::WriteAllText($PackageJsonPath, $content, (New-Object System.Text.UTF8Encoding $false))
     Write-Host '  [提示] 版本号已回滚' -ForegroundColor Yellow
     exit 1
 }
