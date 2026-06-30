@@ -98,15 +98,26 @@ router.post('/upload', upload.single('file'), async (req, res) => {
   }
 })
 
+// Lingva 实例列表（第一个不可用时自动 fallback，也支持环境变量自定义）
+const LINGVA_INSTANCES = [
+  process.env.TRANSLATE_API_URL, // 优先使用自定义地址
+  'https://lingva.ml/api/v1/en/zh/',
+  'https://translate.terraprint.co/api/v1/en/zh/',
+].filter(Boolean)
+
 async function translateOne(src) {
   if (!src || !src.trim()) return ''
   if (/^[\d\s.,;:+\-*/=<>%°ΩμΑ-Ωα-ω]+$/.test(src.trim())) return src.trim()
-  try {
-    const url = 'https://lingva.ml/api/v1/en/zh/' + encodeURIComponent(src.trim())
-    const res = await fetch(url, { signal: AbortSignal.timeout(10000) })
-    const data = await res.json()
-    return data?.translation || src.trim()
-  } catch { return src.trim() }
+  for (const baseUrl of LINGVA_INSTANCES) {
+    try {
+      const url = baseUrl + encodeURIComponent(src.trim())
+      const res = await fetch(url, { signal: AbortSignal.timeout(8000) })
+      if (!res.ok) continue
+      const data = await res.json()
+      if (data?.translation) return data.translation
+    } catch { continue } // 实例不可用，尝试下一个
+  }
+  return src.trim() // 全部失败则返回原文
 }
 
 router.post('/translate', async (req, res) => {
