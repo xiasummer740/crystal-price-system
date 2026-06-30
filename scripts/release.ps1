@@ -100,32 +100,33 @@ Write-Host "  [OK] 构建完成 ($([math]::Round($sw.Elapsed.TotalSeconds, 1))s)
 Write-Host ''
 Write-Host '[3/5] 准备上传文件...' -ForegroundColor Cyan
 
-$PortablePath = Join-Path $DistDir $PortableNameCN
-$InstallerPath = Join-Path $DistDir $InstallerNameCN
+# 自动检测打包产物（electron-builder 默认输出：{productName} Setup {version}.exe）
+$DefaultInstallerPattern = "晶振报价管理系统 Setup $NewVersion.exe"
+$InstallerPath = Join-Path $DistDir $DefaultInstallerPattern
 
-# 生成英文名副本（GitHub API 上传更稳定）
-$PortableNameEN = "crystal-price-system-portable-v$NewVersion.exe"
-$InstallerNameEN = "crystal-price-system-setup-v$NewVersion.exe"
-$PortableENPath = Join-Path $DistDir $PortableNameEN
+# 生成英文名副本（GitHub 上传用）
+$InstallerNameEN = "crystal-price-system-setup-$NewVersion.exe"
 $InstallerENPath = Join-Path $DistDir $InstallerNameEN
 
-$hasPortable = Test-Path $PortablePath
 $hasInstaller = Test-Path $InstallerPath
 
-if ($hasPortable) {
-    Copy-Item $PortablePath $PortableENPath -Force
-    $sizeMB = [math]::Round((Get-Item $PortablePath).Length / 1MB, 1)
-    Write-Host "  便携版: $PortableNameCN ($sizeMB MB)" -ForegroundColor Green
-}
 if ($hasInstaller) {
     Copy-Item $InstallerPath $InstallerENPath -Force
     $sizeMB = [math]::Round((Get-Item $InstallerPath).Length / 1MB, 1)
-    Write-Host "  安装版: $InstallerNameCN ($sizeMB MB)" -ForegroundColor Green
+    Write-Host "  安装版: $DefaultInstallerPattern ($sizeMB MB)" -ForegroundColor Green
+} else {
+    Write-Host '  [错误] 没有找到打包产物！' -ForegroundColor Red
+    Write-Host "  期待文件: $InstallerPath" -ForegroundColor Yellow
+    exit 1
 }
 
-if (-not $hasPortable -and -not $hasInstaller) {
-    Write-Host '  [错误] 没有找到打包产物！' -ForegroundColor Red
-    exit 1
+# 修正 latest.yml：把中文文件名改为英文，匹配实际上传的文件名
+$LatestYmlPath = Join-Path $DistDir 'latest.yml'
+if (Test-Path $LatestYmlPath) {
+    $ymlContent = Get-Content $LatestYmlPath -Raw -Encoding UTF8
+    $ymlContent = $ymlContent -replace '晶振报价管理系统 Setup [\d\.]+\.exe', $InstallerNameEN
+    [System.IO.File]::WriteAllText($LatestYmlPath, $ymlContent, (New-Object System.Text.UTF8Encoding $true))
+    Write-Host "  [OK] latest.yml 已修正为英文文件名" -ForegroundColor Green
 }
 
 # ===== [4/5] 提交代码 + 推送标签 =====
@@ -243,19 +244,6 @@ try {
 # 上传 assets
 $uploadUrl = $release.upload_url -replace '\{\?name,label\}', ''
 
-if ($hasPortable) {
-    Write-Host '  上传便携版...'
-    try {
-        $uploadHeaders = $baseHeaders.Clone()
-        $uploadHeaders['Content-Type'] = 'application/octet-stream'
-        $uploadUrlFull = "$uploadUrl`?name=" + [System.Web.HttpUtility]::UrlEncode($PortableNameEN)
-        Invoke-RestMethod -Uri $uploadUrlFull -Method Post -Headers $uploadHeaders -InFile $PortableENPath
-        Write-Host "  [OK] 便携版已上传" -ForegroundColor Green
-    } catch {
-        Write-Host "  [警告] 便携版上传失败: $($_.Exception.Message)" -ForegroundColor Yellow
-    }
-}
-
 if ($hasInstaller) {
     Write-Host '  上传安装版...'
     try {
@@ -269,10 +257,41 @@ if ($hasInstaller) {
     }
 }
 
+# 上传 latest.yml（自动更新元数据）
+$LatestYmlPath = Join-Path $DistDir 'latest.yml'
+if (Test-Path $LatestYmlPath) {
+    Write-Host '  上传 latest.yml...'
+    try {
+        $uploadHeaders = $baseHeaders.Clone()
+        $uploadHeaders['Content-Type'] = 'application/octet-stream'
+        $uploadUrlFull = "$uploadUrl`?name=latest.yml"
+        Invoke-RestMethod -Uri $uploadUrlFull -Method Post -Headers $uploadHeaders -InFile $LatestYmlPath
+        Write-Host "  [OK] latest.yml 已上传" -ForegroundColor Green
+    } catch {
+        Write-Host "  [警告] latest.yml 上传失败: $($_.Exception.Message)" -ForegroundColor Yellow
+    }
+} else {
+    Write-Host "  [警告] latest.yml 不存在，跳过" -ForegroundColor Yellow
+}
+
+# 上传 blockmap（差分更新）
+$BlockMapPath = Join-Path $DistDir "$InstallerNameEN.blockmap"
+if (Test-Path $BlockMapPath) {
+    Write-Host '  上传 blockmap...'
+    try {
+        $uploadHeaders = $baseHeaders.Clone()
+        $uploadHeaders['Content-Type'] = 'application/octet-stream'
+        $uploadUrlFull = "$uploadUrl`?name=$InstallerNameEN.blockmap"
+        Invoke-RestMethod -Uri $uploadUrlFull -Method Post -Headers $uploadHeaders -InFile $BlockMapPath
+        Write-Host "  [OK] blockmap 已上传" -ForegroundColor Green
+    } catch {
+        Write-Host "  [警告] blockmap 上传失败: $($_.Exception.Message)" -ForegroundColor Yellow
+    }
+}
+
 # ===== 清理临时文件 =====
 Write-Host ''
 Write-Host '清理临时文件...' -ForegroundColor Gray
-if (Test-Path $PortableENPath) { Remove-Item $PortableENPath -Force }
 if (Test-Path $InstallerENPath) { Remove-Item $InstallerENPath -Force }
 Write-Host '  [OK] 完成' -ForegroundColor Gray
 

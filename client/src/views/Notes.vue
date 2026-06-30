@@ -13,6 +13,8 @@
           <button class="hdr-btn cat-btn" @click="showCategoryManager = true" title="管理分类">🏷️</button>
           <button class="action-btn" @click="handleExport" title="导出记事（含图片）">📥 导出</button>
           <button class="action-btn" @click="handleImport" title="导入记事">📤 导入</button>
+          <button class="action-btn" @click="handleImportCustomers" title="从 Excel 导入客户名">👤 导入客户</button>
+          <input ref="customerFileInput" type="file" accept=".xlsx,.xls" style="display:none" @change="onCustomerFileChange" />
           <button class="action-btn" @click="handleDownloadTemplate" title="下载导入模板">📄 模板</button>
           <router-link to="/notes/add" class="add-btn">＋ 新增</router-link>
           <button class="close-btn" @click="goBack" title="关闭">✕</button>
@@ -158,7 +160,7 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { showToast } from 'vant'
 import { useNotesStore } from '../stores/notes.js'
-import { updateNote, exportNotesPackage, importNotesZip, downloadNoteTemplate } from '../utils/api.js'
+import { updateNote, exportNotesPackage, importNotesZip, downloadNoteTemplate, http } from '../utils/api.js'
 import NoteCategories from './NoteCategories.vue'
 
 const emit = defineEmits(['close'])
@@ -173,6 +175,7 @@ const searchInput = ref(null)
 const isStandalone = ref(route.query.standalone === '1')
 const showFilterSheet = ref(false)
 const filterType = ref('')
+const customerFileInput = ref(null)
 
 const filterActions = computed(() => {
   if (filterType.value === 'category') {
@@ -383,6 +386,26 @@ function handleExport() {
 
 function handleDownloadTemplate() {
   triggerDownload('/api/notes/template')
+}
+
+// 导入客户名（从 Excel）
+function handleImportCustomers() {
+  customerFileInput.value?.click()
+}
+async function onCustomerFileChange(e) {
+  const file = e.target.files[0]
+  if (!file) return
+  const formData = new FormData()
+  formData.append('file', file)
+  try {
+    const r = await http.post('/notes/customers/import-excel', formData)
+    showToast(r.data?.msg || '导入完成')
+    // 清空 input 以便重复选择同一文件
+    e.target.value = ''
+  } catch (err) {
+    showToast('导入失败: ' + (err.response?.data?.msg || err.message))
+    e.target.value = ''
+  }
 }
 
 let importInput = null

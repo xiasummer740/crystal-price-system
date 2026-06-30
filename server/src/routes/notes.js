@@ -5,6 +5,7 @@ import fs from 'fs'
 import { fileURLToPath } from 'url'
 import { queryAll, queryOne, execute } from '../db.js'
 import { exportNotesPackage, generateNoteTemplate, importNotesFromZip } from '../utils/export.js'
+import XLSX from 'xlsx'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const router = Router()
@@ -93,14 +94,42 @@ router.post('/import', importUpload.single('file'), async (req, res) => {
 
 // ========== 记事 CRUD ==========
 
-// 返回已有客户名列表（去重、非空、按使用次数排序）
+// 返回客户名列表（customers 表 + notes 表已有客户，去重合并）
 router.get('/customers/list', (_req, res) => {
   const rows = queryAll(`
-    SELECT customer, COUNT(*) as cnt FROM notes
-    WHERE is_deleted = 0 AND customer IS NOT NULL AND customer != ''
-    GROUP BY customer ORDER BY cnt DESC LIMIT 200
+    SELECT name FROM customers WHERE name != ''
+    UNION
+    SELECT DISTINCT customer FROM notes WHERE is_deleted = 0 AND customer IS NOT NULL AND customer != ''
+    ORDER BY name ASC LIMIT 500
   `)
-  res.json({ code: 0, data: rows.map(r => r.customer) })
+  res.json({ code: 0, data: rows.map(r => r.name) })
+})
+
+// 从 Excel 导入客户名（只导入"客户"列，去重）
+const excelUpload = multer({ storage: multer.memoryStorage() })
+router.post('/customers/import-excel', excelUpload.single('file'), (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ code: 1, msg: '请选择文件' })
+    const wb = XLSX.read(req.file.buffer, { type: 'buffer' })
+    const ws = wb.Sheets[wb.SheetNames[0]]
+    const json = XLSX.utils.sheet_to_json(ws, { defval: '' })
+    if (!json.length) return res.status(400).json({ code: 1, msg: '文件为空' })
+
+    // 找客户列（优先 "客户" 列名，否则第一个文本列）
+    const keys = Object.keys(json[0])
+    const custKey = keys.find(k => k.includes('客户')) || keys[0]
+    const names = [...new Set(json.map(r => String(r[custKey]).trim()).filter(Boolean))]
+
+    let imported = 0
+    for (const name of names) {
+      try { execute('INSERT OR IGNORE INTO customers (name, source) VALUES (?, ?)', [name, 'excel']); imported++ }
+      catch {}
+    }
+    res.json({ code: 0, data: { total: names.length, imported }, msg: `共 ${names.length} 个客户，导入 ${imported} 个` })
+  } catch (e) {
+    console.error('[import-customers]', e)
+    res.status(500).json({ code: 1, msg: '导入失败: ' + e.message })
+  }
 })
 
 // 列表 + 搜索 + 分页

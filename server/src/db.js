@@ -172,6 +172,17 @@ export async function initDb() {
   try { db.run('CREATE INDEX IF NOT EXISTS idx_notes_status ON notes(status)') } catch {}
   try { db.run('CREATE INDEX IF NOT EXISTS idx_notes_deleted ON notes(is_deleted)') } catch {}
 
+  // 客户名库（Excel 导入 + 手动录入，去重）
+  db.run(`
+    CREATE TABLE IF NOT EXISTS customers (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      name        TEXT NOT NULL UNIQUE,
+      source      TEXT DEFAULT 'manual',
+      created_at  DATETIME DEFAULT (datetime('now','localtime'))
+    )
+  `)
+  try { db.run('CREATE INDEX IF NOT EXISTS idx_customers_name ON customers(name)') } catch {}
+
   return db
 }
 
