@@ -30,7 +30,10 @@
         <button class="tb-btn" @click="downloadTemplate">模板</button>
         <button class="tb-btn" @click="handleExport">导出</button>
         <button class="tb-btn adv-btn" @click="showAdvFilter = true">高级筛选</button>
-        <button class="tb-btn" @click="showSettings = true">⚙</button>
+        <span class="settings-btn-wrap">
+          <button class="tb-btn" @click="showSettings = true">⚙</button>
+          <span v-if="hasUpdate" class="update-dot"></span>
+        </span>
         <button class="tb-btn calc-btn" @click="showCalc = true">&#128290; 报价计算器</button>
         <SaveStatusBadge />
         <input ref="fileInput" type="file" accept=".xlsx,.xls" hidden @change="onFileChange" />
@@ -303,6 +306,7 @@
             <span v-else-if="updateStatus === 'downloaded'">⚡ 立即安装</span>
             <span v-else>🔍 检查更新</span>
           </button>
+          <a v-if="updateStatus === 'error'" :href="'https://github.com/xiasummer740/crystal-price-system/releases/latest'" target="_blank" class="manual-link" @click.stop>手动下载</a>
           <span class="update-status" v-if="updateStatusText">{{ updateStatusText }}</span>
           <p class="set-hint">当前版本 v{{ appVersion }}</p>
         </div>
@@ -403,7 +407,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
+import { ref, reactive, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { usePriceStore } from '../stores/price.js'
 import { importExcel, http } from '../utils/api.js'
@@ -705,7 +709,13 @@ async function onUpdateClick() {
       }
     } catch (e) {
       // HTTP 检查失败，尝试走 Electron IPC
-      window.electronAPI?.checkUpdate()
+      if (window.electronAPI?.checkUpdate) {
+        window.electronAPI.checkUpdate()
+      } else {
+        // 浏览器模式无后备，直接显示错误
+        updateStatus.value = 'error'
+        updateError.value = '网络错误: ' + (e.message || '请求失败')
+      }
     }
   } else if (s === 'downloaded') {
     window.electronAPI?.installUpdate()
@@ -729,6 +739,16 @@ if (window.electronAPI?.onUpdateStatus) {
   })
 }
 
+// 是否有新版本（用于红点 badge）
+const hasUpdate = computed(() => updateStatus.value === 'available' || updateStatus.value === 'downloaded')
+
+// 打开设置时自动检查更新（避免用户手动刷新）
+watch(showSettings, (open) => {
+  if (open && (updateStatus.value === 'idle' || updateStatus.value === 'error' || updateStatus.value === 'not-available')) {
+    onUpdateClick()
+  }
+})
+
 // 暴露检查更新函数供主进程菜单调用
 window.__checkUpdate = () => {
   if (updateStatus.value === 'idle' || updateStatus.value === 'not-available' || updateStatus.value === 'error') {
@@ -741,8 +761,8 @@ onMounted(async () => {
   await store.loadMetaOptions()
   await store.loadGroupedList()
   localIp.value = window.electronAPI ? window.electronAPI.getLanIp() : (window.location.hostname || '127.0.0.1')
-  // 延迟触发一次更新检查（等 HTTP 服务就绪）
-  setTimeout(() => { try { onUpdateClick() } catch {} }, 20000)
+  // 延时触发一次更新检查（等 HTTP 服务就绪）
+  setTimeout(() => { try { onUpdateClick() } catch {} }, 8000)
 })
 
 // 实时时钟（每秒刷新）
@@ -969,6 +989,12 @@ onUnmounted(() => { if (clockTimer) clearInterval(clockTimer); if (colFilterTime
 .update-pct{font-size:11px;color:#999}
 .update-status{font-size:12px;color:#666}
 .update-pct{font-size:11px;color:#666}
+.manual-link{font-size:12px;color:var(--color-primary);text-decoration:none;padding:2px 8px;border-radius:4px;border:1px solid var(--color-primary)}
+.manual-link:hover{background:var(--color-primary);color:#fff}
+/* 设置按钮红点 badge */
+.settings-btn-wrap{position:relative;display:inline-flex}
+.update-dot{position:absolute;top:2px;right:0;width:8px;height:8px;border-radius:50%;background:#ff4d4f;border:2px solid #fff;box-shadow:0 0 3px rgba(255,77,79,.3);animation:dotPulse 2s infinite}
+@keyframes dotPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.15)}}
 .spec-edit-wrap{padding:16px 20px 20px;overflow-y:auto;height:100%}
 .spec-edit-wrap h3{font-size:18px;font-weight:600;margin:0 0 4px}
 .spec-edit-hint{font-size:11px;color:#e6a23c;margin:0 0 12px}
