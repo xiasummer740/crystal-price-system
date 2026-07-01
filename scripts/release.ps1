@@ -231,6 +231,7 @@ $releaseBodyJson = @{
     body        = $releaseBody
     draft       = $false
     prerelease  = $false
+    make_latest = "true"
 } | ConvertTo-Json
 
 Write-Host '  创建 GitHub Release...'
