@@ -665,7 +665,7 @@ const updateIcon = computed(() => {
 const updateBtnText = computed(() => {
   const t = {
     idle: '检查更新', available: '下载更新 v' + updateVersion.value,
-    downloading: '正在下载...', downloaded: '立即安装',
+    downloading: '正在下载(浏览器)...', downloaded: '立即安装',
     checking: '检查中...', error: '检查失败，点击重试',
     'not-available': '已是最新版'
   }
@@ -679,27 +679,38 @@ const updateTooltip = computed(() => {
   return ''
 })
 
+const updateDownloadUrl = ref('')
+
 async function onUpdateClick() {
   const s = updateStatus.value
   if (s === 'idle' || s === 'error' || s === 'not-available') {
     updateStatus.value = 'checking'
-    // 优先用 HTTP 直连（绕过 IPC），兜底用 IPC
     try {
       const r = await fetch('/api/check-update', { signal: AbortSignal.timeout(25000) })
       const d = await r.json()
       if (d.code === 0 && d.data) {
         updateStatus.value = d.data.status
-        if (d.data.version) updateVersion.value = d.data.version
+        if (d.data.version) {
+          updateVersion.value = d.data.version
+          updateDownloadUrl.value = `https://github.com/xiasummer740/crystal-price-system/releases/download/v${d.data.version}/crystal-price-system-setup-${d.data.version}.exe`
+        }
         if (d.data.message) updateError.value = d.data.message
       } else {
         throw new Error(d.msg || '检查失败')
       }
     } catch (e) {
-      // IPC 兜底
       window.electronAPI?.checkUpdate()
     }
   } else if (s === 'available') {
+    // 用浏览器下载（更快，支持断点续传）
     updateStatus.value = 'downloading'
+    if (updateDownloadUrl.value) {
+      if (window.electronAPI?.openExternal) {
+        window.electronAPI.openExternal(updateDownloadUrl.value)
+      } else {
+        window.open(updateDownloadUrl.value, '_blank')
+      }
+    }
     window.electronAPI?.downloadUpdate()
   } else if (s === 'downloaded') {
     window.electronAPI?.installUpdate()
@@ -710,7 +721,10 @@ async function onUpdateClick() {
 if (window.electronAPI?.onUpdateStatus) {
   window.electronAPI.onUpdateStatus((data) => {
     updateStatus.value = data.status
-    if (data.version) updateVersion.value = data.version
+    if (data.version) {
+      updateVersion.value = data.version
+      updateDownloadUrl.value = `https://github.com/xiasummer740/crystal-price-system/releases/download/v${data.version}/crystal-price-system-setup-${data.version}.exe`
+    }
     if (data.percent !== undefined) updatePercent.value = data.percent
     if (data.message) updateError.value = data.message
   })

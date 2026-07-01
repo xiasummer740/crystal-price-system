@@ -154,6 +154,9 @@ export async function checkForUpdates() {
 }
 
 // ── 初始化：注册 IPC ──
+// 全局暴露更新函数，供 Express 路由直接调用
+global.__checkForUpdates = checkForUpdates
+
 let _initialized = false
 export function initUpdater(win) {
   if (_initialized) {
@@ -164,8 +167,6 @@ export function initUpdater(win) {
   _initialized = true
   mainWindow = win
   log('initUpdater 完成')
-  // 全局暴露，供 Express 路由直接调用
-  global.__checkForUpdates = checkForUpdates
 
   // IPC: 检查更新
   ipcMain.handle('check-update', async () => {

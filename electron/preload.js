@@ -14,6 +14,7 @@ function getLanIp() {
 }
 
 contextBridge.exposeInMainWorld('electronAPI', {
+  openExternal: (url) => ipcRenderer.invoke('open-external', url),
   getLanIp,
   platform: process.platform,
   openDataFolder: async () => { try { await fetch('/api/open-data-folder') } catch {} },

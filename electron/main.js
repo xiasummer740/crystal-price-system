@@ -499,6 +499,9 @@ function startReminderPolling(port) {
   log('Reminder polling started (interval: 60s)')
 }
 
+// 浏览器打开外部链接（供渲染进程调用）
+ipcMain.handle('open-external', (_, url) => { shell.openExternal(url) })
+
 app.whenReady().then(async () => {
   log('App ready')
   const splash = showSplash()
