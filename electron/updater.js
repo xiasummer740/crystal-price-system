@@ -26,7 +26,11 @@ function log(msg) {
 
 // ── 给渲染进程发事件 ──
 function send(data) {
-  mainWindow?.webContents.send('update-status', data)
+  if (!mainWindow || mainWindow.webContents.isDestroyed()) {
+    log('webContents已销毁，无法发送事件: ' + JSON.stringify(data))
+    return
+  }
+  mainWindow.webContents.send('update-status', data)
 }
 
 // ── 版本号比较：大于返回 true ──
@@ -120,7 +124,7 @@ export async function checkForUpdates() {
     if (!isNewer(remote.version, app.getVersion())) {
       send({ status: 'not-available' })
       log('已是最新版本')
-      return
+      return { status: 'not-available', version: app.getVersion() }
     }
 
     updateInfo = {
@@ -131,6 +135,7 @@ export async function checkForUpdates() {
     }
     log(`发现新版本: ${remote.version}`)
     send({ status: 'available', version: remote.version, releaseDate: new Date().toISOString() })
+    return { status: 'available', version: remote.version }
   } catch (e) {
     const msg = e.message || String(e)
     log('检查更新失败: ' + msg)
@@ -139,11 +144,19 @@ export async function checkForUpdates() {
     } else {
       send({ status: 'error', message: '检查失败: ' + msg })
     }
+    return { status: 'error', message: msg }
   }
 }
 
 // ── 初始化：注册 IPC ──
+let _initialized = false
 export function initUpdater(win) {
+  if (_initialized) {
+    log('initUpdater 重复调用，跳过')
+    mainWindow = win // 更新窗口引用
+    return
+  }
+  _initialized = true
   mainWindow = win
   log('initUpdater 完成')
 

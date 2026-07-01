@@ -10,6 +10,9 @@ import { initUpdater, checkForUpdates } from './updater.js'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const BASE_PORT = 3266
 
+// 强制禁用 GPU 硬件加速（解决此 Windows 预览版 GPU 崩溃问题）
+app.disableHardwareAcceleration()
+
 // 清理端口占用
 function freePort(port) {
   try {
@@ -283,6 +286,9 @@ async function startServer() {
     throw new Error('服务模块加载失败: ' + e.message)
   }
   log('Server module imported')
+
+  // 注入更新检查函数到 Express app，供 /api/check-update 调用
+  expressApp.set('_doCheckUpdate', checkForUpdates)
 
   let retryCount = 0
   const MAX_RETRIES = 30

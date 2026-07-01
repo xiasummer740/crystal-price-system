@@ -678,11 +678,25 @@ const updateTooltip = computed(() => {
   return ''
 })
 
-function onUpdateClick() {
+async function onUpdateClick() {
   const s = updateStatus.value
   if (s === 'idle' || s === 'error' || s === 'not-available') {
     updateStatus.value = 'checking'
-    window.electronAPI?.checkUpdate()
+    // 优先用 HTTP 直连（绕过 IPC），兜底用 IPC
+    try {
+      const r = await fetch('/api/check-update', { signal: AbortSignal.timeout(25000) })
+      const d = await r.json()
+      if (d.code === 0 && d.data) {
+        updateStatus.value = d.data.status
+        if (d.data.version) updateVersion.value = d.data.version
+        if (d.data.message) updateError.value = d.data.message
+      } else {
+        throw new Error(d.msg || '检查失败')
+      }
+    } catch (e) {
+      // IPC 兜底
+      window.electronAPI?.checkUpdate()
+    }
   } else if (s === 'available') {
     updateStatus.value = 'downloading'
     window.electronAPI?.downloadUpdate()
@@ -691,7 +705,7 @@ function onUpdateClick() {
   }
 }
 
-// 监听升级状态事件（来自 Electron 主进程）
+// 监听升级状态事件（IPC 通道，同时也通过 HTTP 返回）
 if (window.electronAPI?.onUpdateStatus) {
   window.electronAPI.onUpdateStatus((data) => {
     updateStatus.value = data.status
@@ -704,12 +718,18 @@ if (window.electronAPI?.onUpdateStatus) {
 // 暴露检查更新函数供主进程菜单调用
 window.__checkUpdate = () => {
   if (updateStatus.value === 'idle' || updateStatus.value === 'not-available' || updateStatus.value === 'error') {
-    updateStatus.value = 'checking'
-    window.electronAPI?.checkUpdate()
+    onUpdateClick()
   }
 }
 
-onMounted(async()=>{store.setFilter('page',1);await store.loadMetaOptions();await store.loadGroupedList();localIp.value=window.electronAPI?window.electronAPI.getLanIp():(window.location.hostname||'127.0.0.1')})
+onMounted(async () => {
+  store.setFilter('page', 1)
+  await store.loadMetaOptions()
+  await store.loadGroupedList()
+  localIp.value = window.electronAPI ? window.electronAPI.getLanIp() : (window.location.hostname || '127.0.0.1')
+  // 延迟触发一次更新检查（等 HTTP 服务就绪）
+  setTimeout(() => { try { onUpdateClick() } catch {} }, 20000)
+})
 
 // 实时时钟（每秒刷新）
 const clockTime = ref('')
