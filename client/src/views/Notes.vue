@@ -22,9 +22,17 @@
       </header>
 
       <div class="filter-bar" v-if="store.viewMode === 'card'">
-        <div class="search-box">
-          <input v-model="store.filters.keyword" placeholder="搜索标题、内容、客户…" @input="onSearchDebounced" class="search-input" ref="searchInput" />
+        <div class="search-box" style="position:relative">
+          <input v-model="store.filters.keyword" placeholder="搜索标题、内容、客户…" @input="onSearchDebounced" @focus="showCustomerHint = true" @blur="onSearchBlur" class="search-input" ref="searchInput" />
           <span v-if="store.filters.keyword" class="search-clear" @click="store.filters.keyword = ''; onSearch()">×</span>
+          <div class="customer-hint" v-if="showCustomerHint && customerHints.length">
+            <div v-for="h in customerHints" :key="h.name" class="hint-item" @mousedown.prevent="onPickCustomer(h)">
+              <span class="hint-name">👤 {{ h.name }}</span>
+              <span class="hint-count" v-if="h.note_count > 0">{{ h.note_count }} 条记事</span>
+              <span class="hint-count new" v-else>新建记事</span>
+              <span class="hint-arrow">›</span>
+            </div>
+          </div>
         </div>
         <div class="filter-btn" :class="{ active: store.filters.category_id }" @click="openFilter('category')">
           {{ filterLabel('category') }} ▾
@@ -312,13 +320,44 @@ function switchMode(mode) {
 }
 
 let searchTimer = null
+const showCustomerHint = ref(false)
+const customerHints = ref([])
 function onSearchDebounced() {
   clearTimeout(searchTimer)
-  searchTimer = setTimeout(() => onSearch(), 350)
+  searchTimer = setTimeout(() => {
+    onSearch()
+    searchCustomers()
+  }, 350)
 }
 function onSearch() {
+  showCustomerHint.value = false
   store.setFilter('page', 1)
   load()
+}
+function onSearchBlur() {
+  // 延迟隐藏，让点击候选项能够触发
+  setTimeout(() => { showCustomerHint.value = false }, 200)
+}
+async function searchCustomers() {
+  const kw = (store.filters.keyword || '').trim()
+  if (!kw) { customerHints.value = []; return }
+  try {
+    const r = await http.get('/notes/customers/search', { params: { keyword: kw } })
+    customerHints.value = r.data?.data || []
+  } catch { customerHints.value = [] }
+}
+function onPickCustomer(h) {
+  showCustomerHint.value = false
+  store.filters.keyword = ''
+  if (h.note_count > 0) {
+    // 有记事 → 按客户筛选
+    store.setFilter('customer', h.name)
+    store.setFilter('page', 1)
+    load()
+  } else {
+    // 无记事 → 跳转新增
+    router.push('/notes/add?customer=' + encodeURIComponent(h.name))
+  }
 }
 
 async function load() {
@@ -489,6 +528,14 @@ onUnmounted(() => {
 .search-input::placeholder { color: #bbb; }
 .search-clear { color: #bbb; cursor: pointer; font-size: 14px; padding: 2px; }
 .search-clear:hover { color: #666; }
+.customer-hint { position: absolute; top: 100%; left: 0; right: 0; z-index: 50; margin-top: 4px; background: #fff; border-radius: 8px; box-shadow: 0 6px 24px rgba(0,0,0,.12); max-height: 240px; overflow-y: auto; }
+.hint-item { display: flex; align-items: center; gap: 8px; padding: 10px 14px; cursor: pointer; transition: background .1s; font-size: 13px; border-bottom: 1px solid #f0f0f0; }
+.hint-item:last-child { border-bottom: none; }
+.hint-item:hover { background: #e6f4ff; }
+.hint-name { flex: 1; color: #323233; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hint-count { font-size: 11px; color: #999; white-space: nowrap; }
+.hint-count.new { color: #1989fa; }
+.hint-arrow { color: #ccc; font-size: 16px; }
 .filter-select { padding: 4px 8px; border-radius: 6px; border: 1px solid #e0e0e0; font-size: 12px; color: #555; background: #fff; font-family: inherit; outline: none; min-width: 70px; cursor: pointer; transition: border-color .2s; }
 .filter-select:focus { border-color: #1989fa; }
 .filter-btn { padding: 4px 10px; border-radius: 6px; border: 1px solid #e0e0e0; font-size: 12px; color: #555; background: #fff; font-family: inherit; outline: none; cursor: pointer; transition: all .15s; white-space: nowrap; user-select: none; }

@@ -105,6 +105,27 @@ router.get('/customers/list', (_req, res) => {
   res.json({ code: 0, data: rows.map(r => r.name) })
 })
 
+// 搜索客户名（模糊搜索，附该客户的记事数）
+router.get('/customers/search', (req, res) => {
+  const keyword = (req.query.keyword || '').trim()
+  if (!keyword) return res.json({ code: 0, data: [] })
+  const kw = `%${keyword}%`
+  const rows = queryAll(`
+    SELECT c.name, COALESCE(n.cnt, 0) as note_count
+    FROM (
+      SELECT name FROM customers WHERE name != '' AND name LIKE ?
+      UNION
+      SELECT DISTINCT customer as name FROM notes WHERE is_deleted = 0 AND customer IS NOT NULL AND customer != '' AND customer LIKE ?
+    ) c
+    LEFT JOIN (
+      SELECT customer, COUNT(*) as cnt FROM notes WHERE is_deleted = 0 AND customer IS NOT NULL AND customer != '' GROUP BY customer
+    ) n ON c.name = n.customer
+    ORDER BY n.cnt DESC, c.name ASC
+    LIMIT 10
+  `, [kw, kw])
+  res.json({ code: 0, data: rows })
+})
+
 // 从 Excel 导入客户名（只导入"客户"列，去重）
 const excelUpload = multer({ storage: multer.memoryStorage() })
 router.post('/customers/import-excel', excelUpload.single('file'), (req, res) => {
