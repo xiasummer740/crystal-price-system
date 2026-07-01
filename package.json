@@ -1,6 +1,6 @@
 {
   "name": "crystal-price-system",
-  "version": "1.0.36",
+  "version": "1.0.37",
   "description": "晶振物料报价记录查询系统",
   "type": "module",
   "main": "electron/main.js",
@@ -47,7 +47,9 @@
       "package.json"
     ],
     "asarUnpack": [
-      "node_modules/sql.js/dist/sql-wasm.wasm"
+      "node_modules/sql.js/dist/sql-wasm.wasm",
+      "node_modules/tesseract.js/**",
+      "node_modules/tesseract.js-core/**"
     ],
     "win": {
       "icon": "client/public/SJK-256.png",
