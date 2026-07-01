@@ -218,10 +218,10 @@ async function copyCurrentImage() {
 .page-wrap { display: flex; flex-direction: column; height: 100vh; background: #f5f6f8; }
 .page-header { display: flex; align-items: center; justify-content: space-between; padding: 10px 16px; background: #fff; border-bottom: 1px solid #e8e8e8; flex-shrink: 0; }
 .page-header h3 { font-size: 16px; font-weight: 600; color: #323233; margin: 0; }
-.back-btn { background: none; border: none; color: #1989fa; font-size: 15px; cursor: pointer; padding: 4px 8px; font-family: inherit; }
+.back-btn { background: none; border: none; color: var(--color-primary); font-size: 15px; cursor: pointer; padding: 4px 8px; font-family: inherit; }
 .header-actions { display: flex; gap: 8px; }
-.edit-btn { padding: 4px 12px; border-radius: 4px; border: 1px solid #1989fa; color: #1989fa; font-size: 12px; cursor: pointer; background: #fff; text-decoration: none; transition: all .15s; }
-.edit-btn:hover { background: #e6f4ff; }
+.edit-btn { padding: 4px 12px; border-radius: 4px; border: 1px solid var(--color-primary); color: var(--color-primary); font-size: 12px; cursor: pointer; background: #fff; text-decoration: none; transition: all .15s; }
+.edit-btn:hover { background: rgba(var(--color-primary-rgb),.08); }
 .del-btn { padding: 4px 12px; border-radius: 4px; border: 1px solid #ee0a24; color: #ee0a24; font-size: 12px; cursor: pointer; background: #fff; font-family: inherit; transition: all .15s; }
 .del-btn:hover { background: #fff0f0; }
 
@@ -261,7 +261,7 @@ async function copyCurrentImage() {
 .note-content { font-size: 14px; line-height: 1.8; color: #323233; word-break: break-word; }
 .note-content :deep(code) { background: #f5f5f5; padding: 1px 4px; border-radius: 3px; font-size: 12px; }
 .note-content :deep(h1), .note-content :deep(h2), .note-content :deep(h3), .note-content :deep(h4) { margin: 12px 0 6px; }
-.note-content :deep(a) { color: #1989fa; }
+.note-content :deep(a) { color: var(--color-primary); }
 .img-gallery { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 16px; }
 .gallery-item { position: relative; border-radius: 8px; overflow: hidden; border: 1px solid #f0f0f0; cursor: pointer; aspect-ratio: 1; }
 .gallery-item img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform .3s; }
@@ -275,7 +275,7 @@ async function copyCurrentImage() {
 .file-item:active { transform: scale(.99); }
 .file-item-icon { font-size: 22px; line-height: 1; pointer-events:none }
 .file-item-name { flex: 1; font-size: 12px; color: #323233; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; pointer-events:none }
-.file-item-dl { font-size: 14px; color: #1989fa; flex-shrink: 0; pointer-events:none }
+.file-item-dl { font-size: 14px; color: var(--color-primary); flex-shrink: 0; pointer-events:none }
 
 /* 自定义图片浏览器 */
 .viewer-wrap { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: #000; z-index: 2001; }

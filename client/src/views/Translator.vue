@@ -248,14 +248,14 @@ function resetAll() {
 .app-wrap{display:flex;flex-direction:column;height:100vh;background:#f0f2f5}
 .topbar{display:flex;align-items:center;justify-content:space-between;padding:0 20px;height:44px;background:#fff;border-bottom:1px solid #e8e8e8;flex-shrink:0}
 .topbar-left{display:flex;align-items:center;gap:8px}
-.logo-dot{width:8px;height:8px;border-radius:50%;background:#1989fa}
+.logo-dot{width:8px;height:8px;border-radius:50%;background:var(--color-primary)}
 .logo-text{font-size:15px;font-weight:600;color:#323233}
 .nav-btn{background:transparent;color:#666;border:1px solid #d9d9d9;border-radius:4px;padding:4px 10px;font-size:12px;cursor:pointer;font-family:inherit;text-decoration:none}
-.nav-btn:hover{color:#1989fa;border-color:#1989fa}
+.nav-btn:hover{color:var(--color-primary);border-color:var(--color-primary)}
 .tl-main{flex:1;display:flex;flex-direction:column;overflow:hidden}
 .tl-upload-area{flex:1;display:flex;align-items:center;justify-content:center}
 .tl-upload-box{border:2px dashed #d9d9d9;border-radius:16px;padding:60px 80px;text-align:center;cursor:pointer;background:#fff;transition:all .2s;display:flex;flex-direction:column;align-items:center;gap:8px}
-.tl-upload-box:hover{border-color:#1989fa;background:#f5f8ff}
+.tl-upload-box:hover{border-color:var(--color-primary);background:#f5f8ff}
 .tl-upload-icon{font-size:48px}
 .tl-upload-text{font-size:15px;color:#555}
 .tl-upload-sub{font-size:12px;color:#bbb}
@@ -264,8 +264,8 @@ function resetAll() {
 .tl-file-info{font-size:13px;color:#555;font-weight:500}
 .tl-toolbar-actions{display:flex;align-items:center;gap:8px;margin-left:auto}
 .tl-btn{padding:5px 14px;border-radius:5px;font-size:12px;cursor:pointer;border:1px solid #d9d9d9;background:#fff;color:#666;font-family:inherit;transition:all .15s}
-.tl-btn:hover:not(:disabled){color:#1989fa;border-color:#1989fa}
-.tl-btn.primary{background:#1989fa;color:#fff;border-color:#1989fa}
+.tl-btn:hover:not(:disabled){color:var(--color-primary);border-color:var(--color-primary)}
+.tl-btn.primary{background:var(--color-primary);color:#fff;border-color:var(--color-primary)}
 .tl-btn:disabled{opacity:.5;cursor:not-allowed}
 .tl-error-bar{background:#fff0f0;color:#e53935;padding:8px 16px;font-size:12px;border-bottom:1px solid #ffcdd2}
 .tl-columns{flex:1;display:flex;overflow:hidden}

@@ -457,12 +457,12 @@ async function saveAndNew() {
 .page-wrap { display: flex; flex-direction: column; height: 100vh; background: #f5f6f8; }
 .page-header { display: flex; align-items: center; justify-content: space-between; padding: 10px 16px; background: #fff; border-bottom: 1px solid #e8e8e8; flex-shrink: 0; }
 .page-header h3 { font-size: 16px; font-weight: 600; color: #323233; margin: 0; }
-.back-btn { background: none; border: none; color: #1989fa; font-size: 15px; cursor: pointer; padding: 4px 8px; font-family: inherit; }
-.save-btn { padding: 6px 18px; border-radius: 6px; border: none; background: #1989fa; color: #fff; font-size: 13px; cursor: pointer; font-family: inherit; transition: background .15s; }
+.back-btn { background: none; border: none; color: var(--color-primary); font-size: 15px; cursor: pointer; padding: 4px 8px; font-family: inherit; }
+.save-btn { padding: 6px 18px; border-radius: 6px; border: none; background: var(--color-primary); color: #fff; font-size: 13px; cursor: pointer; font-family: inherit; transition: background .15s; }
 .save-btn:hover { background: #1676d9; }
 .save-btn:disabled { background: #95c9f9; cursor: not-allowed; }
-.save-new-btn { padding: 6px 14px; border-radius: 6px; border: 1px solid #1989fa; background: #fff; color: #1989fa; font-size: 12px; cursor: pointer; font-family: inherit; margin-right: 6px; transition: all .15s; }
-.save-new-btn:hover { background: #e6f4ff; }
+.save-new-btn { padding: 6px 14px; border-radius: 6px; border: 1px solid var(--color-primary); background: #fff; color: var(--color-primary); font-size: 12px; cursor: pointer; font-family: inherit; margin-right: 6px; transition: all .15s; }
+.save-new-btn:hover { background: rgba(var(--color-primary-rgb),.08); }
 .save-new-btn:disabled { opacity: .5; cursor: not-allowed; }
 .page-body { flex: 1; overflow-y: auto; padding: 12px 16px; }
 .form-section { background: #fff; border-radius: 10px; padding: 4px 0; margin-bottom: 12px; box-shadow: 0 1px 3px rgba(0,0,0,.04); }
@@ -476,7 +476,7 @@ async function saveAndNew() {
 .customer-suggest { position: relative; z-index: 20; margin: -12px 16px 8px; background: #fff; border: 1px solid #e0e0e0; border-radius: 0 0 8px 8px; box-shadow: 0 6px 20px rgba(0,0,0,.1); max-height: 200px; overflow-y: auto; }
 .cs-item { padding: 10px 14px; font-size: 13px; color: #323233; cursor: pointer; border-bottom: 1px solid #f5f5f5; transition: background .1s; }
 .cs-item:last-child { border-bottom: none; }
-.cs-item:hover { background: #e6f4ff; color: #1989fa; }
+.cs-item:hover { background: rgba(var(--color-primary-rgb),.08); color: var(--color-primary); }
 .img-grid { display: flex; flex-wrap: wrap; gap: 8px; }
 .img-item { position: relative; width: 80px; height: 80px; border-radius: 8px; overflow: hidden; border: 1px solid #f0f0f0; }
 .img-item img { width: 100%; height: 100%; object-fit: cover; cursor: pointer; transition: opacity .2s; }
@@ -484,7 +484,7 @@ async function saveAndNew() {
 .img-del { position: absolute; top: 2px; right: 2px; width: 20px; height: 20px; border-radius: 50%; border: none; background: rgba(0,0,0,.5); color: #fff; font-size: 12px; cursor: pointer; display: flex; align-items: center; justify-content: center; line-height: 1; transition: background .2s; }
 .img-del:hover { background: rgba(238,10,36,.8); }
 .upload-btn { width: 80px; height: 80px; border-radius: 8px; border: 1px dashed #d9d9d9; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; color: #bbb; transition: all .2s; }
-.upload-btn:hover { border-color: #1989fa; color: #1989fa; background: #f0f6ff; }
+.upload-btn:hover { border-color: var(--color-primary); color: var(--color-primary); background: rgba(var(--color-primary-rgb),.04); }
 .upload-icon { font-size: 22px; line-height: 1; }
 .upload-text { font-size: 10px; margin-top: 2px; }
 .file-thumb { width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; background: #fafbfc; cursor: pointer; gap: 2px; }
@@ -497,5 +497,5 @@ async function saveAndNew() {
 .reminder-picker h4 { font-size: 16px; font-weight: 600; margin: 0 0 16px; color: #323233; }
 .reminder-btns { display: flex; gap: 10px; margin-top: 16px; }
 .reminder-cancel { flex: 1; padding: 10px; border-radius: 8px; border: 1px solid #d9d9d9; background: #fff; color: #666; font-size: 14px; cursor: pointer; font-family: inherit; }
-.reminder-ok { flex: 1; padding: 10px; border-radius: 8px; border: none; background: #1989fa; color: #fff; font-size: 14px; cursor: pointer; font-family: inherit; }
+.reminder-ok { flex: 1; padding: 10px; border-radius: 8px; border: none; background: var(--color-primary); color: #fff; font-size: 14px; cursor: pointer; font-family: inherit; }
 </style>

@@ -68,10 +68,10 @@ onMounted(async ()=>{ detail.value = await store.loadDetail(route.params.id) })
 
 <style scoped>
 .price-text{color:#e53935;font-weight:600;font-size:16px}
-.spec-link{color:#1989fa;text-decoration:none;word-break:break-all;font-size:13px}
+.spec-link{color:var(--color-primary);text-decoration:none;word-break:break-all;font-size:13px}
 .spec-link:hover{text-decoration:underline}
 .detail-btn{display:block;width:100%;padding:10px;border-radius:24px;font-size:14px;font-weight:500;cursor:pointer;text-align:center;border:none;font-family:inherit}
-.detail-btn.primary{background:#1989fa;color:#fff}
-.detail-btn.outline{background:transparent;color:#1989fa;border:1px solid #1989fa}
+.detail-btn.primary{background:var(--color-primary);color:#fff}
+.detail-btn.outline{background:transparent;color:var(--color-primary);border:1px solid var(--color-primary)}
 .detail-btn.danger{background:transparent;color:#ee0a24;border:1px solid #ee0a24}
 </style>

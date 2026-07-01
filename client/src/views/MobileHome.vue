@@ -318,7 +318,7 @@ onUnmounted(() => { stopAutoRefresh(); document.removeEventListener('visibilityc
 .chip-scroll::-webkit-scrollbar { display:none; }
 .chip { flex-shrink:0; padding:4px 14px; border-radius:14px; font-size:11px; background:#f5f6f8; color:#646566; cursor:pointer; border:1px solid transparent; user-select:none; }
 .chip:active { transform:scale(0.95); }
-.chip.active { background:#e6f4ff; color:#1989fa; border-color:#1989fa; font-weight:500; }
+.chip.active { background:rgba(var(--color-primary-rgb),.08); color:var(--color-primary); border-color:var(--color-primary); font-weight:500; }
 
 /* ===== 筛选入口 ===== */
 .filter-entry { display:flex; align-items:center; gap:6px; padding:6px 16px 10px; font-size:12px; color:#999; cursor:pointer; }
@@ -333,7 +333,7 @@ onUnmounted(() => { stopAutoRefresh(); document.removeEventListener('visibilityc
 .card-name { font-size:13px; color:#323233; font-weight:500; margin-bottom:4px; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; line-height:1.4; }
 .card-spec { display:flex; align-items:center; gap:6px; margin-bottom:10px; }
 .spec-text { font-size:11px; color:#999; }
-.cat-tag { background:#e8f4fd; color:#1989fa; padding:1px 6px; border-radius:3px; font-size:10px; }
+.cat-tag { background:#e8f4fd; color:var(--color-primary); padding:1px 6px; border-radius:3px; font-size:10px; }
 
 .card-price-row { display:flex; align-items:center; gap:12px; padding:10px 12px; background:#fafbfc; border-radius:10px; margin-bottom:10px; }
 .price-main { display:flex; align-items:baseline; gap:4px; }
@@ -356,7 +356,7 @@ onUnmounted(() => { stopAutoRefresh(); document.removeEventListener('visibilityc
 .filter-panel { display:flex; flex-direction:column; height:100%; }
 .filter-head { display:flex; align-items:center; justify-content:space-between; padding:20px 16px 0; }
 .filter-head h3 { font-size:18px; margin:0; }
-.filter-reset { font-size:13px; color:#1989fa; cursor:pointer; }
+.filter-reset { font-size:13px; color:var(--color-primary); cursor:pointer; }
 .filter-body { flex:1; overflow-y:auto; -webkit-overflow-scrolling:touch; padding:8px 0; }
 .filter-divider { font-size:12px; color:#999; padding:12px 16px 4px; }
 .filter-btns { padding:12px 16px calc(20px + env(safe-area-inset-bottom)); }
@@ -369,7 +369,7 @@ onUnmounted(() => { stopAutoRefresh(); document.removeEventListener('visibilityc
 .sum-badge { font-size:12px; color:#999; }
 .summary-group { margin-bottom:14px; }
 .sum-factory { font-weight:600; font-size:14px; padding:8px 12px; background:#f7f8fa; border-radius:6px; margin-bottom:4px; display:flex; align-items:center; gap:8px; }
-.sum-fct { font-size:10px; background:#1989fa; color:#fff; padding:1px 6px; border-radius:8px; font-weight:400; }
+.sum-fct { font-size:10px; background:var(--color-primary); color:#fff; padding:1px 6px; border-radius:8px; font-weight:400; }
 .sum-row { display:flex; align-items:center; gap:12px; padding:10px 12px; border-bottom:1px solid #f5f5f5; font-size:12px; cursor:pointer; }
 .sum-row:active { background:#f5f6f8; }
 .sum-date { font-size:11px; color:#999; min-width:68px; }

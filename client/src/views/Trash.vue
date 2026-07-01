@@ -76,7 +76,7 @@ onMounted(loadTrash)
 .logo-text{font-size:15px;font-weight:600;color:#323233}
 .topbar-right{display:flex;align-items:center}
 .nav-btn{background:transparent;color:#666;border:1px solid #d9d9d9;border-radius:4px;padding:4px 10px;font-size:12px;cursor:pointer;font-family:inherit;text-decoration:none}
-.nav-btn:hover{color:#1989fa;border-color:#1989fa}
+.nav-btn:hover{color:var(--color-primary);border-color:var(--color-primary)}
 .main-area{flex:1;overflow-y:auto;padding:16px 20px}
 .info-row{display:flex;align-items:center;justify-content:space-between;background:#fff;padding:6px 14px;border-radius:8px;border:1px solid #e8e8e8}
 .stat-text{font-size:12px;color:#888}.stat-text b{color:#323233;font-weight:600}
@@ -91,7 +91,7 @@ onMounted(loadTrash)
 .ellip{overflow:hidden;text-overflow:ellipsis}
 .act-col{display:flex;gap:3px}
 .row-btn{padding:1px 7px;border-radius:3px;font-size:10px;cursor:pointer;border:1px solid;font-family:inherit;background:#fff}
-.row-btn.edit{color:#1989fa;border-color:#1989fa}.row-btn.edit:hover{background:#e6f4ff}
+.row-btn.edit{color:var(--color-primary);border-color:var(--color-primary)}.row-btn.edit:hover{background:rgba(var(--color-primary-rgb),.08)}
 .row-btn.del{color:#ee0a24;border-color:#ee0a24}.row-btn.del:hover{background:#fff0f0}
 .tb-btn{padding:4px 12px;border-radius:4px;font-size:11px;cursor:pointer;border:1px solid #d9d9d9;background:#fff;color:#555;font-family:inherit}
 .tb-btn.danger{color:#ee0a24;border-color:#ee0a24}.tb-btn.danger:hover{background:#fff0f0}

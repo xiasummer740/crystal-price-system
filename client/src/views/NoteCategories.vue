@@ -29,7 +29,7 @@ const props = defineProps({ show: Boolean })
 const emit = defineEmits(['close', 'updated'])
 const visible = ref(false)
 const list = ref([])
-const presetColors = ['#1989fa','#ee0a24','#07c160','#ff6b35','#7232dd','#e6a23c','#52c41a','#eb2f96','#13c2c2','#fa541c']
+const presetColors = ['#008771','#ee0a24','#07c160','#ff6b35','#7232dd','#e6a23c','#52c41a','#eb2f96','#13c2c2','#fa541c']
 
 watch(() => props.show, async (v) => {
   visible.value = v
@@ -45,8 +45,8 @@ async function load() {
 
 async function onAdd() {
   try {
-    const r = await createCategory({ name: '新类型', color: '#1989fa', sort_order: list.value.length })
-    list.value.push({ id: r.data.id, name: '新类型', color: '#1989fa', sort_order: list.value.length, is_deleted: 0 })
+    const r = await createCategory({ name: '新类型', color: '#008771', sort_order: list.value.length })
+    list.value.push({ id: r.data.id, name: '新类型', color: '#008771', sort_order: list.value.length, is_deleted: 0 })
     showToast('已添加')
     emit('updated')
   } catch (e) { showToast('添加失败: ' + e.message) }
@@ -80,13 +80,13 @@ async function onDelete(cat, i) {
 .cat-item { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; padding: 8px 12px; background: #f8f9fa; border-radius: 8px; border: 1px solid #f0f0f0; }
 .cat-color { width: 14px; height: 14px; border-radius: 50%; flex-shrink: 0; border: 1px solid rgba(0,0,0,.1); }
 .cat-input { flex: 1; border: none; background: transparent; font-size: 14px; color: #323233; outline: none; font-family: inherit; padding: 4px 0; min-width: 60px; }
-.cat-input:focus { border-bottom: 1px solid #1989fa; }
+.cat-input:focus { border-bottom: 1px solid var(--color-primary); }
 .color-presets { display: flex; gap: 3px; flex-shrink: 0; }
 .cp-btn { width: 16px; height: 16px; border-radius: 50%; border: 1px solid rgba(0,0,0,.1); cursor: pointer; padding: 0; transition: transform .15s; }
 .cp-btn:hover { transform: scale(1.3); }
 .cat-del { width: 24px; height: 24px; border-radius: 50%; border: none; background: #fff0f0; color: #e53935; font-size: 14px; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: all .15s; }
 .cat-del:hover { background: #ffcdd2; }
-.cat-add { display: block; width: 100%; padding: 10px; border-radius: 8px; border: 1px dashed #d9d9d9; background: transparent; color: #1989fa; font-size: 14px; cursor: pointer; font-family: inherit; margin: 8px 0; transition: all .15s; }
-.cat-add:hover { border-color: #1989fa; background: #f0f6ff; }
+.cat-add { display: block; width: 100%; padding: 10px; border-radius: 8px; border: 1px dashed #d9d9d9; background: transparent; color: var(--color-primary); font-size: 14px; cursor: pointer; font-family: inherit; margin: 8px 0; transition: all .15s; }
+.cat-add:hover { border-color: var(--color-primary); background: rgba(var(--color-primary-rgb),.04); }
 .cat-hint { font-size: 11px; color: #bbb; text-align: center; margin: 4px 0 0; }
 </style>

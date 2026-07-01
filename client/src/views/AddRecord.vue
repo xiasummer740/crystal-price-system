@@ -272,7 +272,7 @@ async function onSubmitNew() {
 .sug-drop { position:absolute; top:100%; left:0; right:0; background:#fff; border:1px solid #e8e8e8; border-radius:6px; box-shadow:0 4px 16px rgba(0,0,0,.1); z-index:999; max-height:180px; overflow-y:auto }
 .sug-item { padding:8px 14px; font-size:13px; color:#323233; cursor:pointer; border-bottom:1px solid #f5f5f5 }
 .sug-item:last-child { border-bottom:none }
-.sug-item:hover { background:#f0f6ff; color:#1989fa }
+.sug-item:hover { background:rgba(var(--color-primary-rgb),.04); color:var(--color-primary) }
 .spec-zone { border-radius:6px; transition:all .2s; border:2px solid transparent }
-.spec-zone.drag-active { border-color:#1989fa; background:rgba(25,137,250,.04) }
+.spec-zone.drag-active { border-color:var(--color-primary); background:rgba(var(--color-primary-rgb),.04) }
 </style>

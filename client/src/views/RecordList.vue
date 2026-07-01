@@ -106,6 +106,6 @@ onMounted(async () => {
 <style scoped>
 .card-actions { display: flex; gap: 8px; margin-top: 8px; justify-content: flex-end; }
 .row-btn{padding:2px 8px;border-radius:3px;font-size:11px;cursor:pointer;border:1px solid;font-family:inherit}
-.row-btn.edit{background:#fff;color:#1989fa;border-color:#1989fa}
+.row-btn.edit{background:#fff;color:var(--color-primary);border-color:var(--color-primary)}
 .row-btn.del{background:#fff;color:#ee0a24;border-color:#ee0a24}
 </style>
