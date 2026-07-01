@@ -11,9 +11,11 @@ import samplesRouter from './routes/samples.js'
 import translatorRouter from './routes/translator.js'
 import notesRouter from './routes/notes.js'
 import reportsRouter from './routes/reports.js'
+import logsRouter from './routes/logs.js'
 import { exportToExcel, importFromExcel, generateTemplate, generateSampleTemplate, generateNoteTemplate } from './utils/export.js'
 import { initDb, saveNow } from './db.js'
 import { triggerBackup, flushPending } from './utils/excelBackup.js'
+import * as logger from './utils/logger.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const app = express()
@@ -46,6 +48,19 @@ app.use((req, res, next) => {
 app.get('/api/auth/token', (_req, res) => res.json({ code: 0, data: { token: authToken } }))
 app.get('/api/auth/verify', (req, res) => { const t = req.query.token || ''; res.json({ code: t === authToken ? 0 : 1 }) })
 
+// 请求日志中间件（记录非 GET 请求和慢请求）
+app.use((req, res, next) => {
+  const start = Date.now()
+  res.on('finish', () => {
+    const duration = Date.now() - start
+    const level = res.statusCode >= 500 ? 'error' : res.statusCode >= 400 ? 'warn' : 'info'
+    if (res.statusCode >= 400 || duration > 3000 || req.method !== 'GET') {
+      logger[level]('http', `${req.method} ${req.originalUrl} → ${res.statusCode} (${duration}ms)`)
+    }
+  })
+  next()
+})
+
 // 写操作自动 Excel 备份（节流 30s，FIFO 保留 5 份）
 app.use((req, res, next) => {
   if (/^(POST|PUT|DELETE|PATCH)$/.test(req.method)) {
@@ -70,6 +85,7 @@ app.use('/api/samples', samplesRouter)
 app.use('/api/translator', translatorRouter)
 app.use('/api/notes', notesRouter)
 app.use('/api/reports', reportsRouter)
+app.use('/api/logs', logsRouter)
 
 // 导出 Excel
 app.get('/api/export', (req, res) => {
@@ -188,6 +204,14 @@ app.get('/api/update-diagnose', (req, res) => {
     node: process.version,
     electron: process.versions?.electron || 'unknown'
   })
+})
+
+// 全局错误捕获中间件（必须在所有路由之后）
+app.use((err, req, res, _next) => {
+  logger.error('uncaught', `${req.method} ${req.originalUrl} — ${err.stack || err.message}`)
+  if (!res.headersSent) {
+    res.status(500).json({ code: 1, msg: '服务器内部错误，请查看日志' })
+  }
 })
 
 // 生产环境托管前端静态文件

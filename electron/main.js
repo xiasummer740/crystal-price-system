@@ -231,11 +231,29 @@ let dbSaveNow = null
 let doFlushBackupPending = null
 let reminderInterval = null
 
-// 启动日志
+// 启动日志（两阶段: DATA_DIR 未就绪时写 startup.log，就绪后写 DATA_DIR/logs/）
+let _logToDir = null
 function log(msg) {
-  const logPath = path.join(app.getPath('documents'), 'startup.log')
   const line = `[${new Date().toISOString()}] ${msg}\n`
-  try { fs.appendFileSync(logPath, line) } catch {}
+  // 写入 DATA_DIR/logs/startup.log（如果已就绪）
+  if (_logToDir) {
+    try { fs.appendFileSync(path.join(_logToDir, 'startup.log'), line, 'utf8') } catch {}
+  }
+  // 兜底写入 documents/startup.log
+  const fallback = path.join(app.getPath('documents'), 'startup.log')
+  try { fs.appendFileSync(fallback, line) } catch {}
+}
+
+// DATA_DIR 就绪后调用：切换到 logs 目录
+function switchLogTo(dir) {
+  const logDir = path.join(dir, 'logs')
+  try {
+    if (!fs.existsSync(logDir)) fs.mkdirSync(logDir, { recursive: true })
+    _logToDir = logDir
+    log('日志目录已切换: ' + logDir)
+  } catch (e) {
+    log('日志目录切换失败: ' + e.message)
+  }
 }
 
 log('=== App starting ===')
@@ -270,6 +288,7 @@ async function startServer() {
     if (!fs.existsSync(p)) fs.mkdirSync(p, { recursive: true })
   }
   process.env.DATA_DIR = dataDir
+  switchLogTo(dataDir)
   log(`DATA_DIR: ${dataDir}`)
 
   log('Starting server import...')

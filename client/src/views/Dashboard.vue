@@ -310,6 +310,44 @@
           <span class="update-status" v-if="updateStatusText">{{ updateStatusText }}</span>
           <p class="set-hint">当前版本 v{{ appVersion }}</p>
         </div>
+
+        <div class="set-divider"></div>
+        <h4>日志管理</h4>
+        <div class="log-mgr-area">
+          <button class="tb-btn" style="margin-bottom:8px" @click="openLogViewer">📋 查看日志</button>
+          <p class="set-hint">日志文件按日期轮转，位于数据目录下的 logs 文件夹。</p>
+        </div>
+      </div>
+    </van-popup>
+
+    <!-- 日志查看器 -->
+    <van-popup v-model:show="showLogViewer" round position="bottom" :style="{ height:'75%' }" closeable @closed="onLogViewerClose">
+      <div class="log-viewer-wrap">
+        <h3 style="margin:16px 20px 8px;font-size:16px">日志文件列表</h3>
+        <div v-if="logsLoading" style="text-align:center;padding:40px 0;color:#999">加载中...</div>
+        <div v-else-if="logsError" style="text-align:center;padding:40px 0;color:#e53935">{{ logsError }}</div>
+        <div v-else-if="!logFiles.length" style="text-align:center;padding:40px 0;color:#999">暂无日志文件</div>
+        <template v-else>
+          <div class="log-file-list">
+            <div v-for="f in logFiles" :key="f.name" class="log-file-item" :class="{ active: selectedLog === f.name }" @click="loadLogContent(f.name)">
+              <div class="log-file-name">{{ f.name }}</div>
+              <div class="log-file-meta">{{ formatSize(f.size) }} &middot; {{ formatTime(f.mtime) }}</div>
+            </div>
+          </div>
+          <div class="log-actions">
+            <button class="tb-btn" @click="refreshLogs" :disabled="logsLoading">🔄 刷新</button>
+            <button class="tb-btn danger" @click="clearAllLogs">🗑 清空日志</button>
+          </div>
+          <!-- 日志内容 -->
+          <div v-if="logContent" class="log-content-area">
+            <div class="log-content-header">
+              <span>{{ selectedLog }}</span>
+              <span class="log-content-info">{{ logContent.total }} 行，显示最近 {{ logContent.showing }} 行</span>
+              <a :href="`/api/logs/${selectedLog}/download`" class="log-download-link" download>下载</a>
+            </div>
+            <pre class="log-content">{{ logContent.content || '(空)' }}</pre>
+          </div>
+        </template>
       </div>
     </van-popup>
 
@@ -652,6 +690,59 @@ const showSettings = ref(false)
 const settingsTaxRate = ref(Number(localStorage.getItem('crystal_taxRate')) || 13)
 const settingsFxRate = ref(Number(localStorage.getItem('crystal_rate')) || 7)
 function saveSettings() { localStorage.setItem('crystal_taxRate', settingsTaxRate.value); localStorage.setItem('crystal_rate', settingsFxRate.value) }
+
+// 日志查看器
+const showLogViewer = ref(false)
+const logsLoading = ref(false)
+const logsError = ref('')
+const logFiles = ref([])
+const selectedLog = ref('')
+const logContent = ref(null)
+async function fetchLogs() {
+  logsLoading.value = true
+  logsError.value = ''
+  try {
+    const res = await (await fetch('/api/logs')).json()
+    if (res.code === 0) logFiles.value = res.data
+    else logsError.value = res.msg || '加载失败'
+  } catch (e) { logsError.value = '网络错误: ' + e.message }
+  finally { logsLoading.value = false }
+}
+async function loadLogContent(name) {
+  selectedLog.value = name
+  logContent.value = null
+  try {
+    const res = await (await fetch(`/api/logs/${name}?lines=500`)).json()
+    if (res.code === 0) logContent.value = res.data
+  } catch (e) { /* ignore */ }
+}
+async function clearAllLogs() {
+  if (!confirm('确定要清空所有日志文件吗？')) return
+  try {
+    const res = await (await fetch('/api/logs', { method: 'DELETE' })).json()
+    if (res.code === 0) { logFiles.value = []; logContent.value = null; selectedLog.value = '' }
+    alert(res.msg || '已清空')
+  } catch (e) { alert('清空失败: ' + e.message) }
+}
+function refreshLogs() { fetchLogs() }
+function openLogViewer() {
+  showLogViewer.value = true
+  logContent.value = null
+  selectedLog.value = ''
+  fetchLogs()
+}
+function onLogViewerClose() { logContent.value = null; selectedLog.value = '' }
+function formatSize(bytes) {
+  if (!bytes) return '0 B'
+  if (bytes < 1024) return bytes + ' B'
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'
+  return (bytes / 1024 / 1024).toFixed(1) + ' MB'
+}
+function formatTime(iso) {
+  if (!iso) return ''
+  const d = new Date(iso)
+  return d.toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+}
 
 // 在线升级状态
 const updateStatus = ref('idle') // idle | checking | available | downloading | downloaded | not-available | error
@@ -1013,4 +1104,21 @@ onUnmounted(() => { if (clockTimer) clearInterval(clockTimer); if (colFilterTime
 .adv-btns{display:flex;gap:10px}
 .adv-reset{flex:1;padding:10px;border-radius:8px;border:1px solid #d9d9d9;background:#fff;color:#666;font-size:14px;cursor:pointer;font-family:inherit}
 .adv-apply{flex:1;padding:10px;border-radius:8px;border:none;background:var(--color-primary);color:#fff;font-size:14px;cursor:pointer;font-family:inherit}
+/* 日志管理 */
+.log-mgr-area{padding:0 4px}
+.log-viewer-wrap{height:100%;display:flex;flex-direction:column;overflow:hidden}
+.log-file-list{flex:1;overflow-y:auto;margin:0 20px;border:1px solid #eee;border-radius:8px}
+.log-file-item{display:flex;justify-content:space-between;align-items:center;padding:10px 12px;cursor:pointer;border-bottom:1px solid #f5f5f5;transition:background .15s}
+.log-file-item:last-child{border-bottom:none}
+.log-file-item:hover{background:#f9fbff}
+.log-file-item.active{background:#e6f7ff;border-left:3px solid var(--color-primary)}
+.log-file-name{font-size:13px;font-weight:500;color:#333}
+.log-file-meta{font-size:11px;color:#999}
+.log-actions{display:flex;gap:8px;padding:12px 20px}
+.log-content-area{margin:12px 20px 20px;border:1px solid #eee;border-radius:8px;display:flex;flex-direction:column}
+.log-content-header{display:flex;align-items:center;gap:12px;padding:8px 12px;background:#fafafa;border-bottom:1px solid #eee;font-size:12px;color:#666;flex-wrap:wrap}
+.log-content-info{flex:1;text-align:right;color:#999}
+.log-download-link{color:var(--color-primary);text-decoration:none;font-weight:500}
+.log-download-link:hover{text-decoration:underline}
+.log-content{flex:1;overflow-y:auto;padding:12px;font-size:11px;line-height:1.6;color:#333;background:#fcfcfc;margin:0;max-height:300px;white-space:pre-wrap;word-break:break-all;font-family:Consolas,'Courier New',monospace}
 </style>
