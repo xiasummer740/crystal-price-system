@@ -300,6 +300,7 @@
             <span class="update-icon">{{ updateIcon }}</span>
             <span class="update-text">{{ updateBtnText }}</span>
             <span v-if="updatePercent > 0" class="update-pct">{{ updatePercent }}%</span>
+            <span v-else-if="updatePercent < 0" class="update-pct">{{ -updatePercent }}MB</span>
           </button>
           <p class="set-hint">当前版本 v{{ appVersion }}</p>
         </div>

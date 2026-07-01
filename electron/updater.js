@@ -59,7 +59,8 @@ async function fetchWithTimeout(url, timeout = TIMEOUT_MS) {
 // ── 下载文件（带进度回调，fetch 方式） ──
 async function downloadFile(url, destPath, onProgress) {
   const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS * 5)
+  // 119MB 安装包给 10 分钟超时
+  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS * 40)
   try {
     const res = await fetch(url, { signal: controller.signal, redirect: 'follow' })
     if (!res.ok) throw new Error(`HTTP ${res.status}`)
@@ -73,7 +74,11 @@ async function downloadFile(url, destPath, onProgress) {
         if (done) break
         writer.write(Buffer.from(value))
         downloaded += value.length
-        if (total && onProgress) onProgress(Math.round(downloaded / total * 100))
+        // 即使没有 content-length 也发进度（显示已下载 MB）
+        if (onProgress) {
+          if (total) onProgress(Math.round(downloaded / total * 100))
+          else onProgress(-Math.round(downloaded / 1024 / 1024)) // 负数表示 MB
+        }
       }
       writer.end()
     }
