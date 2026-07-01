@@ -98,7 +98,8 @@ function computeSha512(filePath) {
 // ── 解析 latest.yml（极简 YAML 解析） ──
 function parseLatestYml(text) {
   const version = (text.match(/^version:\s*([\d.]+)/m) || [])[1]
-  const fileName = (text.match(/^url:\s*(.+)/m) || [])[1]?.trim()
+  // url 在 files: 子项中（带缩进），改用顶层的 path 字段
+  const fileName = (text.match(/^path:\s*(.+)/m) || [])[1]?.trim()
   const sha512 = (text.match(/^sha512:\s*(\S+)/m) || [])[1]
   if (!version || !fileName) throw new Error('无法解析更新信息')
   return { version, fileName, sha512 }
