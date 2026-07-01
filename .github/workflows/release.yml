@@ -1,0 +1,63 @@
+# Release — 打 tag 自动构建安装包并发布 GitHub Release
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: 安装依赖
+        run: |
+          npm install
+          cd client && npm install && cd ..
+
+      - name: 构建前端 + 打包安装版
+        run: npm run package:installer
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 创建 GitHub Release
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_name }}"
+          $version = $tag -replace '^v', ''
+          Write-Host "创建 Release: $tag"
+
+          # 查找打包产物
+          $distDir = "dist-exe"
+          $exe = Get-ChildItem -Path $distDir -Filter "*.exe" | Select-Object -First 1
+          if (-not $exe) { Write-Host "未找到 exe"; exit 1 }
+          Write-Host "产物: $($exe.Name) ($([math]::Round($exe.Length/1MB,1)) MB)"
+
+          # 生成发布说明
+          $notes = @"
+          晶振报价管理系统 $tag
+
+          自动构建于 GitHub Actions。
+
+          ### 安装
+          下载 `$($exe.Name)` 双击安装即可。
+          "@
+
+          # 创建 Release 并上传
+          gh release create "$tag" `
+            --title "$tag" `
+            --notes "$notes" `
+            "$distDir\*.exe" `
+            "$distDir\latest.yml" `
+            "$distDir\*.blockmap"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
