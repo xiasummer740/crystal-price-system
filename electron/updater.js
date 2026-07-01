@@ -259,7 +259,7 @@ export function initUpdater(win) {
     log('IPC: 安装更新')
 
     try {
-      spawn(downloadPath, ['/S', '--updated'], {
+      spawn(downloadPath, ['--updated'], {
         detached: true,
         stdio: 'ignore'
       }).unref()
