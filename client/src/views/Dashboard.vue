@@ -653,7 +653,7 @@ const updateVersion = ref('')
 const updatePercent = ref(0)
 const updateError = ref('')
 
-const disabled = computed(() => updateStatus.value === 'checking' || updateStatus.value === 'downloading')
+const disabled = computed(() => false) // 任何状态都可点击（重试/取消）
 const updateBtnClass = computed(() => {
   const s = updateStatus.value
   return { idle: s === 'idle', available: s === 'available', downloading: s === 'downloading', downloaded: s === 'downloaded', checking: s === 'checking', error: s === 'error', latest: s === 'not-available' }
@@ -665,7 +665,7 @@ const updateIcon = computed(() => {
 const updateBtnText = computed(() => {
   const t = {
     idle: '检查更新', available: '下载更新 v' + updateVersion.value,
-    downloading: '正在下载(浏览器)...', downloaded: '立即安装',
+    downloading: '正在下载(浏览器)... 点击重试', downloaded: '立即安装',
     checking: '检查中...', error: '检查失败，点击重试',
     'not-available': '已是最新版'
   }
@@ -683,7 +683,11 @@ const updateDownloadUrl = ref('')
 
 async function onUpdateClick() {
   const s = updateStatus.value
-  if (s === 'idle' || s === 'error' || s === 'not-available') {
+  // 任何状态都可取消/重试：再次点击自动重新检查
+  if (s === 'checking' || s === 'downloading') {
+    updateStatus.value = 'checking'
+  }
+  if (s === 'idle' || s === 'error' || s === 'not-available' || s === 'checking') {
     updateStatus.value = 'checking'
     try {
       const r = await fetch('/api/check-update', { signal: AbortSignal.timeout(25000) })
