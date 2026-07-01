@@ -296,11 +296,12 @@
         <div class="set-divider"></div>
         <h4>版本升级</h4>
         <div class="update-area">
-          <button class="update-btn" :class="{ checking: updateStatus === 'checking' }" @click="onUpdateClick" :disabled="updateStatus === 'checking'">
+          <button class="update-btn" :class="{ checking: updateStatus === 'checking' || updateStatus === 'downloading' }" @click="onUpdateClick" :disabled="updateStatus === 'checking' || updateStatus === 'downloading'">
             <span v-if="updateStatus === 'checking'">⏳ 检查中...</span>
+            <span v-else-if="updateStatus === 'available'">⏳ 正在下载...</span>
+            <span v-else-if="updateStatus === 'downloading'">⏳ 下载中{{ updatePercent > 0 ? ' ' + updatePercent + '%' : updatePercent < 0 ? ' ' + (-updatePercent) + 'MB' : '' }}</span>
+            <span v-else-if="updateStatus === 'downloaded'">⚡ 立即安装</span>
             <span v-else>🔍 检查更新</span>
-            <span v-if="updatePercent > 0" class="update-pct">{{ updatePercent }}%</span>
-            <span v-else-if="updatePercent < 0" class="update-pct">{{ -updatePercent }}MB</span>
           </button>
           <span class="update-status" v-if="updateStatusText">{{ updateStatusText }}</span>
           <p class="set-hint">当前版本 v{{ appVersion }}</p>
@@ -658,9 +659,9 @@ const updateError = ref('')
 const updateStatusText = computed(() => {
   if (updateStatus.value === 'checking') return ''
   const t = {
-    available: '发现新版本 v' + updateVersion.value + '，点击上方按钮下载',
-    downloading: '正在下载(浏览器)... 点击重试',
-    downloaded: '新版本已下载，点击安装',
+    available: '发现新版本 v' + updateVersion.value + '，正在自动下载...',
+    downloading: '正在下载更新包...',
+    downloaded: '新版本已下载，点击「立即安装」',
     error: updateError.value || '检查失败',
     'not-available': '已是最新版本'
   }
@@ -671,39 +672,41 @@ const updateDownloadUrl = ref('')
 
 async function onUpdateClick() {
   const s = updateStatus.value
-  // 任何状态都可取消/重试：再次点击自动重新检查
-  if (s === 'checking' || s === 'downloading') {
-    updateStatus.value = 'checking'
-  }
-  if (s === 'idle' || s === 'error' || s === 'not-available' || s === 'checking') {
+  // 检查/下载中禁止操作
+  if (s === 'checking' || s === 'downloading') return
+  if (s === 'idle' || s === 'error' || s === 'not-available') {
     updateStatus.value = 'checking'
     try {
       const r = await fetch('/api/check-update', { signal: AbortSignal.timeout(25000) })
       const d = await r.json()
       if (d.code === 0 && d.data) {
-        updateStatus.value = d.data.status
-        if (d.data.version) {
-          updateVersion.value = d.data.version
-          updateDownloadUrl.value = `https://github.com/xiasummer740/crystal-price-system/releases/download/v${d.data.version}/crystal-price-system-setup-${d.data.version}.exe`
+        const st = d.data.status
+        if (st === 'available') {
+          // 发现新版本 → 自动下载
+          updateStatus.value = 'available'
+          if (d.data.version) {
+            updateVersion.value = d.data.version
+            updateDownloadUrl.value = `https://github.com/xiasummer740/crystal-price-system/releases/download/v${d.data.version}/crystal-price-system-setup-${d.data.version}.exe`
+          }
+          // 通过 Electron IPC 自动下载，下载完成后 IPC 会发 downloaded 事件
+          if (window.electronAPI?.downloadUpdate) {
+            window.electronAPI.downloadUpdate()
+          } else {
+            // 浏览器模式：直接打开下载链接
+            if (updateDownloadUrl.value) window.open(updateDownloadUrl.value, '_blank')
+          }
+        } else {
+          updateStatus.value = st
+          if (d.data.version) updateVersion.value = d.data.version
+          if (d.data.message) updateError.value = d.data.message
         }
-        if (d.data.message) updateError.value = d.data.message
       } else {
         throw new Error(d.msg || '检查失败')
       }
     } catch (e) {
+      // HTTP 检查失败，尝试走 Electron IPC
       window.electronAPI?.checkUpdate()
     }
-  } else if (s === 'available') {
-    // 用浏览器下载（更快，支持断点续传）
-    updateStatus.value = 'downloading'
-    if (updateDownloadUrl.value) {
-      if (window.electronAPI?.openExternal) {
-        window.electronAPI.openExternal(updateDownloadUrl.value)
-      } else {
-        window.open(updateDownloadUrl.value, '_blank')
-      }
-    }
-    window.electronAPI?.downloadUpdate()
   } else if (s === 'downloaded') {
     window.electronAPI?.installUpdate()
   }
@@ -719,6 +722,10 @@ if (window.electronAPI?.onUpdateStatus) {
     }
     if (data.percent !== undefined) updatePercent.value = data.percent
     if (data.message) updateError.value = data.message
+    // IPC 通知有可用更新时，自动触发下载
+    if (data.status === 'available' && window.electronAPI?.downloadUpdate) {
+      window.electronAPI.downloadUpdate()
+    }
   })
 }
 

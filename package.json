@@ -1,6 +1,6 @@
 {
   "name": "crystal-price-system",
-  "version": "1.0.43",
+  "version": "1.0.44",
   "description": "晶振物料报价记录查询系统",
   "type": "module",
   "main": "electron/main.js",
@@ -13,6 +13,7 @@
     "package": "npm run build && electron-builder --win",
     "package:portable": "npm run build && electron-builder --win portable",
     "package:installer": "npm run build && electron-builder --win nsis",
+    "test": "pwsh -ExecutionPolicy Bypass -File tests/run.ps1",
     "release": "powershell -ExecutionPolicy Bypass -File .\\scripts\\release.ps1"
   },
   "dependencies": {
