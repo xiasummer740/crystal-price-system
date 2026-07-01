@@ -168,6 +168,30 @@ app.get('/api/open-data-folder', (_req, res) => {
   res.json({ code: 0 })
 })
 
+// 版本更新检查 HTTP 接口（给渲染进程直连，绕过 IPC）
+app.get('/api/check-update', async (req, res) => {
+  const fn = app.get('_doCheckUpdate')
+  if (!fn) return res.json({ code: 1, msg: '更新模块未就绪', data: { status: 'idle' } })
+  try {
+    const start = Date.now()
+    const result = await fn()
+    res.json({ code: 0, data: result, elapsed: Date.now() - start })
+  } catch (e) {
+    res.json({ code: 1, msg: e.message, data: { status: 'error', message: e.message } })
+  }
+})
+
+// 更新诊断状态接口
+app.get('/api/update-diagnose', (req, res) => {
+  const fn = app.get('_doCheckUpdate')
+  res.json({
+    hasFn: !!fn,
+    node: process.version,
+    electron: process.versions?.electron || 'unknown',
+    cwd: process.cwd()
+  })
+})
+
 // 生产环境托管前端静态文件
 const clientDist = path.join(__dirname, '..', '..', 'client', 'dist')
 app.use(express.static(clientDist))
