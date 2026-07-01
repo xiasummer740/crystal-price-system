@@ -36,6 +36,9 @@ npm run build
 # 启动桌面程序 (开发模式，不打包)
 npm start
 
+# 重新启动开发版（改完代码后自动重启）
+# 使用: taskkill → 等待端口释放 → start
+
 # 打包为便携版 exe
 npm run package
 
@@ -106,7 +109,13 @@ SQLite 单文件 `server/data.db`，首次运行自动创建。
 | /edit/:id     | AddRecord.vue    | 编辑记录（复用 AddRecord）    |
 | /detail/:id   | RecordDetail.vue | 记录详情                    |
 
-## Key Design Decisions
+## 开发工作流
+
+- **改完代码自动重启**: 修改 Electron 主进程文件（`electron/*.js`）或前端代码后，立即重启开发版应用。先 `taskkill /f /im electron.exe` 清理旧进程，确认端口 3266 释放后，再 `node node_modules/electron/cli.js . --no-sandbox --disable-gpu` 启动新实例。不需要等祥哥说"启动看看"。
+- **仅改前端 CSS/模板**（`client/src/**/*.vue`）：只需 `npm run build`，Electron 自动加载新构建产物，无需重启主进程。
+- **改 API 路由**（`server/src/routes/*.js`）：修改后立即重启主进程（同上）。
+- **发版流程**: `npm run package` → 更新 `latest.yml` → commit → tag → `gh release create`。
+- **❌ 禁止开发版跑通就当完成**：发版前必须 `npm run package` 打包完整 exe，**安装运行确认功能正常**，不能只靠 `npm start` 开发版测试。开发版环境与正式版 asar 环境有差异（函数引用、路径、asar 解包等），正式版出问题等于没做完。
 
 - **Electron 子进程模式**: Express 服务在 Main Process 中通过 `fork()` 启动，与渲染进程解耦
 - **preload.js**: 通过 `contextBridge` 向渲染进程暴露局域网 IP 获取能力

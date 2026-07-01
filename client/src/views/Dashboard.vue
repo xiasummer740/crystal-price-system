@@ -296,12 +296,13 @@
         <div class="set-divider"></div>
         <h4>版本升级</h4>
         <div class="update-area">
-          <button class="update-btn" :class="updateBtnClass" @click="onUpdateClick" :title="updateTooltip" :disabled="disabled">
-            <span class="update-icon">{{ updateIcon }}</span>
-            <span class="update-text">{{ updateBtnText }}</span>
+          <button class="update-btn" :class="{ checking: updateStatus === 'checking' }" @click="onUpdateClick" :disabled="updateStatus === 'checking'">
+            <span v-if="updateStatus === 'checking'">⏳ 检查中...</span>
+            <span v-else>🔍 检查更新</span>
             <span v-if="updatePercent > 0" class="update-pct">{{ updatePercent }}%</span>
             <span v-else-if="updatePercent < 0" class="update-pct">{{ -updatePercent }}MB</span>
           </button>
+          <span class="update-status" v-if="updateStatusText">{{ updateStatusText }}</span>
           <p class="set-hint">当前版本 v{{ appVersion }}</p>
         </div>
       </div>
@@ -653,30 +654,17 @@ const updateVersion = ref('')
 const updatePercent = ref(0)
 const updateError = ref('')
 
-const disabled = computed(() => false) // 任何状态都可点击（重试/取消）
-const updateBtnClass = computed(() => {
-  const s = updateStatus.value
-  return { idle: s === 'idle', available: s === 'available', downloading: s === 'downloading', downloaded: s === 'downloaded', checking: s === 'checking', error: s === 'error', latest: s === 'not-available' }
-})
-const updateIcon = computed(() => {
-  const m = { idle: '⬇', available: '🔄', downloading: '⏳', downloaded: '✅', checking: '🔍', error: '⚠️', 'not-available': '✓' }
-  return m[updateStatus.value] || '⬇'
-})
-const updateBtnText = computed(() => {
+// 状态文本（独立显示在按钮下方）
+const updateStatusText = computed(() => {
+  if (updateStatus.value === 'checking') return ''
   const t = {
-    idle: '检查更新', available: '下载更新 v' + updateVersion.value,
-    downloading: '正在下载(浏览器)... 点击重试', downloaded: '立即安装',
-    checking: '检查中...', error: '检查失败，点击重试',
-    'not-available': '已是最新版'
+    available: '发现新版本 v' + updateVersion.value + '，点击上方按钮下载',
+    downloading: '正在下载(浏览器)... 点击重试',
+    downloaded: '新版本已下载，点击安装',
+    error: updateError.value || '检查失败',
+    'not-available': '已是最新版本'
   }
-  return t[updateStatus.value] || '检查更新'
-})
-const updateTooltip = computed(() => {
-  if (updateStatus.value === 'available') return `发现新版本 v${updateVersion.value}，点击下载更新`
-  if (updateStatus.value === 'downloaded') return `新版本 v${updateVersion.value} 已下载，点击安装并重启`
-  if (updateStatus.value === 'error') return updateError.value || '更新检查失败'
-  if (updateStatus.value === 'not-available') return '当前已是最新版本'
-  return ''
+  return t[updateStatus.value] || ''
 })
 
 const updateDownloadUrl = ref('')
@@ -966,18 +954,13 @@ onUnmounted(() => { if (clockTimer) clearInterval(clockTimer); if (colFilterTime
 .set-hint{font-size:11px;color:#999;margin-top:12px;line-height:1.6}
 .set-divider{height:1px;background:#f0f0f0;margin:16px 0}
 .set-wrap h4{font-size:14px;font-weight:600;margin:0 0 8px;color:#555}
-.update-area{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
-.update-btn{display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:6px;border:1px solid #d9d9d9;font-size:13px;cursor:pointer;font-family:inherit;transition:all .2s;background:#f5f6f8;color:#666}
-.update-btn:hover{border-color:var(--color-primary);color:var(--color-primary)}
+.update-area{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.update-btn{display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:6px;border:1px solid var(--color-primary);font-size:13px;cursor:pointer;font-family:inherit;transition:all .2s;background:#e8f4fd;color:var(--color-primary)}
+.update-btn:hover{background:#d0ebfa}
 .update-btn:disabled{opacity:.6;cursor:not-allowed}
-.update-btn.available{background:#fff3e0;border-color:#ffa726;color:#e65100}
-.update-btn.available:hover{background:#ffe0b2}
-.update-btn.downloading{background:#e3f2fd;border-color:#42a5f5;color:#1565c0}
-.update-btn.downloaded{background:#e8f5e9;border-color:#66bb6a;color:#2e7d32}
-.update-btn.error{background:#ffebee;border-color:#ef5350;color:#c62828}
-.update-btn.latest{background:#f5f6f8;border-color:#d9d9d9;color:#999;cursor:default}
-.update-btn.latest:hover{border-color:#d9d9d9;color:#999}
-.update-icon{font-size:16px;line-height:1}
+.update-btn.checking{background:#f5f6f8;border-color:#d9d9d9;color:#999}
+.update-pct{font-size:11px;color:#999}
+.update-status{font-size:12px;color:#666}
 .update-pct{font-size:11px;color:#666}
 .spec-edit-wrap{padding:16px 20px 20px;overflow-y:auto;height:100%}
 .spec-edit-wrap h3{font-size:18px;font-weight:600;margin:0 0 4px}
