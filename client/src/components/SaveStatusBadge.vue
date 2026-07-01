@@ -26,12 +26,14 @@ const labelText = computed(() => {
   if (store.isSaving) return '保存中…'
   if (store.isFailed) return '保存失败 ⚠'
   if (store.isSaved) return `已保存 ${store.savedAtText}`
-  return '' // idle 时不显示
+  // idle 但有上次保存时间 — 继续显示
+  if (store.lastSavedAt) return store.savedAtText
+  return ''
 })
 
 const tipText = computed(() => {
   if (store.isFailed) return store.lastError || '保存失败'
-  if (store.isSaved && store.lastSavedAt) return store.lastSavedAt.toLocaleString()
+  if (store.lastSavedAt) return store.lastSavedAt.toLocaleString()
   return ''
 })
 
