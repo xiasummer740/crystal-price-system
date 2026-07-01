@@ -104,8 +104,8 @@ Write-Host "  [OK] 构建完成 ($([math]::Round($sw.Elapsed.TotalSeconds, 1))s)
 Write-Host ''
 Write-Host '[3/5] 准备上传文件...' -ForegroundColor Cyan
 
-# 自动检测打包产物（electron-builder 默认输出：{productName} Setup {version}.exe）
-$DefaultInstallerPattern = "晶振报价管理系统 Setup $NewVersion.exe"
+# 自动检测打包产物（artifactName: crystal-price-system-setup-{version}.exe）
+$DefaultInstallerPattern = "crystal-price-system-setup-$NewVersion.exe"
 $InstallerPath = Join-Path $DistDir $DefaultInstallerPattern
 
 # 生成英文名副本（GitHub 上传用）
