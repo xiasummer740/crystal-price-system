@@ -1,10 +1,11 @@
 /**
  * 日志管理 API
  *
- * GET    /api/logs            — 列出日志文件
- * GET    /api/logs/:filename  — 读取日志内容（?lines=500）
+ * GET    /api/logs                  — 列出日志文件
+ * GET    /api/logs/:filename        — 读取日志内容（?lines=500）
  * GET    /api/logs/:filename/download — 下载日志文件
- * DELETE /api/logs            — 清空所有日志
+ * DELETE /api/logs                  — 清空所有日志
+ * POST   /api/logs/client-error     — 前端错误上报
  */
 import { Router } from 'express'
 import * as logger from '../utils/logger.js'
@@ -63,6 +64,20 @@ router.delete('/', (_req, res) => {
     logger.error('logs', `清空失败: ${e.message}`)
     res.status(500).json({ code: 1, msg: '清空日志失败' })
   }
+})
+
+// 前端错误上报（POST）
+router.post('/client-error', (req, res) => {
+  const { message, stack, url, component, info, userAgent } = req.body || {}
+  const lines = [
+    `[前端错误] ${message || '未知错误'}`,
+    stack ? `  Stack: ${stack.slice(0, 500)}` : '',
+    info ? `  Info: ${info}` : '',
+    url ? `  URL: ${url}` : '',
+    component ? `  Component: ${component}` : '',
+  ].filter(Boolean).join('\n')
+  logger.error('client', lines + (userAgent ? `\n  UA: ${userAgent}` : ''))
+  res.json({ code: 0 })
 })
 
 export default router
