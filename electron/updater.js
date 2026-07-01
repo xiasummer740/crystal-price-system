@@ -159,6 +159,8 @@ export function initUpdater(win) {
   _initialized = true
   mainWindow = win
   log('initUpdater 完成')
+  // 全局暴露，供 Express 路由直接调用
+  global.__checkForUpdates = checkForUpdates
 
   // IPC: 检查更新
   ipcMain.handle('check-update', async () => {

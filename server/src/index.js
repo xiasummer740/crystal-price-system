@@ -170,8 +170,8 @@ app.get('/api/open-data-folder', (_req, res) => {
 
 // 版本更新检查 HTTP 接口（给渲染进程直连，绕过 IPC）
 app.get('/api/check-update', async (req, res) => {
-  const fn = app.get('_doCheckUpdate')
-  if (!fn) return res.json({ code: 1, msg: '更新模块未就绪', data: { status: 'idle' } })
+  const fn = global.__checkForUpdates
+  if (!fn) return res.json({ code: 1, msg: '更新模块未就绪', errorDetail: 'global.__checkForUpdates 未定义' })
   try {
     const start = Date.now()
     const result = await fn()
@@ -183,12 +183,10 @@ app.get('/api/check-update', async (req, res) => {
 
 // 更新诊断状态接口
 app.get('/api/update-diagnose', (req, res) => {
-  const fn = app.get('_doCheckUpdate')
   res.json({
-    hasFn: !!fn,
+    hasFn: !!global.__checkForUpdates,
     node: process.version,
-    electron: process.versions?.electron || 'unknown',
-    cwd: process.cwd()
+    electron: process.versions?.electron || 'unknown'
   })
 })
 

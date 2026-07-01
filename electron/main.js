@@ -287,9 +287,6 @@ async function startServer() {
   }
   log('Server module imported')
 
-  // 注入更新检查函数到 Express app，供 /api/check-update 调用
-  expressApp.set('_doCheckUpdate', checkForUpdates)
-
   let retryCount = 0
   const MAX_RETRIES = 30
   return new Promise((resolve, reject) => {
