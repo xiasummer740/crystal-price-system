@@ -1,3 +1,4 @@
+/// <reference types="vitest" />
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import Components from 'unplugin-vue-components/vite'
@@ -12,6 +13,10 @@ const rootPkg = JSON.parse(fs.readFileSync(path.resolve(__dirname, '..', 'packag
 export default defineConfig({
   define: {
     __APP_VERSION__: JSON.stringify(rootPkg.version)
+  },
+  test: {
+    environment: 'jsdom',
+    include: ['src/**/*.{test,spec}.{js,ts}'],
   },
   plugins: [
     vue(),

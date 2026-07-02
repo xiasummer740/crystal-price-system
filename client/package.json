@@ -5,7 +5,9 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@vant/use": "^1.6.0",
@@ -18,8 +20,11 @@
   "devDependencies": {
     "@vant/auto-import-resolver": "^1.2.1",
     "@vitejs/plugin-vue": "^5.1.4",
+    "@vue/test-utils": "^2.4.11",
+    "jsdom": "^29.1.1",
     "unplugin-vue-components": "^0.27.4",
     "vite": "^5.4.9",
-    "vite-plugin-pwa": "^0.20.5"
+    "vite-plugin-pwa": "^0.20.5",
+    "vitest": "^4.1.9"
   }
 }

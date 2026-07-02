@@ -13,8 +13,10 @@
     "package": "npm run build && electron-builder --win",
     "package:portable": "npm run build && electron-builder --win portable",
     "package:installer": "npm run build && electron-builder --win nsis",
-    "test": "node --test tests/*.test.js",
-"test:e2e": "npx playwright test",
+    "test:backend": "node --test tests/*.test.js",
+    "test:frontend": "cd client && npx vitest run",
+    "test": "npm run test:backend && npm run test:frontend",
+    "test:e2e": "npx playwright test",
     "release": "powershell -ExecutionPolicy Bypass -File .\\scripts\\release.ps1"
   },
   "dependencies": {
