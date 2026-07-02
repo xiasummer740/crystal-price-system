@@ -30,7 +30,6 @@
         <div class="stat-row" style="justify-content:center;padding:60px 0">
           <van-loading size="24" /><span style="margin-left:10px;color:#999">生成报告中...</span>
         </div>
-        <div v-if="ocrRunning" class="ocr-hint">🔍 正在识别图片文字...</div>
       </template>
 
       <!-- 报告内容 -->
@@ -66,7 +65,6 @@
                 <div class="item-body">
                   <div class="item-title">{{ item.title || '无标题' }}</div>
                   <div class="item-content" v-if="item.content">📝 {{ item.content }}</div>
-                  <div class="item-ocr" v-if="item.ocrText">🔍 {{ item.ocrText }}</div>
                 </div>
               </div>
             </div>
@@ -95,7 +93,6 @@ const range = ref('today')
 const customStart = ref('')
 const customEnd = ref('')
 const loading = ref(false)
-const ocrRunning = ref(false)
 const report = ref(null)
 
 const rangeLabel = computed(() => {
@@ -112,7 +109,6 @@ function switchRange(key) {
 
 async function load() {
   loading.value = true
-  ocrRunning.value = false
   report.value = null
   try {
     const params = { range: range.value }
@@ -121,18 +117,12 @@ async function load() {
       params.start = customStart.value
       params.end = customEnd.value
     }
-    // 如果包含图片附件，显示 OCR 提示
     const r = await http.get('/reports', { params })
     report.value = r.data
-    // 检查是否有图片需要 OCR
-    const hasImages = report.value.byCustomer?.some(g => g.items?.some(i => i.hasImages))
-    ocrRunning.value = !!hasImages
   } catch (e) {
     report.value = null
   } finally {
     loading.value = false
-    // OCR 完成后隐藏提示
-    setTimeout(() => { ocrRunning.value = false }, 1000)
   }
 }
 

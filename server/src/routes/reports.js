@@ -1,17 +1,10 @@
 // 总结汇报 API — 日报/周报/月报
-// 按客户分组汇总记事，自动 OCR 图片文字
+// 按客户分组汇总记事，展示标题、内容摘要和状态
 
 import { Router } from 'express'
-import path from 'path'
-import fs from 'fs'
-import { fileURLToPath } from 'url'
-import Tesseract from 'tesseract.js'
 import { queryAll } from '../db.js'
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const router = Router()
-
-const notesUploadDir = path.join(process.env.DATA_DIR || path.join(__dirname, '..', '..'), '记事图片库')
 
 // 计算时间范围
 function calcRange(range) {
@@ -38,37 +31,13 @@ function calcRange(range) {
       end = fmt(now) + ' 23:59:59'
       break
     default:
-      // 自定义范围
       start = fmt(now) + ' 00:00:00'
       end = fmt(now) + ' 23:59:59'
   }
   return { start, end }
 }
 
-// 从 notes.images 字段提取图片文件路径
-function parseImagePaths(imagesJson) {
-  try {
-    const urls = JSON.parse(imagesJson || '[]')
-    return urls.map(url => {
-      const name = decodeURIComponent(url.split('/').pop())
-      return path.join(notesUploadDir, name)
-    }).filter(fp => fs.existsSync(fp))
-  } catch { return [] }
-}
-
-// OCR 一张图片
-async function ocrImage(filePath) {
-  try {
-    const { data } = await Tesseract.recognize(filePath, 'chi_sim+eng', {
-      logger: () => {} // 静默运行
-    })
-    return data.text.trim()
-  } catch {
-    return ''
-  }
-}
-
-// 截取文本摘要（取前若干字）
+// 截取文本摘要
 function summary(text, maxLen = 80) {
   if (!text) return ''
   const clean = text.replace(/\s+/g, ' ').trim()
@@ -76,11 +45,10 @@ function summary(text, maxLen = 80) {
   return clean.slice(0, maxLen) + '…'
 }
 
-// 生成简单摘要：提取关键词/要点
+// 提取内容要点（前 3 行）
 function summarizeContent(content) {
   if (!content || !content.trim()) return ''
   const lines = content.split('\n').filter(l => l.trim())
-  // 取前 3 行非空内容，每行截断
   return lines.slice(0, 3).map(l => summary(l, 60)).join(' → ')
 }
 
@@ -123,16 +91,6 @@ router.get('/', async (req, res) => {
       if (note.status === 'done') g.done++
       else g.pending++
 
-      // OCR：只对图片附件执行，缓存计算结果
-      let ocrText = ''
-      const imagePaths = parseImagePaths(note.images)
-      if (imagePaths.length > 0) {
-        // 只 OCR 第一张（避免太多请求），超时 5 秒
-        const ocrPromise = ocrImage(imagePaths[0])
-        const timeout = new Promise(r => setTimeout(() => r(''), 5000))
-        ocrText = await Promise.race([ocrPromise, timeout])
-      }
-
       g.items.push({
         id: note.id,
         title: note.title,
@@ -141,9 +99,7 @@ router.get('/', async (req, res) => {
         priority: note.priority,
         category_name: note.category_name,
         reminder_at: note.reminder_at,
-        created_at: note.created_at,
-        hasImages: imagePaths.length > 0,
-        ocrText: ocrText ? summary(ocrText, 100) : ''
+        created_at: note.created_at
       })
     }
 
