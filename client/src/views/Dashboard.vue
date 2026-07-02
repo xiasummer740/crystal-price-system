@@ -773,9 +773,23 @@ async function onUpdateClick() {
   if (s === 'available') {
     updateStatus.value = 'downloading'
     if (window.electronAPI?.downloadUpdate) {
-      window.electronAPI.downloadUpdate()
+      try {
+        const result = await window.electronAPI.downloadUpdate()
+        if (!result?.success) throw new Error(result?.msg || '下载未启动')
+      } catch (e) {
+        // IPC 下载失败 → 兜底浏览器下载
+        if (updateDownloadUrl.value) {
+          updateStatus.value = 'available'
+          window.open(updateDownloadUrl.value, '_blank')
+        } else {
+          updateStatus.value = 'error'
+          updateError.value = '下载失败，请手动下载: ' + (e.message || '')
+        }
+      }
     } else if (updateDownloadUrl.value) {
+      // 浏览器模式：直接打开下载链接
       window.open(updateDownloadUrl.value, '_blank')
+      updateStatus.value = 'idle'
     }
     return
   }

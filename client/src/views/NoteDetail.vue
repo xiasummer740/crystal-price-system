@@ -91,7 +91,7 @@
                 <button class="viewer-close" @click="showPreview = false">✕</button>
               </div>
             </div>
-            <img :src="images[previewIdx]" class="viewer-img" @click.stop />
+            <img :src="imageList[previewIdx]" class="viewer-img" @click.stop />
             <button v-if="previewIdx > 0" class="viewer-nav viewer-prev" @click.stop="previewIdx--">‹</button>
             <button v-if="previewIdx < imageList.length - 1" class="viewer-nav viewer-next" @click.stop="previewIdx++">›</button>
           </div>
