@@ -1,6 +1,6 @@
 {
   "name": "crystal-price-system",
-  "version": "1.0.54",
+  "version": "1.0.55",
   "description": "晶振物料报价记录查询系统",
   "type": "module",
   "main": "electron/main.js",
