@@ -232,14 +232,28 @@
         <div class="set-divider"></div>
         <h4>版本升级</h4>
         <div class="update-area">
-          <button class="update-btn" :class="{ checking: updateStatus === 'checking' || updateStatus === 'downloading' }" @click="onUpdateClick" :disabled="updateStatus === 'checking' || updateStatus === 'downloading' || updateStatus === 'available'">
-            <span v-if="updateStatus === 'checking'">⏳ 检查中...</span>
-            <span v-else-if="updateStatus === 'available'">⏳ 准备下载...</span>
-            <span v-else-if="updateStatus === 'downloading'">⏳ 下载中{{ updatePercent > 0 ? ' ' + updatePercent + '%' : updatePercent < 0 ? ' ' + (-updatePercent) + 'MB' : '' }}</span>
-            <span v-else-if="updateStatus === 'downloaded'">⚡ 重启安装</span>
-            <span v-else>🔍 检查更新</span>
-          </button>
-          <a v-if="updateStatus === 'error'" :href="'https://github.com/xiasummer740/crystal-price-system/releases/latest'" target="_blank" class="manual-link" @click.stop>手动下载</a>
+          <div class="update-btn-row">
+            <button class="update-btn" :class="{ checking: updateStatus === 'checking' || updateStatus === 'downloading' }" @click="onUpdateClick" :disabled="updateStatus === 'checking' || updateStatus === 'downloading' || updateStatus === 'available' || updateStatus === 'installing'">
+              <span v-if="updateStatus === 'checking'">⏳ 检查中...</span>
+              <span v-else-if="updateStatus === 'available'">⏳ 准备下载...</span>
+              <span v-else-if="updateStatus === 'downloading'">⏳ 下载中 {{ downloadSpeed }}</span>
+              <span v-else-if="updateStatus === 'downloaded'">⚡ 重启安装</span>
+              <span v-else-if="updateStatus === 'installing'">⏳ 正在安装...</span>
+              <span v-else>🔍 检查更新</span>
+            </button>
+            <a v-if="updateStatus === 'error'" :href="'https://github.com/xiasummer740/crystal-price-system/releases/latest'" target="_blank" class="manual-link" @click.stop>手动下载</a>
+          </div>
+
+          <!-- 下载进度条 -->
+          <div v-if="updateStatus === 'downloading' && updatePercent > 0" class="update-progress-wrap">
+            <van-progress :percentage="updatePercent" :stroke-width="6" color="#1989fa" track-color="#e8e8e8" :show-pivot="false" />
+            <span class="update-pct">{{ updatePercent }}%</span>
+          </div>
+          <div v-else-if="updateStatus === 'downloading'" class="update-progress-wrap">
+            <div class="update-progress-bar-indeterminate"></div>
+            <span class="update-pct">连接中...</span>
+          </div>
+
           <span class="update-status" v-if="updateStatusText">{{ updateStatusText }}</span>
           <p class="set-hint">当前版本 v{{ appVersion }}</p>
         </div>
@@ -670,18 +684,38 @@ function formatTime(iso) {
 }
 
 // 在线升级状态
-const updateStatus = ref('idle') // idle | checking | available | downloading | downloaded | not-available | error
+const updateStatus = ref('idle') // idle | checking | available | downloading | downloaded | installing | not-available | error
 const updateVersion = ref('')
 const updatePercent = ref(0)
 const updateError = ref('')
+const downloadSpeed = ref('')
+
+// 下载速度估算
+let speedBytes = []
+function trackSpeed(bytes) {
+  const now = Date.now()
+  speedBytes.push({ bytes, time: now })
+  // 只保留最近 3 秒的数据
+  speedBytes = speedBytes.filter(s => now - s.time < 3000)
+  if (speedBytes.length < 2) return
+  const first = speedBytes[0]
+  const elapsed = (now - first.time) / 1000
+  if (elapsed < 0.5) return
+  const totalBytes = bytes - first.bytes
+  const speed = totalBytes / elapsed // bytes/s
+  if (speed > 1024 * 1024) downloadSpeed.value = (speed / 1024 / 1024).toFixed(1) + 'MB/s'
+  else if (speed > 1024) downloadSpeed.value = Math.round(speed / 1024) + 'KB/s'
+  else downloadSpeed.value = Math.round(speed) + 'B/s'
+}
 
 // 状态文本（独立显示在按钮下方）
 const updateStatusText = computed(() => {
   if (updateStatus.value === 'checking') return ''
   const t = {
     available: '发现新版本 v' + updateVersion.value + '，自动下载中...',
-    downloading: '正在下载更新包...',
+    downloading: updatePercent.value > 0 ? '已下载 ' + updatePercent.value + '%' : '正在连接下载服务器...',
     downloaded: '新版本已就绪，点击「重启安装」立即更新',
+    installing: '正在安装更新，应用即将重启...',
     error: updateError.value || '检查失败',
     'not-available': '已是最新版本'
   }
@@ -692,12 +726,15 @@ const updateDownloadUrl = ref('')
 
 async function onUpdateClick() {
   const s = updateStatus.value
-  if (s === 'checking' || s === 'downloading' || s === 'available') return
+  if (s === 'checking' || s === 'downloading' || s === 'available' || s === 'installing') return
 
-  // available 状态不需要用户操作 → 后台自动下载中
+  // available / downloading 不需要用户操作
 
   // 已下载 → 静默安装
   if (s === 'downloaded') {
+    updateStatus.value = 'installing'
+    // 给用户 500ms 看到「正在安装...」再关窗口
+    await new Promise(r => setTimeout(r, 500))
     window.electronAPI?.installUpdate()
     return
   }
@@ -742,14 +779,18 @@ if (window.electronAPI?.onUpdateStatus) {
       updateVersion.value = data.version
       updateDownloadUrl.value = `https://github.com/xiasummer740/crystal-price-system/releases/download/v${data.version}/crystal-price-system-setup-${data.version}.exe`
     }
-    if (data.percent !== undefined) updatePercent.value = data.percent
+    if (data.percent !== undefined) {
+      updatePercent.value = Math.abs(data.percent)
+      trackSpeed(data.percent < 0 ? data.percent * 1024 * 1024 : data.percent * 119 * 1024 * 1024 / 100)
+    }
     if (data.message) updateError.value = data.message
-    // IPC 通知有可用更新 — 只更新状态，不自动下载，用户点击才下载
   })
 }
 
 // 是否有新版本（用于红点 badge）
-const hasUpdate = computed(() => updateStatus.value === 'available' || updateStatus.value === 'downloaded')
+const hasUpdate = computed(() =>
+  ['available', 'downloading', 'downloaded', 'installing'].includes(updateStatus.value)
+)
 
 // 打开设置时自动检查更新（避免用户手动刷新）
 watch(showSettings, (open) => {
@@ -957,9 +998,14 @@ onUnmounted(() => { if (clockTimer) clearInterval(clockTimer); if (colFilterTime
 .update-btn:hover{background:#d0ebfa}
 .update-btn:disabled{opacity:.6;cursor:not-allowed}
 .update-btn.checking{background:#f5f6f8;border-color:#d9d9d9;color:#999}
-.update-pct{font-size:11px;color:#999}
+.update-btn-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.update-progress-wrap{display:flex;align-items:center;gap:10px;padding:4px 0}
+.update-progress-wrap :deep(.van-progress){flex:1}
+.update-pct{font-size:11px;color:#666;white-space:nowrap;min-width:36px;text-align:right}
+@keyframes indeterminate{0%{left:-30%}100%{left:100%}}
+.update-progress-bar-indeterminate{height:6px;border-radius:3px;background:#e8e8e8;overflow:hidden;flex:1;position:relative}
+.update-progress-bar-indeterminate::after{content:'';position:absolute;top:0;left:-30%;height:100%;width:30%;border-radius:3px;background:linear-gradient(90deg,transparent,#1989fa,transparent);animation:indeterminate 1.5s ease-in-out infinite}
 .update-status{font-size:12px;color:#666}
-.update-pct{font-size:11px;color:#666}
 .manual-link{font-size:12px;color:var(--color-primary);text-decoration:none;padding:2px 8px;border-radius:4px;border:1px solid var(--color-primary)}
 .manual-link:hover{background:var(--color-primary);color:#fff}
 /* 设置按钮红点 badge */
