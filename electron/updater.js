@@ -218,7 +218,10 @@ export function initUpdater(win) {
 
   // IPC: 下载更新
   ipcMain.handle('download-update', async () => {
-    if (!updateInfo) return { success: false, msg: '没有可用更新' }
+    if (!updateInfo) {
+      log('download-update: updateInfo 为空，尚未检测到新版本')
+      return { success: false, msg: '尚未检测到新版本，请先检查更新' }
+    }
     log('IPC: 开始下载更新')
 
     if (downloadPath) { try { unlinkSync(downloadPath) } catch {} }
