@@ -5,6 +5,19 @@ const TEST_ID = `E2E测试-${Date.now()}`
 
 test.describe('核心流程: 新增 → 保存 → 表格更新', () => {
 
+  test.afterAll(async ({ request }) => {
+    // 清理：删除本次测试创建的所有 E2E 测试记录
+    const res = await request.get(`${BASE}/api/prices?page=1&pageSize=200`)
+    if (!res.ok()) return
+    const body = await res.json()
+    const list = body.data?.list || []
+    const toDelete = list.filter(r => r.material_name && r.material_name.startsWith('E2E测试-'))
+    for (const r of toDelete) {
+      try { await request.delete(`${BASE}/api/prices/${r.id}`) } catch {}
+    }
+    if (toDelete.length) console.log(`✅ 清理 ${toDelete.length} 条 E2E 测试记录`)
+  })
+
   test('完整新增报价流程', async ({ page }) => {
     // 1. 打开首页
     await page.goto(BASE)
