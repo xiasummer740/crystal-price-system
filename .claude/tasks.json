@@ -1,5 +1,8 @@
 {
+  "build": "npm run build",
+  "lint": "npx eslint --config \"C:/Users/Administrator/.claude/quality/eslint.config.js\" client/src/",
   "test": "npm test",
+  "health": "curl -f \"http://localhost:3266/api/prices?page=1&pageSize=1\"",
   "start": "npm run dev",
-  "build": "npm run build"
+  "e2e": "npx playwright test"
 }
