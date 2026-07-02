@@ -89,6 +89,7 @@ const customer = ref(decodeURIComponent(route.params.customer || ''))
 const tabs = [
   { key: 'today', label: '日报' },
   { key: 'week', label: '周报' },
+  { key: 'last-week', label: '上周报' },
   { key: 'month', label: '月报' },
   { key: 'year', label: '年报' }
 ]
@@ -134,6 +135,18 @@ function calcRange(rangeKey) {
       mon.setDate(now.getDate() - (day === 0 ? 6 : day - 1))
       start = fmt(mon)
       end = fmt(now)
+      break
+    }
+    case 'last-week': {
+      const day = now.getDay()
+      const thisMon = new Date(now)
+      thisMon.setDate(now.getDate() - (day === 0 ? 6 : day - 1))
+      const lastMon = new Date(thisMon)
+      lastMon.setDate(thisMon.getDate() - 7)
+      const lastSun = new Date(lastMon)
+      lastSun.setDate(lastMon.getDate() + 6)
+      start = fmt(lastMon)
+      end = fmt(lastSun)
       break
     }
     case 'month':

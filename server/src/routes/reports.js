@@ -26,6 +26,18 @@ function calcRange(range) {
       end = fmt(now) + ' 23:59:59'
       break
     }
+    case 'last-week': {
+      const day = now.getDay()
+      const thisMon = new Date(now)
+      thisMon.setDate(now.getDate() - (day === 0 ? 6 : day - 1))
+      const lastMon = new Date(thisMon)
+      lastMon.setDate(thisMon.getDate() - 7)
+      const lastSun = new Date(lastMon)
+      lastSun.setDate(lastMon.getDate() + 6)
+      start = fmt(lastMon) + ' 00:00:00'
+      end = fmt(lastSun) + ' 23:59:59'
+      break
+    }
     case 'month':
       start = fmt(new Date(now.getFullYear(), now.getMonth(), 1)) + ' 00:00:00'
       end = fmt(now) + ' 23:59:59'

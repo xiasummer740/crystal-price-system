@@ -91,6 +91,7 @@ const router = useRouter()
 const tabs = [
   { key: 'today', label: '日报' },
   { key: 'week', label: '周报' },
+  { key: 'last-week', label: '上周报' },
   { key: 'month', label: '月报' },
   { key: 'year', label: '年报' }
 ]
