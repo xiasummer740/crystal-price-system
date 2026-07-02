@@ -301,7 +301,7 @@
         <div class="update-area">
           <button class="update-btn" :class="{ checking: updateStatus === 'checking' || updateStatus === 'downloading' }" @click="onUpdateClick" :disabled="updateStatus === 'checking' || updateStatus === 'downloading'">
             <span v-if="updateStatus === 'checking'">⏳ 检查中...</span>
-            <span v-else-if="updateStatus === 'available'">⏳ 正在下载...</span>
+            <span v-else-if="updateStatus === 'available'">⬇ 下载更新</span>
             <span v-else-if="updateStatus === 'downloading'">⏳ 下载中{{ updatePercent > 0 ? ' ' + updatePercent + '%' : updatePercent < 0 ? ' ' + (-updatePercent) + 'MB' : '' }}</span>
             <span v-else-if="updateStatus === 'downloaded'">⚡ 立即安装</span>
             <span v-else>🔍 检查更新</span>
@@ -754,7 +754,7 @@ const updateError = ref('')
 const updateStatusText = computed(() => {
   if (updateStatus.value === 'checking') return ''
   const t = {
-    available: '发现新版本 v' + updateVersion.value + '，正在自动下载...',
+    available: '发现新版本 v' + updateVersion.value,
     downloading: '正在下载更新包...',
     downloaded: '新版本已下载，点击「立即安装」',
     error: updateError.value || '检查失败',
@@ -767,49 +767,54 @@ const updateDownloadUrl = ref('')
 
 async function onUpdateClick() {
   const s = updateStatus.value
-  // 检查/下载中禁止操作
   if (s === 'checking' || s === 'downloading') return
-  if (s === 'idle' || s === 'error' || s === 'not-available') {
-    updateStatus.value = 'checking'
-    try {
-      const r = await fetch('/api/check-update', { signal: AbortSignal.timeout(25000) })
-      const d = await r.json()
-      if (d.code === 0 && d.data) {
-        const st = d.data.status
-        if (st === 'available') {
-          // 发现新版本 → 自动下载
-          updateStatus.value = 'available'
-          if (d.data.version) {
-            updateVersion.value = d.data.version
-            updateDownloadUrl.value = `https://github.com/xiasummer740/crystal-price-system/releases/download/v${d.data.version}/crystal-price-system-setup-${d.data.version}.exe`
-          }
-          // 通过 Electron IPC 自动下载，下载完成后 IPC 会发 downloaded 事件
-          if (window.electronAPI?.downloadUpdate) {
-            window.electronAPI.downloadUpdate()
-          } else {
-            // 浏览器模式：直接打开下载链接
-            if (updateDownloadUrl.value) window.open(updateDownloadUrl.value, '_blank')
-          }
-        } else {
-          updateStatus.value = st
-          if (d.data.version) updateVersion.value = d.data.version
-          if (d.data.message) updateError.value = d.data.message
+
+  // 已有新版本 → 手动触发下载
+  if (s === 'available') {
+    updateStatus.value = 'downloading'
+    if (window.electronAPI?.downloadUpdate) {
+      window.electronAPI.downloadUpdate()
+    } else if (updateDownloadUrl.value) {
+      window.open(updateDownloadUrl.value, '_blank')
+    }
+    return
+  }
+
+  // 已下载 → 静默安装
+  if (s === 'downloaded') {
+    window.electronAPI?.installUpdate()
+    return
+  }
+
+  // idle / error / not-available → 检查更新
+  updateStatus.value = 'checking'
+  try {
+    const r = await fetch('/api/check-update', { signal: AbortSignal.timeout(25000) })
+    const d = await r.json()
+    if (d.code === 0 && d.data) {
+      const st = d.data.status
+      if (st === 'available') {
+        updateStatus.value = 'available'
+        if (d.data.version) {
+          updateVersion.value = d.data.version
+          updateDownloadUrl.value = `https://github.com/xiasummer740/crystal-price-system/releases/download/v${d.data.version}/crystal-price-system-setup-${d.data.version}.exe`
         }
       } else {
-        throw new Error(d.msg || '检查失败')
+        updateStatus.value = st
+        if (d.data.version) updateVersion.value = d.data.version
+        if (d.data.message) updateError.value = d.data.message
       }
-    } catch (e) {
-      // HTTP 检查失败，尝试走 Electron IPC
-      if (window.electronAPI?.checkUpdate) {
-        window.electronAPI.checkUpdate()
-      } else {
-        // 浏览器模式无后备，直接显示错误
-        updateStatus.value = 'error'
-        updateError.value = '网络错误: ' + (e.message || '请求失败')
-      }
+    } else {
+      throw new Error(d.msg || '检查失败')
     }
-  } else if (s === 'downloaded') {
-    window.electronAPI?.installUpdate()
+  } catch (e) {
+    // HTTP 检查失败，尝试走 Electron IPC
+    if (window.electronAPI?.checkUpdate) {
+      window.electronAPI.checkUpdate()
+    } else {
+      updateStatus.value = 'error'
+      updateError.value = '网络错误: ' + (e.message || '请求失败')
+    }
   }
 }
 
@@ -823,10 +828,7 @@ if (window.electronAPI?.onUpdateStatus) {
     }
     if (data.percent !== undefined) updatePercent.value = data.percent
     if (data.message) updateError.value = data.message
-    // IPC 通知有可用更新时，自动触发下载
-    if (data.status === 'available' && window.electronAPI?.downloadUpdate) {
-      window.electronAPI.downloadUpdate()
-    }
+    // IPC 通知有可用更新 — 只更新状态，不自动下载，用户点击才下载
   })
 }
 

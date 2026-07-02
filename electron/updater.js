@@ -259,7 +259,8 @@ export function initUpdater(win) {
     log('IPC: 安装更新')
 
     try {
-      spawn(downloadPath, ['--updated'], {
+      // /S = NSIS 静默安装（不弹安装界面），--updated 读取上次安装路径
+      spawn(downloadPath, ['/S', '--updated'], {
         detached: true,
         stdio: 'ignore'
       }).unref()
