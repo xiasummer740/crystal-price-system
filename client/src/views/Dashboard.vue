@@ -232,11 +232,11 @@
         <div class="set-divider"></div>
         <h4>版本升级</h4>
         <div class="update-area">
-          <button class="update-btn" :class="{ checking: updateStatus === 'checking' || updateStatus === 'downloading' }" @click="onUpdateClick" :disabled="updateStatus === 'checking' || updateStatus === 'downloading'">
+          <button class="update-btn" :class="{ checking: updateStatus === 'checking' || updateStatus === 'downloading' }" @click="onUpdateClick" :disabled="updateStatus === 'checking' || updateStatus === 'downloading' || updateStatus === 'available'">
             <span v-if="updateStatus === 'checking'">⏳ 检查中...</span>
-            <span v-else-if="updateStatus === 'available'">⬇ 下载更新</span>
+            <span v-else-if="updateStatus === 'available'">⏳ 准备下载...</span>
             <span v-else-if="updateStatus === 'downloading'">⏳ 下载中{{ updatePercent > 0 ? ' ' + updatePercent + '%' : updatePercent < 0 ? ' ' + (-updatePercent) + 'MB' : '' }}</span>
-            <span v-else-if="updateStatus === 'downloaded'">⚡ 立即安装</span>
+            <span v-else-if="updateStatus === 'downloaded'">⚡ 重启安装</span>
             <span v-else>🔍 检查更新</span>
           </button>
           <a v-if="updateStatus === 'error'" :href="'https://github.com/xiasummer740/crystal-price-system/releases/latest'" target="_blank" class="manual-link" @click.stop>手动下载</a>
@@ -679,9 +679,9 @@ const updateError = ref('')
 const updateStatusText = computed(() => {
   if (updateStatus.value === 'checking') return ''
   const t = {
-    available: '发现新版本 v' + updateVersion.value,
+    available: '发现新版本 v' + updateVersion.value + '，自动下载中...',
     downloading: '正在下载更新包...',
-    downloaded: '新版本已下载，点击「立即安装」',
+    downloaded: '新版本已就绪，点击「重启安装」立即更新',
     error: updateError.value || '检查失败',
     'not-available': '已是最新版本'
   }
@@ -692,32 +692,9 @@ const updateDownloadUrl = ref('')
 
 async function onUpdateClick() {
   const s = updateStatus.value
-  if (s === 'checking' || s === 'downloading') return
+  if (s === 'checking' || s === 'downloading' || s === 'available') return
 
-  // 已有新版本 → 手动触发下载
-  if (s === 'available') {
-    updateStatus.value = 'downloading'
-    if (window.electronAPI?.downloadUpdate) {
-      try {
-        const result = await window.electronAPI.downloadUpdate()
-        if (!result?.success) throw new Error(result?.msg || '下载未启动')
-      } catch (e) {
-        // IPC 下载失败 → 兜底浏览器下载
-        if (updateDownloadUrl.value) {
-          updateStatus.value = 'available'
-          window.open(updateDownloadUrl.value, '_blank')
-        } else {
-          updateStatus.value = 'error'
-          updateError.value = '下载失败，请手动下载: ' + (e.message || '')
-        }
-      }
-    } else if (updateDownloadUrl.value) {
-      // 浏览器模式：直接打开下载链接
-      window.open(updateDownloadUrl.value, '_blank')
-      updateStatus.value = 'idle'
-    }
-    return
-  }
+  // available 状态不需要用户操作 → 后台自动下载中
 
   // 已下载 → 静默安装
   if (s === 'downloaded') {

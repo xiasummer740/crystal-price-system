@@ -129,7 +129,49 @@ function parseLatestYml(text) {
   return { version, fileName, sha512 }
 }
 
+// ── 核心下载逻辑（提取为独立函数，供 IPC 和自动下载共用） ──
+async function startDownload() {
+  if (!updateInfo) {
+    log('startDownload: updateInfo 为空')
+    return { success: false, msg: '尚未检测到新版本' }
+  }
+
+  if (downloadPath) { try { unlinkSync(downloadPath) } catch {} }
+
+  const destPath = join(app.getPath('temp'), `crystal-update-${Date.now()}.exe`)
+  downloadPath = destPath
+
+  try {
+    await downloadFile(updateInfo.downloadUrl, destPath, (percent) => {
+      send({ status: 'downloading', percent, version: updateInfo.version })
+    })
+    log('下载完成')
+
+    if (updateInfo.sha512) {
+      const actual = await computeSha512(destPath)
+      if (actual !== updateInfo.sha512) {
+        log(`SHA512 不匹配: 期望 ${updateInfo.sha512}，实际 ${actual}`)
+        try { unlinkSync(destPath) } catch {}
+        send({ status: 'error', message: '文件校验失败，请重试' })
+        return { success: false, msg: 'SHA512 mismatch' }
+      }
+      log('SHA512 校验通过')
+    }
+
+    send({ status: 'downloaded', version: updateInfo.version })
+    log('自动下载完成，已就绪')
+    return { success: true }
+  } catch (e) {
+    log('下载更新失败: ' + (e.message || e))
+    try { unlinkSync(downloadPath) } catch {}
+    downloadPath = null
+    send({ status: 'error', message: '下载失败: ' + (e.message || '未知错误') })
+    return { success: false, msg: e.message }
+  }
+}
+
 // ── 主流程：检查更新（fetch → https.get 兜底） ──
+// 检测到新版本后自动开始后台下载，像微信一样静默
 const UPDATE_YML_URL = `${BASE_URL}/latest/download/latest.yml`
 
 export async function checkForUpdates() {
@@ -183,8 +225,15 @@ export async function checkForUpdates() {
       sha512: remote.sha512,
       downloadUrl: `${BASE_URL}/download/v${remote.version}/${remote.fileName}`
     }
-    log(`发现新版本: ${remote.version}`)
+    log(`发现新版本: ${remote.version}，2 秒后开始自动下载...`)
     send({ status: 'available', version: remote.version, releaseDate: new Date().toISOString() })
+
+    // ── 微信式：检测到新版后自动后台下载（延迟 2 秒，等 UI 先展示） ──
+    setTimeout(() => {
+      log('自动下载触发')
+      startDownload()
+    }, 2000)
+
     return { status: 'available', version: remote.version }
   } catch (e) {
     const msg = e.message || String(e)
@@ -216,44 +265,11 @@ export function initUpdater(win) {
     return true
   })
 
-  // IPC: 下载更新
+  // IPC: 下载更新（手动触发，自动下载失败时兜底）
   ipcMain.handle('download-update', async () => {
-    if (!updateInfo) {
-      log('download-update: updateInfo 为空，尚未检测到新版本')
-      return { success: false, msg: '尚未检测到新版本，请先检查更新' }
-    }
-    log('IPC: 开始下载更新')
-
-    if (downloadPath) { try { unlinkSync(downloadPath) } catch {} }
-
-    const destPath = join(app.getPath('temp'), `crystal-update-${Date.now()}.exe`)
-    downloadPath = destPath
-
-    try {
-      await downloadFile(updateInfo.downloadUrl, destPath, (percent) => {
-        send({ status: 'downloading', percent })
-      })
-      log('下载完成')
-
-      if (updateInfo.sha512) {
-        const actual = await computeSha512(destPath)
-        if (actual !== updateInfo.sha512) {
-          log(`SHA512 不匹配: 期望 ${updateInfo.sha512}，实际 ${actual}`)
-          try { unlinkSync(destPath) } catch {}
-          send({ status: 'error', message: '文件校验失败，请重试' })
-          return { success: false, msg: 'SHA512 mismatch' }
-        }
-        log('SHA512 校验通过')
-      }
-
-      send({ status: 'downloaded', version: updateInfo.version })
-      return { success: true }
-    } catch (e) {
-      log('下载更新失败: ' + (e.message || e))
-      try { unlinkSync(destPath) } catch {}
-      send({ status: 'error', message: '下载失败: ' + (e.message || '未知错误') })
-      return { success: false, msg: e.message }
-    }
+    log('IPC: 手动触发下载')
+    const result = await startDownload()
+    return result
   })
 
   // IPC: 安装更新
