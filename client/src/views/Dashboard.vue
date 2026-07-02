@@ -241,7 +241,7 @@
               <span v-else-if="updateStatus === 'installing'">⏳ 正在安装...</span>
               <span v-else>🔍 检查更新</span>
             </button>
-            <a v-if="updateStatus === 'error'" :href="'https://github.com/xiasummer740/crystal-price-system/releases/latest'" target="_blank" class="manual-link" @click.stop>手动下载</a>
+            <a v-if="updateStatus === 'error'" :href="'https://github.com/xiasummer740/crystal-price-system/releases/latest'" target="_blank" class="manual-link" @click.stop>⬇ 手动下载</a>
           </div>
 
           <!-- 下载进度条 -->
@@ -741,8 +741,23 @@ async function onUpdateClick() {
 
   // idle / error / not-available → 检查更新
   updateStatus.value = 'checking'
+
+  // Electron 模式：直接走 IPC（更快，不绕 HTTP）
+  if (window.electronAPI?.checkUpdate) {
+    window.electronAPI.checkUpdate()
+    // 60s 总超时，IPC 事件会自动更新状态
+    setTimeout(() => {
+      if (updateStatus.value === 'checking') {
+        updateStatus.value = 'error'
+        updateError.value = '检查超时，请检查网络后重试，或点击下方「手动下载」'
+      }
+    }, 60000)
+    return
+  }
+
+  // 浏览器模式：走 HTTP
   try {
-    const r = await fetch('/api/check-update', { signal: AbortSignal.timeout(25000) })
+    const r = await fetch('/api/check-update', { signal: AbortSignal.timeout(60000) })
     const d = await r.json()
     if (d.code === 0 && d.data) {
       const st = d.data.status
@@ -761,13 +776,8 @@ async function onUpdateClick() {
       throw new Error(d.msg || '检查失败')
     }
   } catch (e) {
-    // HTTP 检查失败，尝试走 Electron IPC
-    if (window.electronAPI?.checkUpdate) {
-      window.electronAPI.checkUpdate()
-    } else {
-      updateStatus.value = 'error'
-      updateError.value = '网络错误: ' + (e.message || '请求失败')
-    }
+    updateStatus.value = 'error'
+    updateError.value = '网络错误: ' + (e.message || '请求失败')
   }
 }
 
