@@ -23,11 +23,10 @@ const dotClass = computed(() => ({
 }))
 
 const labelText = computed(() => {
-  if (store.isSaving) return '保存中…'
-  if (store.isFailed) return '保存失败 ⚠'
-  if (store.isSaved) return `已保存 ${store.savedAtText}`
-  // idle 但有上次保存时间 — 继续显示
-  if (store.lastSavedAt) return store.savedAtText
+  // 正在保存时显示状态，但保留最后保存时间
+  if (store.isSaving) return store.lastSavedAt ? `保存中… (${store.savedAtText})` : '保存中…'
+  if (store.isFailed) return `保存失败 ⚠ ${store.lastSavedAt ? '(' + store.savedAtText + ')' : ''}`
+  if (store.isSaved || store.lastSavedAt) return `已保存 ${store.savedAtText}`
   return ''
 })
 
