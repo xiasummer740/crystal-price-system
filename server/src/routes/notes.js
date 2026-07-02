@@ -155,7 +155,7 @@ router.post('/customers/import-excel', excelUpload.single('file'), (req, res) =>
 
 // 列表 + 搜索 + 分页
 router.get('/', (req, res) => {
-  const { page = 1, pageSize = 50, keyword, customer, category_id, status, priority, reminder } = req.query
+  const { page = 1, pageSize = 50, keyword, customer, category_id, status, priority, reminder, start, end } = req.query
   const conditions = ['n.is_deleted = 0']
   const params = []
 
@@ -169,6 +169,8 @@ router.get('/', (req, res) => {
   if (status) { conditions.push('n.status = ?'); params.push(status) }
   if (priority) { conditions.push('n.priority = ?'); params.push(Number(priority)) }
   if (reminder === 'pending') { conditions.push('n.reminder_at IS NOT NULL AND n.is_reminded = 0') }
+  if (start) { conditions.push('n.created_at >= ?'); params.push(start + ' 00:00:00') }
+  if (end) { conditions.push('n.created_at <= ?'); params.push(end + ' 23:59:59') }
 
   const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : ''
   const total = queryOne(`SELECT COUNT(*) as total FROM notes n ${where}`, params)?.total ?? 0

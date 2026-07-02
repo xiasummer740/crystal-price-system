@@ -176,7 +176,13 @@ async function handleDelete() {
   }
 }
 
-function goBack() { router.push('/notes') }
+function goBack() {
+  if (route.query.from === 'reports') {
+    router.push('/reports')
+  } else {
+    router.push('/notes')
+  }
+}
 // 下载文件，使用原始文件名（去掉时间戳前缀）
 async function downloadFile(url) {
   try {

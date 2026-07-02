@@ -52,13 +52,14 @@
           <div v-for="group in report.byCustomer" :key="group.customer" class="customer-group">
             <div class="customer-header">
               <span class="customer-dot"></span>
-              <span class="customer-name">{{ group.customer }}</span>
+              <span class="customer-name" @click="goCompanyReport(group.customer)">{{ group.customer }}</span>
               <span class="customer-count">{{ group.count }}条</span>
+              <button class="customer-summary-btn" @click.stop="goCompanyReport(group.customer)">📋 汇总</button>
               <span class="customer-done" v-if="group.done">✅ {{ group.done }}</span>
               <span class="customer-pending" v-if="group.pending">⏳ {{ group.pending }}</span>
             </div>
             <div class="item-list">
-              <div v-for="item in group.items" :key="item.id" class="report-item" @click="$router.push('/notes/' + item.id)">
+              <div v-for="item in group.items" :key="item.id" class="report-item" @click="$router.push('/notes/' + item.id + '?from=reports')">
                 <span class="item-status" :class="'s-' + item.status">
                   {{ {todo:'📋',in_progress:'🔄',done:'✅'}[item.status] || '📋' }}
                 </span>
@@ -82,12 +83,16 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { http } from '../utils/api.js'
+
+const router = useRouter()
 
 const tabs = [
   { key: 'today', label: '日报' },
   { key: 'week', label: '周报' },
-  { key: 'month', label: '月报' }
+  { key: 'month', label: '月报' },
+  { key: 'year', label: '年报' }
 ]
 const range = ref('today')
 const customStart = ref('')
@@ -127,6 +132,16 @@ async function load() {
 }
 
 onMounted(() => load())
+
+// 跳转到公司记事汇总页
+const startDate = computed(() => (report.value?.start || '').slice(0, 10))
+const endDate = computed(() => (report.value?.end || '').slice(0, 10))
+function goCompanyReport(customer) {
+  const params = new URLSearchParams()
+  if (startDate.value) params.set('start', startDate.value)
+  if (endDate.value) params.set('end', endDate.value)
+  router.push('/reports/company/' + encodeURIComponent(customer) + '?' + params.toString())
+}
 </script>
 
 <style scoped>
@@ -175,6 +190,8 @@ onMounted(() => load())
 .customer-count{font-size:11px;color:#999}
 .customer-done{font-size:11px;color:#52c41a}
 .customer-pending{font-size:11px;color:#faad14}
+.customer-summary-btn{padding:2px 8px;border-radius:4px;border:1px solid #722ed1;background:#f9f0ff;color:#722ed1;font-size:11px;cursor:pointer;font-family:inherit;transition:all .15s;white-space:nowrap}
+.customer-summary-btn:hover{background:#efdbff}
 
 /* 条目 */
 .item-list{border-top:1px solid #f5f5f5}

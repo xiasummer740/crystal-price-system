@@ -11,6 +11,7 @@ import Notes from '../views/Notes.vue'
 import NoteForm from '../views/NoteForm.vue'
 import NoteDetail from '../views/NoteDetail.vue'
 import Reports from '../views/Reports.vue'
+import CompanyReport from '../views/CompanyReport.vue'
 
 const routes = [
   { path: '/', name: 'Dashboard', component: Dashboard, meta: { title: '晶振报价系统' } },
@@ -27,6 +28,7 @@ const routes = [
   { path: '/notes/edit/:id', name: 'EditNote', component: NoteForm, meta: { title: '编辑记事' } },
   { path: '/notes/:id', name: 'NoteDetail', component: NoteDetail, meta: { title: '记事详情' } },
   { path: '/reports', name: 'Reports', component: Reports, meta: { title: '总结汇报' } },
+  { path: '/reports/company/:customer', name: 'CompanyReport', component: CompanyReport, meta: { title: '公司记事汇总' } },
   { path: '/:pathMatch(.*)*', redirect: '/' }
 ]
 

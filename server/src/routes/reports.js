@@ -30,6 +30,10 @@ function calcRange(range) {
       start = fmt(new Date(now.getFullYear(), now.getMonth(), 1)) + ' 00:00:00'
       end = fmt(now) + ' 23:59:59'
       break
+    case 'year':
+      start = `${now.getFullYear()}-01-01 00:00:00`
+      end = fmt(now) + ' 23:59:59'
+      break
     default:
       start = fmt(now) + ' 00:00:00'
       end = fmt(now) + ' 23:59:59'
