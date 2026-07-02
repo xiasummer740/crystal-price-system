@@ -136,6 +136,9 @@ async function startDownload() {
     return { success: false, msg: '尚未检测到新版本' }
   }
 
+  // 立即通知前端：正在连接，进度条先动起来（连接 GitHub 可能几秒到几十秒）
+  send({ status: 'downloading', percent: 0, version: updateInfo.version })
+
   if (downloadPath) { try { unlinkSync(downloadPath) } catch {} }
 
   const destPath = join(app.getPath('temp'), `crystal-update-${Date.now()}.exe`)
