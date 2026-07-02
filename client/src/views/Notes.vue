@@ -82,7 +82,7 @@
                   <span v-if="item.is_pinned" class="card-pin">📌</span>
                   <span v-if="item.reminder_at && !item.is_reminded" class="card-reminder-icon">⏰</span>
                 </div>
-                <h4 class="card-title">{{ item.title }}</h4>
+                <h4 class="card-title" v-if="item.title">{{ item.title }}</h4>
                 <p class="card-desc" v-if="item.content">{{ contentPreview(item.content) }}</p>
                 <div class="card-time">{{ fmtTime(item.updated_at || item.created_at) }}</div>
                 <div class="card-meta">
@@ -134,7 +134,7 @@
                   <span class="kanban-cat" v-if="item.category_name" :style="{ color: item.category_color }">{{ item.category_name }}</span>
                   <span v-if="item.is_pinned" class="card-pin">📌</span>
                 </div>
-                <div class="kanban-title">{{ item.title }}</div>
+                <div class="kanban-title" v-if="item.title">{{ item.title }}</div>
                 <div class="kanban-meta">
                   <span v-if="item.customer">{{ item.customer }}</span>
                   <span v-if="item.reminder_at && !item.is_reminded">⏰</span>
@@ -593,10 +593,13 @@ onUnmounted(() => {
 .card-customer { color: #666; }
 .card-edit { font-size: 13px; color: #ccc; cursor: pointer; margin-left: auto; padding: 0 2px; line-height: 1; transition: color .15s; }
 .card-edit:hover { color: var(--color-primary); }
-.card-status { padding: 1px 6px; border-radius: 3px; font-size: 10px; }
-.card-status.todo { background: #f5f5f5; color: #757575; }
-.card-status.in_progress { background: #e3f2fd; color: #1565c0; }
-.card-status.done { background: #e8f5e9; color: #2e7d32; }
+.card-status { padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; }
+.card-status.todo { background: #fff7e6; color: #d46b08; border: 1px solid #ffd591; animation: card-glow-o 2s ease-in-out infinite; }
+.card-status.in_progress { background: #e6f7ff; color: #1890ff; border: 1px solid #91d5ff; animation: card-glow-b 2s ease-in-out infinite; }
+.card-status.done { background: #f6ffed; color: #389e0d; border: 1px solid #b7eb8f; animation: card-glow-g 2s ease-in-out infinite; }
+@keyframes card-glow-o { 0%,100% { box-shadow: 0 0 6px rgba(212,107,8,.25); } 50% { box-shadow: 0 0 12px rgba(212,107,8,.45); } }
+@keyframes card-glow-b { 0%,100% { box-shadow: 0 0 6px rgba(24,144,255,.25); } 50% { box-shadow: 0 0 12px rgba(24,144,255,.45); } }
+@keyframes card-glow-g { 0%,100% { box-shadow: 0 0 6px rgba(56,158,13,.25); } 50% { box-shadow: 0 0 12px rgba(56,158,13,.45); } }
 
 /* ====== 空状态 ====== */
 .empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; flex: 1; padding: 40px 20px; text-align: center; }

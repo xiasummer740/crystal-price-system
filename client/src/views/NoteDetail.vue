@@ -34,7 +34,7 @@
         <div class="page-body">
           <div class="detail-card">
             <div class="detail-header">
-              <h2 class="note-title">{{ note.title }}</h2>
+              <h2 class="note-title" v-if="note.title">{{ note.title }}</h2>
               <span v-if="note.is_pinned" class="pinned-badge">📌 置顶</span>
             </div>
 
@@ -249,9 +249,12 @@ async function copyCurrentImage() {
 .priority-badge.p1 { background: #fff0f0; color: #c62828; }
 .priority-badge.p2 { background: #fff8e1; color: #f57f17; }
 .priority-badge.p3 { background: #e8f4fd; color: #1565c0; }
-.status-badge.todo { background: #f5f5f5; color: #757575; }
-.status-badge.in_progress { background: #e3f2fd; color: #1565c0; }
-.status-badge.done { background: #e8f5e9; color: #2e7d32; }
+.status-badge.todo { background: #fff7e6; color: #d46b08; border: 1px solid #ffd591; box-shadow: 0 0 8px rgba(212,107,8,.25); animation: glow-orange 2s ease-in-out infinite; }
+.status-badge.in_progress { background: #e6f7ff; color: #1890ff; border: 1px solid #91d5ff; box-shadow: 0 0 8px rgba(24,144,255,.25); animation: glow-blue 2s ease-in-out infinite; }
+.status-badge.done { background: #f6ffed; color: #389e0d; border: 1px solid #b7eb8f; box-shadow: 0 0 8px rgba(56,158,13,.25); animation: glow-green 2s ease-in-out infinite; }
+@keyframes glow-orange { 0%,100% { box-shadow: 0 0 6px rgba(212,107,8,.25); } 50% { box-shadow: 0 0 14px rgba(212,107,8,.45); } }
+@keyframes glow-blue { 0%,100% { box-shadow: 0 0 6px rgba(24,144,255,.25); } 50% { box-shadow: 0 0 14px rgba(24,144,255,.45); } }
+@keyframes glow-green { 0%,100% { box-shadow: 0 0 6px rgba(56,158,13,.25); } 50% { box-shadow: 0 0 14px rgba(56,158,13,.45); } }
 .date-item { color: #999; }
 .reminder-info { display: flex; align-items: center; gap: 8px; font-size: 13px; color: #666; margin-bottom: 12px; padding: 8px 12px; background: #fff8e1; border-radius: 6px; }
 .reminder-icon { font-size: 14px; }

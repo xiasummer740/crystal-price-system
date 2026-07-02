@@ -63,7 +63,7 @@
                   {{ {todo:'📋',in_progress:'🔄',done:'✅'}[item.status] || '📋' }}
                 </span>
                 <div class="item-body">
-                  <div class="item-title">{{ item.title || '无标题' }}</div>
+                  <div class="item-title" v-if="item.title">{{ item.title }}</div>
                   <div class="item-content" v-if="item.content">📝 {{ item.content }}</div>
                 </div>
               </div>
