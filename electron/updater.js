@@ -3,7 +3,8 @@
 // 配置读取 package.json 的 build.publish（GitHub）
 
 import { ipcMain } from 'electron'
-import { autoUpdater } from 'electron-updater'
+import pkg from 'electron-updater'
+const { autoUpdater } = pkg
 import { appendFileSync } from 'fs'
 import { join } from 'path'
 
