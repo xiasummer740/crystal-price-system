@@ -690,22 +690,12 @@ const updatePercent = ref(0)
 const updateError = ref('')
 const downloadSpeed = ref('')
 
-// 下载速度估算
-let speedBytes = []
-function trackSpeed(bytes) {
-  const now = Date.now()
-  speedBytes.push({ bytes, time: now })
-  // 只保留最近 3 秒的数据
-  speedBytes = speedBytes.filter(s => now - s.time < 3000)
-  if (speedBytes.length < 2) return
-  const first = speedBytes[0]
-  const elapsed = (now - first.time) / 1000
-  if (elapsed < 0.5) return
-  const totalBytes = bytes - first.bytes
-  const speed = totalBytes / elapsed // bytes/s
-  if (speed > 1024 * 1024) downloadSpeed.value = (speed / 1024 / 1024).toFixed(1) + 'MB/s'
-  else if (speed > 1024) downloadSpeed.value = Math.round(speed / 1024) + 'KB/s'
-  else downloadSpeed.value = Math.round(speed) + 'B/s'
+// 直接格式化后端传来的下载速度（bytes/s）
+function fmtSpeed(bytesPerSec) {
+  if (!bytesPerSec || bytesPerSec <= 0) return ''
+  if (bytesPerSec > 1024 * 1024) return (bytesPerSec / 1024 / 1024).toFixed(1) + 'MB/s'
+  if (bytesPerSec > 1024) return Math.round(bytesPerSec / 1024) + 'KB/s'
+  return Math.round(bytesPerSec) + 'B/s'
 }
 
 // 状态文本（独立显示在按钮下方）
@@ -791,8 +781,10 @@ if (window.electronAPI?.onUpdateStatus) {
       updateDownloadUrl.value = `https://github.com/xiasummer740/crystal-price-system/releases/download/v${data.version}/crystal-price-system-setup-${data.version}.exe`
     }
     if (data.percent !== undefined) {
-      updatePercent.value = Math.abs(data.percent)
-      trackSpeed(data.percent < 0 ? data.percent * 1024 * 1024 : data.percent * 119 * 1024 * 1024 / 100)
+      updatePercent.value = data.percent
+    }
+    if (data.speed !== undefined) {
+      downloadSpeed.value = fmtSpeed(data.speed)
     }
     if (data.message) updateError.value = data.message
 

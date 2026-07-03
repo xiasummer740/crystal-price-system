@@ -290,9 +290,18 @@ export async function downloadUpdate() {
       }
     }
 
-    // 下载安装包
+    // 下载安装包（实时计算速度）
+    let prevBytes = 0, prevTime = 0
     await downloadFile(release.downloadUrl, destPath, (p) => {
-      send({ status: 'downloading', percent: p.percent, version: release.version })
+      const now = Date.now()
+      let speed = 0
+      if (prevTime > 0) {
+        const dt = (now - prevTime) / 1000
+        if (dt > 0) speed = Math.round((p.received - prevBytes) / dt)
+      }
+      prevBytes = p.received
+      prevTime = now
+      send({ status: 'downloading', percent: p.percent, version: release.version, speed })
     })
 
     // SHA512 校验
