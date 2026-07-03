@@ -5,7 +5,7 @@ import http from 'http'
 import { execSync } from 'child_process'
 import { fileURLToPath } from 'url'
 import { loadUserConfig, saveUserConfig } from './config.js'
-import { initUpdater, checkForUpdates } from './updater.js'
+import { initUpdater } from './updater.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const BASE_PORT = 3266
@@ -543,11 +543,10 @@ app.whenReady().then(async () => {
     ])
     Menu.setApplicationMenu(menu)
     createWindow(port)
-    // 窗口就绪后：关闪屏 + 初始化升级 + 延迟静默检查
+    // 窗口就绪后：关闪屏 + 初始化升级
     mainWindow.once('ready-to-show', () => {
       setTimeout(() => { splash.close() }, 400)
       initUpdater(mainWindow)
-      setTimeout(() => { try { checkForUpdates() } catch {} }, 15000)
     })
     // 启动记事提醒轮询
     startReminderPolling(port)
@@ -565,7 +564,6 @@ app.whenReady().then(async () => {
           mainWindow.once('ready-to-show', () => {
             splash.close()
             initUpdater(mainWindow)
-            setTimeout(() => { try { checkForUpdates() } catch {} }, 15000)
           })
         } catch (e2) {
           splash.close()

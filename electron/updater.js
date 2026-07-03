@@ -10,6 +10,7 @@ import { join } from 'path'
 
 autoUpdater.autoDownload = false
 autoUpdater.autoInstallOnAppQuit = false
+autoUpdater.forceDevUpdateConfig = true  // 开发版也可用（需 dev-app-update.yml）
 
 let mainWindow = null
 let _downloadStarted = false
@@ -80,10 +81,18 @@ autoUpdater.on('error', (err) => {
 export async function checkForUpdates() {
   log('checkForUpdates 被调用')
   try {
-    autoUpdater.checkForUpdates()
+    // 竞速：autoUpdater.checkForUpdates() vs 超时
+    // electron-updater 的 HTTP 请求本身不带超时，网络不通时会死等
+    await Promise.race([
+      autoUpdater.checkForUpdates(),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('检查更新超时 (30s)')), 30000)
+      )
+    ])
     return { status: 'checking' }
   } catch (e) {
     log(`checkForUpdates 失败: ${e.message}`)
+    // 超时 / 网络错误 → 发 error 事件让前端知道
     send({ status: 'error', message: '检查更新失败: ' + e.message })
     return { status: 'error', message: e.message }
   }
@@ -135,7 +144,11 @@ export function initUpdater(win) {
   // IPC: 检查更新
   ipcMain.handle('check-update', async () => {
     log('IPC: 检查更新')
-    checkForUpdates()
+    try {
+      await checkForUpdates()
+    } catch (e) {
+      log('IPC check-update 错误: ' + e.message)
+    }
     return true
   })
 
