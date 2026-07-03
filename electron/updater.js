@@ -1,12 +1,17 @@
 // 自动在线升级 — 改用 electron-updater（electron-builder 官方配套）
 // 比手写 fetch 更稳定：自动重试、可靠进度、静默安装
 // 配置读取 package.json 的 build.publish（GitHub）
+//
+// 注意：electron-updater 底层用 Chromium net.request()，在中国访问 GitHub
+// 经常断连且不带超时。所以加一层快速探活：原生 https.get（5s 超时）先确认
+// GitHub 可达，再调 electron-updater 做正式检查。
 
 import { ipcMain } from 'electron'
 import pkg from 'electron-updater'
 const { autoUpdater } = pkg
 import { appendFileSync } from 'fs'
 import { join } from 'path'
+import https from 'https'
 
 autoUpdater.autoDownload = false
 autoUpdater.autoInstallOnAppQuit = false
@@ -78,21 +83,49 @@ autoUpdater.on('error', (err) => {
 
 // ── 对外接口 ──
 
+// GitHub 可达性缓存
+let _reachableCache = null  // { ok, time }
+
+// 快速探活：原生 https.get 判断 GitHub 能否连上
+function checkGithubReachable(timeoutMs = 5000) {
+  return new Promise((resolve) => {
+    // 缓存 3 分钟内有效
+    if (_reachableCache && Date.now() - _reachableCache.time < 180000) {
+      return resolve(_reachableCache.ok)
+    }
+    const req = https.get('https://github.com', { timeout: timeoutMs }, (res) => {
+      const ok = res.statusCode >= 200 && res.statusCode < 500
+      _reachableCache = { ok, time: Date.now() }
+      res.resume()
+      resolve(ok)
+    })
+    req.on('timeout', () => { req.destroy(); resolve(false) })
+    req.on('error', () => { _reachableCache = { ok: false, time: Date.now() }; resolve(false) })
+  })
+}
+
 export async function checkForUpdates() {
   log('checkForUpdates 被调用')
+
+  // 第一步：快速探活 GitHub（5s 超时）
+  const reachable = await checkGithubReachable(5000)
+  if (!reachable) {
+    log('GitHub 不可达，跳过更新检查')
+    send({ status: 'error', message: '检查更新失败：无法连接到 GitHub，请检查网络后重试' })
+    return { status: 'error', message: 'GitHub 不可达' }
+  }
+
+  // 第二步：正式检查（带 10s 超时）
   try {
-    // 竞速：autoUpdater.checkForUpdates() vs 超时
-    // electron-updater 的 HTTP 请求本身不带超时，网络不通时会死等
     await Promise.race([
       autoUpdater.checkForUpdates(),
       new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('检查更新超时 (30s)')), 30000)
+        setTimeout(() => reject(new Error('检查更新超时 (10s)')), 10000)
       )
     ])
     return { status: 'checking' }
   } catch (e) {
     log(`checkForUpdates 失败: ${e.message}`)
-    // 超时 / 网络错误 → 发 error 事件让前端知道
     send({ status: 'error', message: '检查更新失败: ' + e.message })
     return { status: 'error', message: e.message }
   }

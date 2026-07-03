@@ -745,13 +745,13 @@ async function onUpdateClick() {
   // Electron 模式：直接走 IPC（更快，不绕 HTTP）
   if (window.electronAPI?.checkUpdate) {
     window.electronAPI.checkUpdate()
-    // 60s 总超时，IPC 事件会自动更新状态
+    // 20s 总超时（后端预检 5s + 正式检查 10s + 余量）
     setTimeout(() => {
       if (updateStatus.value === 'checking') {
         updateStatus.value = 'error'
         updateError.value = '检查超时，请检查网络后重试，或点击下方「手动下载」'
       }
-    }, 60000)
+    }, 20000)
     return
   }
 
