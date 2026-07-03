@@ -168,7 +168,6 @@ const reportText = ref('')
 const currentTabLabel = computed(() => tabs.find(t => t.key === range.value)?.label || range.value)
 
 const statusText = { todo: '待办', in_progress: '进行中', done: '已完成', follow_up: '跟进后续' }
-const statusIcon = { todo: '📋', in_progress: '🔄', done: '✅', follow_up: '⏳' }
 
 function generateReport() {
   const r = report.value
@@ -178,26 +177,34 @@ function generateReport() {
   // 标题
   const period = rangeLabel.value
   lines.push(`【${currentTabLabel.value}报告】${period}`)
-  lines.push(`总计 ${r.total} 条 | ✅ 已完成 ${r.byStatus.done || 0} | 🔄 进行中 ${r.byStatus.in_progress || 0} | 📋 待办 ${r.byStatus.todo || 0}`)
+  const parts = []
+  if (r.byStatus.done) parts.push(`已完成 ${r.byStatus.done}`)
+  if (r.byStatus.in_progress) parts.push(`进行中 ${r.byStatus.in_progress}`)
+  if (r.byStatus.todo) parts.push(`待办 ${r.byStatus.todo}`)
+  if (r.byStatus.follow_up) parts.push(`跟进 ${r.byStatus.follow_up}`)
+  lines.push(`总计 ${r.total} 条 | ${parts.join('、')}`)
   lines.push('')
 
-  // 各客户
+  // 各客户（过滤掉无实际内容的条目）
+  const noTitlePattern = /^(未命名|untitled)?$/i
   for (const group of r.byCustomer) {
-    const done = group.done || 0
-    const pending = group.pending || 0
-    lines.push(`▎${group.customer}（${group.count}条）`)
-    for (const item of group.items) {
-      if (!item.title) continue  // 跳过无标题的记事
-      const icon = statusIcon[item.status] || '📋'
-      const content = item.title + (item.content ? ' — ' + item.content : '')
-      lines.push(`  ${icon} ${content}`)
+    const valid = group.items.filter(item => {
+      if (!item.title || noTitlePattern.test(item.title.trim())) return false
+      return true
+    })
+    if (!valid.length) continue  // 该客户无有效条目，跳过
+    lines.push(`▎${group.customer}（${valid.length}条）`)
+    for (const item of valid) {
+      const status = statusText[item.status] || '待办'
+      const text = item.title + (item.content ? ' — ' + item.content : '')
+      lines.push(`  [${status}] ${text}`)
     }
     lines.push('')
   }
 
   // 要点总结
   if (r.highlights.length) {
-    lines.push(`📌 要点：${r.highlights.join('、')}`)
+    lines.push(`要点：${r.highlights.join('、')}`)
   }
 
   reportText.value = lines.join('\n')
