@@ -187,13 +187,13 @@ function generateReport() {
 
   // 各客户
   const noTitle = /^(未命名|untitled)$/i
+  const showDate = range.value !== 'today'  // 日报不用显示日期
   for (const group of r.byCustomer) {
     const valid = group.items.filter(item => {
-      // 没标题没内容 → 跳过
       if ((!item.title || noTitle.test(item.title.trim())) && !item.content) return false
       return true
     })
-    if (!valid.length) continue  // 该客户无有效条目，跳过
+    if (!valid.length) continue
     lines.push(`▎${group.customer}（${valid.length}条）`)
     for (const item of valid) {
       const status = statusText[item.status] || '待办'
@@ -201,7 +201,11 @@ function generateReport() {
       const text = showTitle
         ? item.title + (item.content ? ' — ' + item.content : '')
         : item.content
-      lines.push(`  [${status}] ${text}`)
+      const date = showDate && item.created_at ? item.created_at.slice(5, 10) : ''
+      const prefix = date ? `${date} ` : ''
+      // 多行内容缩进展示
+      const indented = text.split('\n').map((l, i) => i === 0 ? `  [${status}] ${prefix}${l}` : `     ${l}`).join('\n')
+      lines.push(indented)
     }
     lines.push('')
   }
