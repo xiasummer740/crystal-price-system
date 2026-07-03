@@ -4,7 +4,7 @@ import fs from 'fs'
 import http from 'http'
 import { execSync } from 'child_process'
 import { fileURLToPath } from 'url'
-import { loadUserConfig, saveUserConfig } from './config.js'
+import { loadUserConfig, saveUserConfig, loadFullConfig, saveFullConfig } from './config.js'
 import { initUpdater } from './updater.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -441,14 +441,26 @@ function showSplash() {
 
 // 记事便签独立浮窗
 let notesWindow = null
+let _notesSaveTimer = null
+function saveNotesBounds() {
+  if (!notesWindow || notesWindow.isDestroyed()) return
+  try {
+    const bounds = notesWindow.getBounds()
+    const cfg = loadFullConfig()
+    saveFullConfig({ notesWindow: { ...cfg.notesWindow, ...bounds } })
+  } catch (e) { log('saveNotesBounds error: ' + e.message) }
+}
 function openNotesWindow(port) {
   if (notesWindow && !notesWindow.isDestroyed()) { notesWindow.focus(); return }
+  const cfg = loadFullConfig()
+  const saved = cfg?.notesWindow || {}
   const mainPos = mainWindow?.getBounds()
   notesWindow = new BrowserWindow({
-    width: 860, height: 640,
+    width: saved.width || 860,
+    height: saved.height || 640,
     minWidth: 480, minHeight: 400,
-    x: mainPos ? mainPos.x + 60 : undefined,
-    y: mainPos ? mainPos.y + 60 : undefined,
+    x: saved.x ?? (mainPos ? mainPos.x + 60 : undefined),
+    y: saved.y ?? (mainPos ? mainPos.y + 60 : undefined),
     title: '记事便签',
     frame: true,
     icon: path.join(__dirname, '..', 'client', 'dist', 'SJK-256.png'),
@@ -459,9 +471,19 @@ function openNotesWindow(port) {
     }
   })
   notesWindow.setMenuBarVisibility(false)
+  // 监听大小/位置变化 → 节流保存
+  const debounceSave = () => {
+    if (_notesSaveTimer) clearTimeout(_notesSaveTimer)
+    _notesSaveTimer = setTimeout(saveNotesBounds, 500)
+  }
+  notesWindow.on('resize', debounceSave)
+  notesWindow.on('move', debounceSave)
   const url = `http://localhost:${port}/#/notes?standalone=1&v=${app.getVersion()}&packaged=${app.isPackaged}`
   notesWindow.loadURL(url)
-  notesWindow.on('closed', () => { notesWindow = null })
+  notesWindow.on('closed', () => {
+    notesWindow = null
+    if (_notesSaveTimer) { clearTimeout(_notesSaveTimer); _notesSaveTimer = null }
+  })
 }
 
 // IPC：渲染进程请求打开/关闭记事窗口
