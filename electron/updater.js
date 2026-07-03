@@ -1,12 +1,13 @@
-// 自动在线升级 — 改用 electron-updater（electron-builder 官方配套）
-// 比手写 fetch 更稳定：自动重试、可靠进度、静默安装
-// 配置读取 package.json 的 build.publish（GitHub）
+// 自动在线升级
+// 版本检查：直接调 GitHub API（原生 https.get + 绝对超时），不依赖 electron-updater 的 HTTP
+// 下载/安装：仍然用 electron-updater（负责进度回调、校验、静默安装）
 //
-// 注意：electron-updater 底层用 Chromium net.request()，在中国访问 GitHub
-// 经常断连且不带超时。所以加一层快速探活：原生 https.get（5s 超时）先确认
-// GitHub 可达，再调 electron-updater 做正式检查。
+// 为什么绕过 electron-updater 做检查？
+// electron-updater 底层用 Chromium net.request()，在中国网络下 DNS 解析
+// 可能永久挂起，且其自身的超时机制不可靠。原生 https.get + setTimeout
+// 绝对兜底保证无论什么网络状况都能在时限内返回结果。
 
-import { ipcMain } from 'electron'
+import { app, ipcMain } from 'electron'
 import pkg from 'electron-updater'
 const { autoUpdater } = pkg
 import { appendFileSync } from 'fs'
@@ -15,7 +16,6 @@ import https from 'https'
 
 autoUpdater.autoDownload = false
 autoUpdater.autoInstallOnAppQuit = false
-autoUpdater.forceDevUpdateConfig = true  // 开发版也可用（需 dev-app-update.yml）
 
 let mainWindow = null
 let _downloadStarted = false
@@ -37,25 +37,7 @@ function send(data) {
   mainWindow.webContents.send('update-status', data)
 }
 
-// ── electron-updater 事件监听 ──
-
-autoUpdater.on('checking-for-update', () => {
-  log('正在检查更新...')
-  send({ status: 'checking' })
-})
-
-autoUpdater.on('update-available', (info) => {
-  log(`发现新版本: ${info.version}`)
-  _downloadStarted = false
-  send({ status: 'available', version: info.version, releaseDate: info.releaseDate })
-  // 立即开始下载（electron-updater 处理重试和断点续传）
-  autoUpdater.downloadUpdate()
-})
-
-autoUpdater.on('update-not-available', () => {
-  log('已是最新版本')
-  send({ status: 'not-available' })
-})
+// ── electron-updater 仅用于下载进度和安装 ──
 
 autoUpdater.on('download-progress', (progress) => {
   const percent = Math.round(progress.percent)
@@ -75,67 +57,93 @@ autoUpdater.on('update-downloaded', (info) => {
 })
 
 autoUpdater.on('error', (err) => {
-  log(`更新错误: ${err.message || err}`)
-  // 用户主动取消的不报错
+  log(`下载错误: ${err.message || err}`)
   if (err.message && err.message.includes('Cancelled')) return
   send({ status: 'error', message: `更新失败: ${err.message || '未知错误'}` })
 })
 
 // ── 对外接口 ──
 
-// GitHub 可达性缓存
-let _reachableCache = null  // { ok, time }
-
-// 快速探活：原生 https.get 判断 GitHub 能否连上
-// 关键：DNS 解析也可能被墙卡死，所以加一层 setTimeout 绝对兜底
-function checkGithubReachable(timeoutMs = 8000) {
+// 直接调 GitHub API 查最新版本
+// 用 setTimeout 绝对兜底，不管 DNS 还是 TCP 都不会死等
+function fetchLatestVersion(timeoutMs = 10000) {
   return new Promise((resolve) => {
-    if (_reachableCache && Date.now() - _reachableCache.time < 180000) {
-      return resolve(_reachableCache.ok)
-    }
     let settled = false
-    const done = (ok) => {
+    const done = (err, version) => {
       if (settled) return
       settled = true
-      _reachableCache = { ok, time: Date.now() }
-      resolve(ok)
+      if (err) resolve({ err })  // { err: '错误信息' }
+      else resolve({ version })  // { version: '1.0.xx' }
     }
-    // 绝对兜底：DNS 卡死也能在 timeoutMs 内返回
-    setTimeout(() => done(false), timeoutMs)
-    const req = https.get('https://github.com', { timeout: 5000 }, (res) => {
-      done(res.statusCode >= 200 && res.statusCode < 500)
-      res.resume()
+    // 绝对兜底超时
+    setTimeout(() => done(new Error('请求超时')), timeoutMs)
+
+    const url = 'https://api.github.com/repos/xiasummer740/crystal-price-system/releases/latest'
+    const req = https.get(url, {
+      timeout: 8000,
+      headers: { 'User-Agent': 'crystal-price-system', 'Accept': 'application/json' }
+    }, (res) => {
+      let data = ''
+      res.on('data', (chunk) => { data += chunk })
+      res.on('end', () => {
+        try {
+          const info = JSON.parse(data)
+          const tag = (info.tag_name || '').replace(/^v/, '')
+          if (!tag) return done(new Error('无法解析版本号'))
+          done(null, tag)
+        } catch (e) {
+          done(new Error('解析 GitHub 响应失败'))
+        }
+      })
     })
-    req.on('timeout', () => { req.destroy(); done(false) })
-    req.on('error', () => done(false))
+    req.on('timeout', () => { req.destroy(); done(new Error('连接超时')) })
+    req.on('error', (e) => done(new Error('网络错误: ' + (e.message || e.code || '未知'))))
   })
 }
 
 export async function checkForUpdates() {
   log('checkForUpdates 被调用')
 
-  // 第一步：快速探活 GitHub（5s 超时）
-  const reachable = await checkGithubReachable(5000)
-  if (!reachable) {
-    log('GitHub 不可达，跳过更新检查')
-    send({ status: 'error', message: '检查更新失败：无法连接到 GitHub，请检查网络后重试' })
-    return { status: 'error', message: 'GitHub 不可达' }
+  const result = await fetchLatestVersion(10000)
+
+  if (result.err) {
+    log(`检查更新失败: ${result.err}`)
+    send({ status: 'error', message: '检查更新失败: ' + result.err })
+    return { status: 'error', message: result.err }
   }
 
-  // 第二步：正式检查（带 10s 超时）
-  try {
-    await Promise.race([
-      autoUpdater.checkForUpdates(),
-      new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('检查更新超时 (10s)')), 10000)
-      )
-    ])
-    return { status: 'checking' }
-  } catch (e) {
-    log(`checkForUpdates 失败: ${e.message}`)
-    send({ status: 'error', message: '检查更新失败: ' + e.message })
-    return { status: 'error', message: e.message }
+  const latest = result.version
+  const current = app.getVersion()
+
+  log(`远端版本: ${latest}, 当前版本: ${current}`)
+
+  // 简单版本比较（逐段比较数字）
+  const curParts = current.split('.').map(Number)
+  const latParts = latest.split('.').map(Number)
+  let isNewer = false
+  for (let i = 0; i < Math.max(curParts.length, latParts.length); i++) {
+    const c = curParts[i] || 0
+    const l = latParts[i] || 0
+    if (l > c) { isNewer = true; break }
+    if (l < c) break
   }
+
+  if (!isNewer) {
+    log('已是最新版本')
+    send({ status: 'not-available' })
+    return { status: 'not-available' }
+  }
+
+  log(`发现新版本: ${latest}`)
+  _downloadStarted = false
+  send({ status: 'available', version: latest })
+  // 自动开始下载（复用 electron-updater 的下载能力）
+  try {
+    autoUpdater.downloadUpdate()
+  } catch (e) {
+    log(`自动下载失败: ${e.message}`)
+  }
+  return { status: 'available', version: latest }
 }
 
 export async function downloadUpdate() {
@@ -181,7 +189,6 @@ export function initUpdater(win) {
   mainWindow = win
   log('initUpdater 完成')
 
-  // IPC: 检查更新
   ipcMain.handle('check-update', async () => {
     log('IPC: 检查更新')
     try {
@@ -192,12 +199,10 @@ export function initUpdater(win) {
     return true
   })
 
-  // IPC: 下载更新
   ipcMain.handle('download-update', async () => {
     return await downloadUpdate()
   })
 
-  // IPC: 安装更新
   ipcMain.handle('install-update', async () => {
     return await installUpdate()
   })
