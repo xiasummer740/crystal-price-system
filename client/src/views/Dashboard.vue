@@ -795,6 +795,7 @@ async function onRollbackClick() {
 
 // 监听升级状态事件（IPC 通道）
 let _downloadStartTimer = null
+let _downloadFallbackTimer = null
 if (window.electronAPI?.onUpdateStatus) {
   window.electronAPI.onUpdateStatus((data) => {
     const prevStatus = updateStatus.value
@@ -808,19 +809,35 @@ if (window.electronAPI?.onUpdateStatus) {
         updateVersion.value = data.version
         updateDownloadUrl.value = `https://github.com/xiasummer740/crystal-price-system/releases/download/v${data.version}/crystal-price-system-setup-${data.version}.exe`
       }
-      // 15s 超时兜底：如果进度一直没来，显示错误
+      // 兜底：20s 还没进度 → 前端主动触发下载（防止后端没自动开始）
       clearTimeout(_downloadStartTimer)
-      _downloadStartTimer = setTimeout(() => {
+      clearTimeout(_downloadFallbackTimer)
+      _downloadStartTimer = setTimeout(async () => {
         if (updateStatus.value === 'downloading' && updatePercent.value === 0) {
-          updateStatus.value = 'error'
-          updateError.value = '下载启动超时，请重试或手动下载'
+          updateError.value = '等待下载响应...'
+          const result = await window.electronAPI?.downloadUpdate?.()
+          if (result && result.msg === '已在下载中') {
+            // 后端其实在下，只是还没发进度，再等 20s
+            setTimeout(() => {
+              if (updateStatus.value === 'downloading' && updatePercent.value === 0) {
+                updateStatus.value = 'error'
+                updateError.value = '下载启动超时，请重试或点击下方「手动下载」'
+              }
+            }, 20000)
+          } else if (!result || !result.success) {
+            // 下载启动失败
+            updateStatus.value = 'error'
+            updateError.value = result?.msg || '下载启动失败，请重试'
+          }
+          // result.success === true → 下载已开始，等进度推送
         }
-      }, 15000)
+      }, 20000)
       return
     }
     // downloading 或 downloaded → 清除超时
     if (data.status === 'downloading' || data.status === 'downloaded' || data.status === 'error') {
       clearTimeout(_downloadStartTimer)
+      clearTimeout(_downloadFallbackTimer)
     }
 
     // 回滚进度更新走独立变量
