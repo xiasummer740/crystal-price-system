@@ -772,11 +772,32 @@ async function onUpdateClick() {
     if (d.code === 0 && d.data) {
       const st = d.data.status
       if (st === 'available') {
-        updateStatus.value = 'available'
+        updateStatus.value = 'downloading'
         if (d.data.version) {
           updateVersion.value = d.data.version
           updateDownloadUrl.value = `https://github.com/xiasummer740/crystal-price-system/releases/download/v${d.data.version}/crystal-price-system-setup-${d.data.version}.exe`
         }
+        // 轮询下载进度（HTTP 模式收不到 IPC 事件）
+        const pollTimer = setInterval(async () => {
+          try {
+            const pr = await fetch('/api/download-progress')
+            const pd = await pr.json()
+            if (pd.code === 0 && pd.data) {
+              if (pd.data.status === 'downloading' && pd.data.percent > 0) {
+                updatePercent.value = pd.data.percent
+                if (pd.data.speed) downloadSpeed.value = fmtSpeed(pd.data.speed)
+              } else if (pd.data.status === 'downloaded') {
+                updateStatus.value = 'downloaded'
+                updatePercent.value = 100
+                clearInterval(pollTimer)
+              } else if (pd.data.status === 'error') {
+                updateStatus.value = 'error'
+                updateError.value = pd.data.message || '下载失败'
+                clearInterval(pollTimer)
+              }
+            }
+          } catch {}
+        }, 2000)
       } else {
         updateStatus.value = st
         if (d.data.version) updateVersion.value = d.data.version

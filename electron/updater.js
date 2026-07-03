@@ -673,6 +673,19 @@ export async function installUpdate() {
 // ── 全局暴露，供 Express 路由调用 ──
 global.__checkForUpdates = checkForUpdates
 global.__downloadUpdate = downloadUpdate
+global.__downloadProgress = { status: 'idle', percent: 0, version: '', speed: 0 }
+
+// 下载进度回调里更新全局状态
+const _origSend = send
+send = function(data) {
+  if (data.status === 'downloading' || data.status === 'downloaded' || data.status === 'error') {
+    global.__downloadProgress = { ...global.__downloadProgress, ...data }
+  }
+  if (data.status === 'downloading') {
+    global.__downloadProgress.status = 'downloading'
+  }
+  return _origSend(data)
+}
 
 // ── 初始化: 注册 IPC ──
 let _initialized = false

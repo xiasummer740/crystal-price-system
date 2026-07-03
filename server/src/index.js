@@ -202,6 +202,12 @@ app.get('/api/check-update', async (req, res) => {
   }
 })
 
+// 下载进度查询接口（给走 HTTP 的前端轮询用）
+app.get('/api/download-progress', (req, res) => {
+  const dp = global.__downloadProgress || { status: 'idle', percent: 0, version: '', speed: 0 }
+  res.json({ code: 0, data: dp })
+})
+
 // 更新诊断状态接口
 app.get('/api/update-diagnose', (req, res) => {
   res.json({
