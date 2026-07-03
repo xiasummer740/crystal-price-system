@@ -745,16 +745,23 @@ async function onUpdateClick() {
   // idle / error / not-available → 检查更新
   updateStatus.value = 'checking'
 
-  // Electron 模式：直接走 IPC（更快，不绕 HTTP）
+  // Electron 模式：IPC 检查更新 + 主动触发下载
   if (window.electronAPI?.checkUpdate) {
     window.electronAPI.checkUpdate()
-    // 20s 总超时（后端预检 5s + 正式检查 10s + 余量）
+    // 不管 IPC 事件通不通，3 秒后直接叫后端开始下载
     setTimeout(() => {
-      if (updateStatus.value === 'checking') {
+      if (updateStatus.value === 'available' || updateStatus.value === 'checking') {
+        updateStatus.value = 'downloading'
+        window.electronAPI?.downloadUpdate?.()
+      }
+    }, 3000)
+    // 30s 总超时
+    setTimeout(() => {
+      if (updateStatus.value === 'checking' || updateStatus.value === 'available' || (updateStatus.value === 'downloading' && updatePercent.value === 0)) {
         updateStatus.value = 'error'
         updateError.value = '检查超时，请检查网络后重试，或点击下方「手动下载」'
       }
-    }, 20000)
+    }, 30000)
     return
   }
 
