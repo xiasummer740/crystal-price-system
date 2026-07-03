@@ -672,6 +672,7 @@ export async function installUpdate() {
 
 // ── 全局暴露，供 Express 路由调用 ──
 global.__checkForUpdates = checkForUpdates
+global.__downloadUpdate = downloadUpdate
 
 // ── 初始化: 注册 IPC ──
 let _initialized = false

@@ -187,10 +187,15 @@ app.get('/api/open-data-folder', (_req, res) => {
 // 版本更新检查 HTTP 接口（给渲染进程直连，绕过 IPC）
 app.get('/api/check-update', async (req, res) => {
   const fn = global.__checkForUpdates
+  const dn = global.__downloadUpdate
   if (!fn) return res.json({ code: 1, msg: '更新模块未就绪', errorDetail: 'global.__checkForUpdates 未定义' })
   try {
     const start = Date.now()
     const result = await fn()
+    // 找到新版本时自动触发下载（不管前端走 HTTP 还是 IPC）
+    if (result.status === 'available' && dn) {
+      dn().catch(e => console.error('自动下载错误:', e.message))
+    }
     res.json({ code: 0, data: result, elapsed: Date.now() - start })
   } catch (e) {
     res.json({ code: 1, msg: e.message, data: { status: 'error', message: e.message } })
