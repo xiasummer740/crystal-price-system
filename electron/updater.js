@@ -248,13 +248,10 @@ export async function checkForUpdates() {
     log(`发现新版本: ${remote.version}，2 秒后开始自动下载...`)
     send({ status: 'available', version: remote.version, releaseDate: new Date().toISOString() })
 
-    // ── 微信式：检测到新版后自动后台下载（延迟 2 秒，等 UI 先展示） ──
-    // _updating 在 startDownload 中管理，这里释放锁让后续点击能进 startDownload
-    _updating = false
-    setTimeout(() => {
-      log('自动下载触发')
-      startDownload()
-    }, 2000)
+    // ── 检测到新版后立即开始下载（不再等 2 秒，避免定时器不触发） ──
+    // startDownload 内部有 _updating 互斥锁，不会重复下载
+    log('自动下载触发')
+    startDownload() // 内部会发送 downloading 事件，前端立即显示进度
 
     return { status: 'available', version: remote.version }
   } catch (e) {

@@ -781,9 +781,10 @@ async function onUpdateClick() {
   }
 }
 
-// 监听升级状态事件（IPC 通道，同时也通过 HTTP 返回）
+// 监听升级状态事件（IPC 通道）
 if (window.electronAPI?.onUpdateStatus) {
   window.electronAPI.onUpdateStatus((data) => {
+    const prevStatus = updateStatus.value
     updateStatus.value = data.status
     if (data.version) {
       updateVersion.value = data.version
@@ -794,6 +795,16 @@ if (window.electronAPI?.onUpdateStatus) {
       trackSpeed(data.percent < 0 ? data.percent * 1024 * 1024 : data.percent * 119 * 1024 * 1024 / 100)
     }
     if (data.message) updateError.value = data.message
+
+    // 兜底：收到 available 后 3 秒还没变为 downloading → 前端主动触发下载
+    if (data.status === 'available' && window.electronAPI?.downloadUpdate) {
+      setTimeout(async () => {
+        if (updateStatus.value === 'available') {
+          console.log('[update] 自动下载未触发，前端主动发起')
+          await window.electronAPI.downloadUpdate()
+        }
+      }, 3000)
+    }
   })
 }
 
