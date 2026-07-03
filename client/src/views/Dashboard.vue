@@ -256,6 +256,16 @@
 
           <span class="update-status" v-if="updateStatusText">{{ updateStatusText }}</span>
           <p class="set-hint">当前版本 v{{ appVersion }}</p>
+
+          <!-- 回滚按钮（仅升级后可回滚时显示） -->
+          <div v-if="rollbackVersion && (updateStatus === 'idle' || updateStatus === 'not-available' || updateStatus === 'error')" style="margin-top:8px">
+            <a class="manual-link" style="font-size:12px" @click.stop="onRollbackClick">↩ 回滚到 v{{ rollbackVersion }}</a>
+          </div>
+          <div v-if="updateStatus === 'rollback-downloading'" class="update-progress-wrap" style="margin-top:4px">
+            <van-progress :percentage="rollbackPercent" :stroke-width="6" color="#fa8c16" track-color="#e8e8e8" :show-pivot="false" />
+            <span class="update-pct" style="color:#fa8c16">{{ rollbackPercent }}% {{ rollbackSpeed }}</span>
+          </div>
+          <span v-if="updateStatus === 'rollback-downloaded'" class="update-status" style="color:#fa8c16">回滚包已下载，正在安装...</span>
         </div>
 
         <div class="set-divider"></div>
@@ -713,6 +723,9 @@ const updateStatusText = computed(() => {
 })
 
 const updateDownloadUrl = ref('')
+const rollbackVersion = ref('')
+const rollbackPercent = ref(0)
+const rollbackSpeed = ref('')
 
 async function onUpdateClick() {
   const s = updateStatus.value
@@ -771,11 +784,32 @@ async function onUpdateClick() {
   }
 }
 
+// 回滚到上一版本
+async function onRollbackClick() {
+  if (!window.electronAPI?.rollbackUpdate) return
+  rollbackPercent.value = 0
+  rollbackSpeed.value = ''
+  updateStatus.value = 'rollback-downloading'
+  await window.electronAPI.rollbackUpdate()
+}
+
 // 监听升级状态事件（IPC 通道）
 if (window.electronAPI?.onUpdateStatus) {
   window.electronAPI.onUpdateStatus((data) => {
     const prevStatus = updateStatus.value
     updateStatus.value = data.status
+
+    // 回滚进度更新走独立变量
+    if (data.status === 'rollback-downloading') {
+      if (data.percent !== undefined) rollbackPercent.value = data.percent
+      if (data.speed !== undefined) rollbackSpeed.value = fmtSpeed(data.speed)
+      if (data.version) rollbackVersion.value = data.version
+      return
+    }
+    if (data.status === 'rollback-downloaded' || data.status === 'rollback-installing') {
+      return
+    }
+
     if (data.version) {
       updateVersion.value = data.version
       updateDownloadUrl.value = `https://github.com/xiasummer740/crystal-price-system/releases/download/v${data.version}/crystal-price-system-setup-${data.version}.exe`
@@ -811,6 +845,19 @@ watch(showSettings, (open) => {
     onUpdateClick()
   }
 })
+
+// 检查是否有可回滚的版本
+async function checkRollbackState() {
+  if (!window.electronAPI?.getUpgradeState) return
+  try {
+    const st = await window.electronAPI.getUpgradeState()
+    if (st && st.canRollback) {
+      rollbackVersion.value = st.oldVersion
+    }
+  } catch {}
+}
+// 等待 IPC 就绪后查一次
+setTimeout(checkRollbackState, 2000)
 
 // 暴露检查更新函数供主进程菜单调用
 window.__checkUpdate = () => {

@@ -24,5 +24,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   checkUpdate: () => ipcRenderer.invoke('check-update'),
   downloadUpdate: () => ipcRenderer.invoke('download-update'),
   installUpdate: () => ipcRenderer.invoke('install-update'),
-  onUpdateStatus: (cb) => ipcRenderer.on('update-status', (_event, data) => cb(data))
+  onUpdateStatus: (cb) => ipcRenderer.on('update-status', (_event, data) => cb(data)),
+  // 升级回滚
+  getUpgradeState: () => ipcRenderer.invoke('get-upgrade-state'),
+  rollbackUpdate: () => ipcRenderer.invoke('rollback-update')
 })
