@@ -48,7 +48,7 @@
             <div class="note-head">
               <div class="note-title-row">
                 <span class="note-status" :class="note.status">
-                  {{ {todo:'📋',in_progress:'🔄',done:'✅'}[note.status] || '📋' }}
+                  {{ {todo:'📋',in_progress:'🔄',done:'✅',follow_up:'🔄'}[note.status] || '📋' }}
                 </span>
                 <strong class="note-title" v-if="note.title">{{ note.title }}</strong>
                 <span v-else class="note-title no-title">(无标题)</span>

@@ -61,7 +61,7 @@
             <div class="item-list">
               <div v-for="item in group.items" :key="item.id" class="report-item" @click="$router.push('/notes/' + item.id + '?from=reports')">
                 <span class="item-status" :class="'s-' + item.status">
-                  {{ {todo:'📋',in_progress:'🔄',done:'✅'}[item.status] || '📋' }}
+                  {{ {todo:'📋',in_progress:'🔄',done:'✅',follow_up:'🔄'}[item.status] || '📋' }}
                 </span>
                 <div class="item-body">
                   <div class="item-title" v-if="item.title">{{ item.title }}</div>

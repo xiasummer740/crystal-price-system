@@ -88,7 +88,7 @@
                 <div class="card-meta">
                   <span v-if="item.customer" class="card-customer">👤 {{ item.customer }}</span>
                   <span class="card-status" :class="item.status">
-                    {{ {todo:'待办',in_progress:'进行中',done:'已完成'}[item.status] || '待办' }}
+                    {{ {todo:'待办',in_progress:'进行中',done:'已完成',follow_up:'跟进后续'}[item.status] || '待办' }}
                   </span>
                   <span v-if="hasAttachments(item)" class="card-img-count">📎 {{ attachmentCount(item) }}</span>
                   <span class="card-edit" @click.stop="router.push('/notes/edit/'+item.id)" title="编辑">✎</span>
@@ -197,7 +197,8 @@ const filterActions = computed(() => {
       { name: '全部状态', value: '' },
       { name: '待办', value: 'todo' },
       { name: '进行中', value: 'in_progress' },
-      { name: '已完成', value: 'done' }
+      { name: '已完成', value: 'done' },
+      { name: '跟进后续', value: 'follow_up' }
     ]
   }
   if (filterType.value === 'reminder') {
@@ -211,7 +212,7 @@ const filterActions = computed(() => {
 
 const filterLabels = {
   category: { '': '全部分类' },
-  status: { '': '全部状态', todo: '待办', in_progress: '进行中', done: '已完成' },
+  status: { '': '全部状态', todo: '待办', in_progress: '进行中', done: '已完成', follow_up: '跟进后续' },
   reminder: { '': '全部提醒', pending: '待提醒' }
 }
 
@@ -246,11 +247,12 @@ const hasActiveFilter = computed(() =>
 const kanbanCols = [
   { key: 'todo', label: '待办', color: '#757575' },
   { key: 'in_progress', label: '进行中', color: '#1565c0' },
-  { key: 'done', label: '已完成', color: '#2e7d32' }
+  { key: 'done', label: '已完成', color: '#2e7d32' },
+  { key: 'follow_up', label: '跟进后续', color: '#e65100' }
 ]
 
 const grouped = computed(() => {
-  const g = { todo: [], in_progress: [], done: [] }
+  const g = { todo: [], in_progress: [], done: [], follow_up: [] }
   for (const item of store.list) {
     const s = item.status || 'todo'
     if (g[s]) g[s].push(item)
@@ -387,7 +389,7 @@ async function onDrop(e, status) {
   try {
     await updateNote(draggingItem.value.id, { status })
     draggingItem.value.status = status
-    showToast('已移至' + ({ todo: '待办', in_progress: '进行中', done: '已完成' }[status] || status))
+    showToast('已移至' + ({ todo: '待办', in_progress: '进行中', done: '已完成', follow_up: '跟进后续' }[status] || status))
   } catch (e) {
     showToast('更新失败: ' + e.message)
   }
@@ -597,6 +599,7 @@ onUnmounted(() => {
 .card-status.todo { background: #fff7e6; color: #d46b08; border: 1px solid #ffd591; animation: card-glow-o 2s ease-in-out infinite; }
 .card-status.in_progress { background: #e6f7ff; color: #1890ff; border: 1px solid #91d5ff; animation: card-glow-b 2s ease-in-out infinite; }
 .card-status.done { background: #f6ffed; color: #389e0d; border: 1px solid #b7eb8f; animation: card-glow-g 2s ease-in-out infinite; }
+.card-status.follow_up { background: #fff3e0; color: #e65100; border: 1px solid #ffcc80; animation: card-glow-o 2s ease-in-out infinite; }
 @keyframes card-glow-o { 0%,100% { box-shadow: 0 0 6px rgba(212,107,8,.25); } 50% { box-shadow: 0 0 12px rgba(212,107,8,.45); } }
 @keyframes card-glow-b { 0%,100% { box-shadow: 0 0 6px rgba(24,144,255,.25); } 50% { box-shadow: 0 0 12px rgba(24,144,255,.45); } }
 @keyframes card-glow-g { 0%,100% { box-shadow: 0 0 6px rgba(56,158,13,.25); } 50% { box-shadow: 0 0 12px rgba(56,158,13,.45); } }

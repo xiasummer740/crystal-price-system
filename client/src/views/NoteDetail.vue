@@ -47,7 +47,7 @@
                 {{ {1:'🔴 高',2:'🟡 中',3:'🔵 低'}[note.priority || 2] }}
               </span>
               <span class="meta-item status-badge" :class="note.status">
-                {{ {todo:'待办',in_progress:'进行中',done:'已完成'}[note.status] || '待办' }}
+                {{ {todo:'待办',in_progress:'进行中',done:'已完成',follow_up:'跟进后续'}[note.status] || '待办' }}
               </span>
               <span class="meta-item date-item">📅 {{ (note.updated_at || note.created_at || '').slice(0, 10) }}</span>
             </div>
@@ -258,6 +258,7 @@ async function copyCurrentImage() {
 .status-badge.todo { background: #fff7e6; color: #d46b08; border: 1px solid #ffd591; box-shadow: 0 0 8px rgba(212,107,8,.25); animation: glow-orange 2s ease-in-out infinite; }
 .status-badge.in_progress { background: #e6f7ff; color: #1890ff; border: 1px solid #91d5ff; box-shadow: 0 0 8px rgba(24,144,255,.25); animation: glow-blue 2s ease-in-out infinite; }
 .status-badge.done { background: #f6ffed; color: #389e0d; border: 1px solid #b7eb8f; box-shadow: 0 0 8px rgba(56,158,13,.25); animation: glow-green 2s ease-in-out infinite; }
+.status-badge.follow_up { background: #fff3e0; color: #e65100; border: 1px solid #ffcc80; box-shadow: 0 0 8px rgba(230,81,0,.25); animation: glow-orange 2s ease-in-out infinite; }
 @keyframes glow-orange { 0%,100% { box-shadow: 0 0 6px rgba(212,107,8,.25); } 50% { box-shadow: 0 0 14px rgba(212,107,8,.45); } }
 @keyframes glow-blue { 0%,100% { box-shadow: 0 0 6px rgba(24,144,255,.25); } 50% { box-shadow: 0 0 14px rgba(24,144,255,.45); } }
 @keyframes glow-green { 0%,100% { box-shadow: 0 0 6px rgba(56,158,13,.25); } 50% { box-shadow: 0 0 14px rgba(56,158,13,.45); } }
