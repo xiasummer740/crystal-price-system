@@ -794,10 +794,34 @@ async function onRollbackClick() {
 }
 
 // 监听升级状态事件（IPC 通道）
+let _downloadStartTimer = null
 if (window.electronAPI?.onUpdateStatus) {
   window.electronAPI.onUpdateStatus((data) => {
     const prevStatus = updateStatus.value
     updateStatus.value = data.status
+
+    // 收到 available → 后端已自动触发下载，立即显示进度条（不等后端发 downloading 事件）
+    if (data.status === 'available') {
+      updateStatus.value = 'downloading'
+      updatePercent.value = 0
+      if (data.version) {
+        updateVersion.value = data.version
+        updateDownloadUrl.value = `https://github.com/xiasummer740/crystal-price-system/releases/download/v${data.version}/crystal-price-system-setup-${data.version}.exe`
+      }
+      // 15s 超时兜底：如果进度一直没来，显示错误
+      clearTimeout(_downloadStartTimer)
+      _downloadStartTimer = setTimeout(() => {
+        if (updateStatus.value === 'downloading' && updatePercent.value === 0) {
+          updateStatus.value = 'error'
+          updateError.value = '下载启动超时，请重试或手动下载'
+        }
+      }, 15000)
+      return
+    }
+    // downloading 或 downloaded → 清除超时
+    if (data.status === 'downloading' || data.status === 'downloaded' || data.status === 'error') {
+      clearTimeout(_downloadStartTimer)
+    }
 
     // 回滚进度更新走独立变量
     if (data.status === 'rollback-downloading') {
@@ -822,15 +846,7 @@ if (window.electronAPI?.onUpdateStatus) {
     }
     if (data.message) updateError.value = data.message
 
-    // 兜底：收到 available 后 3 秒还没变为 downloading → 前端主动触发下载
-    if (data.status === 'available' && window.electronAPI?.downloadUpdate) {
-      setTimeout(async () => {
-        if (updateStatus.value === 'available') {
-          console.log('[update] 自动下载未触发，前端主动发起')
-          await window.electronAPI.downloadUpdate()
-        }
-      }, 3000)
-    }
+    // 兜底已废弃：available 直接显示 downloading，不再等 3s
   })
 }
 
