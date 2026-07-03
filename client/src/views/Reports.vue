@@ -187,8 +187,9 @@ function generateReport() {
     const pending = group.pending || 0
     lines.push(`▎${group.customer}（${group.count}条）`)
     for (const item of group.items) {
+      if (!item.title) continue  // 跳过无标题的记事
       const icon = statusIcon[item.status] || '📋'
-      const content = (item.title || '(无标题)') + (item.content ? ' — ' + item.content : '')
+      const content = item.title + (item.content ? ' — ' + item.content : '')
       lines.push(`  ${icon} ${content}`)
     }
     lines.push('')
