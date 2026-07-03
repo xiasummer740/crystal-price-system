@@ -185,18 +185,22 @@ function generateReport() {
   lines.push(`总计 ${r.total} 条 | ${parts.join('、')}`)
   lines.push('')
 
-  // 各客户（过滤掉无实际内容的条目）
-  const noTitlePattern = /^(未命名|untitled)?$/i
+  // 各客户
+  const noTitle = /^(未命名|untitled)$/i
   for (const group of r.byCustomer) {
     const valid = group.items.filter(item => {
-      if (!item.title || noTitlePattern.test(item.title.trim())) return false
+      // 没标题没内容 → 跳过
+      if ((!item.title || noTitle.test(item.title.trim())) && !item.content) return false
       return true
     })
     if (!valid.length) continue  // 该客户无有效条目，跳过
     lines.push(`▎${group.customer}（${valid.length}条）`)
     for (const item of valid) {
       const status = statusText[item.status] || '待办'
-      const text = item.title + (item.content ? ' — ' + item.content : '')
+      const showTitle = item.title && !noTitle.test(item.title.trim())
+      const text = showTitle
+        ? item.title + (item.content ? ' — ' + item.content : '')
+        : item.content
       lines.push(`  [${status}] ${text}`)
     }
     lines.push('')
