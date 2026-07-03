@@ -87,20 +87,27 @@ autoUpdater.on('error', (err) => {
 let _reachableCache = null  // { ok, time }
 
 // 快速探活：原生 https.get 判断 GitHub 能否连上
-function checkGithubReachable(timeoutMs = 5000) {
+// 关键：DNS 解析也可能被墙卡死，所以加一层 setTimeout 绝对兜底
+function checkGithubReachable(timeoutMs = 8000) {
   return new Promise((resolve) => {
-    // 缓存 3 分钟内有效
     if (_reachableCache && Date.now() - _reachableCache.time < 180000) {
       return resolve(_reachableCache.ok)
     }
-    const req = https.get('https://github.com', { timeout: timeoutMs }, (res) => {
-      const ok = res.statusCode >= 200 && res.statusCode < 500
+    let settled = false
+    const done = (ok) => {
+      if (settled) return
+      settled = true
       _reachableCache = { ok, time: Date.now() }
-      res.resume()
       resolve(ok)
+    }
+    // 绝对兜底：DNS 卡死也能在 timeoutMs 内返回
+    setTimeout(() => done(false), timeoutMs)
+    const req = https.get('https://github.com', { timeout: 5000 }, (res) => {
+      done(res.statusCode >= 200 && res.statusCode < 500)
+      res.resume()
     })
-    req.on('timeout', () => { req.destroy(); resolve(false) })
-    req.on('error', () => { _reachableCache = { ok: false, time: Date.now() }; resolve(false) })
+    req.on('timeout', () => { req.destroy(); done(false) })
+    req.on('error', () => done(false))
   })
 }
 
