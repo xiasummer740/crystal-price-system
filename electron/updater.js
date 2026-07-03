@@ -1,277 +1,130 @@
-// 自动在线升级 — 去掉 electron-updater，改用原生 fetch
-// fetch 自动跟随跨域跳转，不走 GitHub API，避免在中国大陆被干扰
-// 正式版如果 fetch 失败则用 https.get 重试（ASAR 打包后 fetch 可能不稳定）
+// 自动在线升级 — 改用 electron-updater（electron-builder 官方配套）
+// 比手写 fetch 更稳定：自动重试、可靠进度、静默安装
+// 配置读取 package.json 的 build.publish（GitHub）
 
-import { app, ipcMain } from 'electron'
-import { createWriteStream, unlinkSync, appendFileSync, createReadStream } from 'fs'
+import { ipcMain } from 'electron'
+import { autoUpdater } from 'electron-updater'
+import { appendFileSync } from 'fs'
 import { join } from 'path'
-import { spawn } from 'child_process'
-import { createHash } from 'crypto'
-import https from 'https'
 
-const REPO = 'xiasummer740/crystal-price-system'
-const BASE_URL = `https://github.com/${REPO}/releases`
-const TIMEOUT_MS = 15000
+autoUpdater.autoDownload = false
+autoUpdater.autoInstallOnAppQuit = false
 
 let mainWindow = null
-let updateInfo = null // { version, fileName, sha512, downloadUrl }
-let downloadPath = null
-let _updating = false // 互斥锁：防止重复检查/下载
+let _downloadStarted = false
 
-// ── 日志（userData 目录，避免权限问题） ──
+// ── 日志 ──
 function log(msg) {
   try {
     const logPath = join(process.env.TEMP || __dirname, 'crystal-update.log')
-    const line = `[${new Date().toISOString()}] ${msg}\n`
-    appendFileSync(logPath, line)
+    appendFileSync(logPath, `[${new Date().toISOString()}] ${msg}\n`)
   } catch {}
 }
 
 // ── 给渲染进程发事件 ──
 function send(data) {
   if (!mainWindow || mainWindow.webContents.isDestroyed()) {
-    log('webContents已销毁，无法发送事件: ' + JSON.stringify(data))
+    log('webContents已销毁: ' + JSON.stringify(data))
     return
   }
   mainWindow.webContents.send('update-status', data)
 }
 
-// ── 版本号比较：大于返回 true ──
-function isNewer(latest, current) {
-  const pa = latest.split('.').map(Number)
-  const pb = current.split('.').map(Number)
-  for (let i = 0; i < 3; i++) {
-    if ((pa[i] || 0) > (pb[i] || 0)) return true
-    if ((pa[i] || 0) < (pb[i] || 0)) return false
-  }
-  return false
-}
+// ── electron-updater 事件监听 ──
 
-// ── 带超时的 fetch（Node.js 18+ 内置，Electron 33 可用） ──
-async function fetchWithTimeout(url, timeout = TIMEOUT_MS) {
-  const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), timeout)
+autoUpdater.on('checking-for-update', () => {
+  log('正在检查更新...')
+  send({ status: 'checking' })
+})
+
+autoUpdater.on('update-available', (info) => {
+  log(`发现新版本: ${info.version}`)
+  _downloadStarted = false
+  send({ status: 'available', version: info.version, releaseDate: info.releaseDate })
+  // 立即开始下载（electron-updater 处理重试和断点续传）
+  autoUpdater.downloadUpdate()
+})
+
+autoUpdater.on('update-not-available', () => {
+  log('已是最新版本')
+  send({ status: 'not-available' })
+})
+
+autoUpdater.on('download-progress', (progress) => {
+  const percent = Math.round(progress.percent)
+  const speed = progress.bytesPerSecond
+  let speedStr = ''
+  if (speed > 1024 * 1024) speedStr = (speed / 1024 / 1024).toFixed(1) + 'MB/s'
+  else if (speed > 1024) speedStr = Math.round(speed / 1024) + 'KB/s'
+  else speedStr = Math.round(speed) + 'B/s'
+  log(`下载中 ${percent}% (${speedStr})`)
+  send({ status: 'downloading', percent, version: autoUpdater.currentVersion?.version })
+  _downloadStarted = true
+})
+
+autoUpdater.on('update-downloaded', (info) => {
+  log(`下载完成: ${info.version}`)
+  send({ status: 'downloaded', version: info.version })
+})
+
+autoUpdater.on('error', (err) => {
+  log(`更新错误: ${err.message || err}`)
+  // 用户主动取消的不报错
+  if (err.message && err.message.includes('Cancelled')) return
+  send({ status: 'error', message: `更新失败: ${err.message || '未知错误'}` })
+})
+
+// ── 对外接口 ──
+
+export async function checkForUpdates() {
+  log('checkForUpdates 被调用')
   try {
-    const res = await fetch(url, { signal: controller.signal, redirect: 'follow' })
-    return res
-  } finally {
-    clearTimeout(timer)
+    autoUpdater.checkForUpdates()
+    return { status: 'checking' }
+  } catch (e) {
+    log(`checkForUpdates 失败: ${e.message}`)
+    send({ status: 'error', message: '检查更新失败: ' + e.message })
+    return { status: 'error', message: e.message }
   }
 }
 
-// ── https.get 后备方案（ASAR 打包后 fetch 可能不稳，用原生模块兜底） ──
-function httpsGet(url, timeout = TIMEOUT_MS) {
-  return new Promise((resolve, reject) => {
-    const req = https.get(url, { timeout }, (res) => {
-      let data = ''
-      res.on('data', (chunk) => { data += chunk })
-      res.on('end', () => resolve(data))
-    })
-    req.on('error', reject)
-    req.on('timeout', () => { req.destroy(); reject(new Error('HTTPS 超时')) })
-  })
-}
-
-// ── 下载文件（带进度回调，fetch 方式） ──
-async function downloadFile(url, destPath, onProgress) {
-  const controller = new AbortController()
-  // 119MB 安装包给 10 分钟超时
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS * 40)
-  try {
-    const res = await fetch(url, { signal: controller.signal, redirect: 'follow' })
-    if (!res.ok) throw new Error(`HTTP ${res.status}`)
-    const total = parseInt(res.headers.get('content-length') || '0', 10)
-    let downloaded = 0
-    const reader = res.body.getReader()
-    const writer = createWriteStream(destPath)
-    const pump = async () => {
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-        writer.write(Buffer.from(value))
-        downloaded += value.length
-        // 即使没有 content-length 也发进度（显示已下载 MB）
-        if (onProgress) {
-          if (total) onProgress(Math.round(downloaded / total * 100))
-          else onProgress(-Math.round(downloaded / 1024 / 1024)) // 负数表示 MB
-        }
-      }
-      writer.end()
-    }
-    await pump()
-    await new Promise((resolve, reject) => {
-      writer.on('finish', resolve)
-      writer.on('error', reject)
-    })
-    return destPath
-  } finally {
-    clearTimeout(timer)
-  }
-}
-
-// ── 计算文件 SHA512 ──
-function computeSha512(filePath) {
-  return new Promise((resolve, reject) => {
-    const hash = createHash('sha512')
-    const stream = createReadStream(filePath)
-    stream.on('data', (chunk) => hash.update(chunk))
-    stream.on('end', () => resolve(hash.digest('base64')))
-    stream.on('error', reject)
-  })
-}
-
-// ── 解析 latest.yml（极简 YAML 解析） ──
-function parseLatestYml(text) {
-  const version = (text.match(/^version:\s*([\d.]+)/m) || [])[1]
-  // url 在 files: 子项中（带缩进），改用顶层的 path 字段
-  const fileName = (text.match(/^path:\s*(.+)/m) || [])[1]?.trim()
-  const sha512 = (text.match(/^sha512:\s*(\S+)/m) || [])[1]
-  if (!version || !fileName) throw new Error('无法解析更新信息')
-  return { version, fileName, sha512 }
-}
-
-// ── 核心下载逻辑（提取为独立函数，供 IPC 和自动下载共用） ──
-async function startDownload() {
-  if (_updating) {
-    log('startDownload: 已在下载中，跳过重复')
+export async function downloadUpdate() {
+  log('downloadUpdate 被调用')
+  if (_downloadStarted) {
+    log('已在下载中，跳过')
     return { success: false, msg: '已在下载中' }
   }
-
-  if (!updateInfo) {
-    log('startDownload: updateInfo 为空')
-    return { success: false, msg: '尚未检测到新版本' }
-  }
-
-  _updating = true
-
-  // 立即通知前端：正在连接，进度条先动起来（连接 GitHub 可能几秒到几十秒）
-  send({ status: 'downloading', percent: 0, version: updateInfo.version })
-
-  if (downloadPath) { try { unlinkSync(downloadPath) } catch {} }
-
-  const destPath = join(app.getPath('temp'), `crystal-update-${Date.now()}.exe`)
-  downloadPath = destPath
-
   try {
-    await downloadFile(updateInfo.downloadUrl, destPath, (percent) => {
-      send({ status: 'downloading', percent, version: updateInfo.version })
-    })
-    log('下载完成')
-
-    if (updateInfo.sha512) {
-      const actual = await computeSha512(destPath)
-      if (actual !== updateInfo.sha512) {
-        log(`SHA512 不匹配: 期望 ${updateInfo.sha512}，实际 ${actual}`)
-        try { unlinkSync(destPath) } catch {}
-        send({ status: 'error', message: '文件校验失败，请重试' })
-        return { success: false, msg: 'SHA512 mismatch' }
-      }
-      log('SHA512 校验通过')
-    }
-
-    send({ status: 'downloaded', version: updateInfo.version })
-    log('自动下载完成，已就绪')
-    _updating = false
+    autoUpdater.downloadUpdate()
     return { success: true }
   } catch (e) {
-    log('下载更新失败: ' + (e.message || e))
-    try { unlinkSync(downloadPath) } catch {}
-    downloadPath = null
-    send({ status: 'error', message: '下载失败: ' + (e.message || '未知错误') })
-    _updating = false
+    log(`downloadUpdate 失败: ${e.message}`)
     return { success: false, msg: e.message }
   }
 }
 
-// ── 主流程：检查更新（fetch → https.get 兜底） ──
-// 检测到新版本后自动开始后台下载，像微信一样静默
-const UPDATE_YML_URL = `${BASE_URL}/latest/download/latest.yml`
-
-export async function checkForUpdates() {
-  if (_updating) {
-    log('checkForUpdates: 已有检查/下载在进行，跳过')
-    return { status: 'busy' }
-  }
-  _updating = true
-  send({ status: 'checking' })
-  log('正在检查更新...')
-
-  // 尝试两次：fetch → https.get 兜底
-  let ymlText = null
-  let lastErr = null
-  for (let attempt = 0; attempt < 2; attempt++) {
-    try {
-      if (attempt === 0) {
-        // 第一轮：fetch
-        const res = await fetchWithTimeout(UPDATE_YML_URL)
-        if (!res.ok) throw new Error(`HTTP ${res.status}`)
-        ymlText = await res.text()
-      } else {
-        // 第二轮：https.get 兜底（更长超时）
-        ymlText = await httpsGet(UPDATE_YML_URL, TIMEOUT_MS * 2)
-      }
-      break // 成功则跳出循环
-    } catch (e) {
-      lastErr = e
-      log(`尝试 ${attempt + 1}/2 失败: ${e.message || e}`)
-    }
-  }
-
-  if (!ymlText) {
-    const msg = lastErr?.message || String(lastErr || '未知错误')
-    log('检查更新最终失败: ' + msg)
-    const friendly = msg.includes('超时') || msg.includes('timeout') || lastErr?.name === 'AbortError'
-      ? '检查超时，请检查网络连接后重试'
-      : '无法连接到 GitHub，请确认网络可访问 github.com'
-    send({ status: 'error', message: friendly })
-    _updating = false
-    return { status: 'error', message: msg }
-  }
-
+export async function installUpdate() {
+  log('installUpdate 被调用')
   try {
-    const remote = parseLatestYml(ymlText)
-    log(`远端版本: ${remote.version}, 当前版本: ${app.getVersion()}`)
-
-    if (!isNewer(remote.version, app.getVersion())) {
-      send({ status: 'not-available' })
-      log('已是最新版本')
-      _updating = false
-      return { status: 'not-available', version: app.getVersion() }
-    }
-
-    updateInfo = {
-      version: remote.version,
-      fileName: remote.fileName,
-      sha512: remote.sha512,
-      downloadUrl: `${BASE_URL}/download/v${remote.version}/${remote.fileName}`
-    }
-    log(`发现新版本: ${remote.version}，2 秒后开始自动下载...`)
-    send({ status: 'available', version: remote.version, releaseDate: new Date().toISOString() })
-
-    // ── 检测到新版后立即开始下载（不再等 2 秒，避免定时器不触发） ──
-    // startDownload 内部有 _updating 互斥锁，不会重复下载
-    log('自动下载触发')
-    startDownload() // 内部会发送 downloading 事件，前端立即显示进度
-
-    return { status: 'available', version: remote.version }
+    setImmediate(() => {
+      autoUpdater.quitAndInstall()
+    })
+    return { success: true }
   } catch (e) {
-    const msg = e.message || String(e)
-    log('解析更新信息失败: ' + msg)
-    send({ status: 'error', message: '解析更新信息失败: ' + msg })
-    _updating = false
-    return { status: 'error', message: msg }
+    log(`installUpdate 失败: ${e.message}`)
+    return { success: false, msg: e.message }
   }
 }
 
-// ── 初始化：注册 IPC ──
-// 全局暴露更新函数，供 Express 路由直接调用
+// ── 全局暴露，供 Express 路由调用 ──
 global.__checkForUpdates = checkForUpdates
 
+// ── 初始化：注册 IPC ──
 let _initialized = false
 export function initUpdater(win) {
   if (_initialized) {
     log('initUpdater 重复调用，跳过')
-    mainWindow = win // 更新窗口引用
+    mainWindow = win
     return
   }
   _initialized = true
@@ -285,29 +138,13 @@ export function initUpdater(win) {
     return true
   })
 
-  // IPC: 下载更新（手动触发，自动下载失败时兜底）
+  // IPC: 下载更新
   ipcMain.handle('download-update', async () => {
-    log('IPC: 手动触发下载')
-    const result = await startDownload()
-    return result
+    return await downloadUpdate()
   })
 
   // IPC: 安装更新
   ipcMain.handle('install-update', async () => {
-    if (!downloadPath) return { success: false, msg: '没有已下载的安装包' }
-    log('IPC: 安装更新')
-
-    try {
-      // /S = NSIS 静默安装（不弹安装界面），--updated 读取上次安装路径
-      spawn(downloadPath, ['/S', '--updated'], {
-        detached: true,
-        stdio: 'ignore'
-      }).unref()
-      app.quit()
-      return { success: true }
-    } catch (e) {
-      log('安装更新失败: ' + e.message)
-      return { success: false, msg: e.message }
-    }
+    return await installUpdate()
   })
 }
