@@ -1,12 +1,17 @@
 import { defineStore } from 'pinia'
 
 export const useSaveStatusStore = defineStore('saveStatus', {
-  state: () => ({
-    status: 'idle',         // 'idle' | 'saving' | 'saved' | 'failed'
-    lastSavedAt: null,      // Date 对象，最近一次保存成功的时间
-    lastError: null,        // 字符串，最近一次保存失败的错误信息
-    inflight: 0              // 进行中的写请求计数（>0 时显示 saving）
-  }),
+  state: () => {
+    // 从 localStorage 恢复上次保存时间
+    const saved = localStorage.getItem('crystal_lastSavedAt')
+    const lastSavedAt = saved ? new Date(Number(saved)) : null
+    return {
+      status: 'idle',         // 'idle' | 'saving' | 'saved' | 'failed'
+      lastSavedAt,            // Date 对象，最近一次保存成功的时间（跨重启保持）
+      lastError: null,        // 字符串，最近一次保存失败的错误信息
+      inflight: 0              // 进行中的写请求计数（>0 时显示 saving）
+    }
+  },
   getters: {
     isSaving: (state) => state.status === 'saving',
     isSaved: (state) => state.status === 'saved',
@@ -31,6 +36,7 @@ export const useSaveStatusStore = defineStore('saveStatus', {
       if (this.inflight === 0 && this.status !== 'failed') {
         this.status = 'saved'
         this.lastSavedAt = new Date()
+        localStorage.setItem('crystal_lastSavedAt', String(this.lastSavedAt.getTime()))
         // 不再自动重置 — 保持显示上次保存时间
       }
     },
