@@ -203,9 +203,7 @@ function generateReport() {
         : item.content
       const date = showDate && item.created_at ? item.created_at.slice(5, 10) : ''
       const prefix = date ? `${date} ` : ''
-      // 多行内容缩进展示
-      const indented = text.split('\n').map((l, i) => i === 0 ? `  [${status}] ${prefix}${l}` : `     ${l}`).join('\n')
-      lines.push(indented)
+      lines.push(`  [${status}] ${prefix}${text}`)
     }
     lines.push('')
   }
