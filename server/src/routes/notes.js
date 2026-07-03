@@ -4,6 +4,12 @@ import path from 'path'
 import fs from 'fs'
 import { fileURLToPath } from 'url'
 import { queryAll, queryOne, execute } from '../db.js'
+
+// 统一处理：将「未命名」标题转为空，前端自行决定如何显示
+function cleanNote(row) {
+  if (row && row.title === '未命名') row.title = ''
+  return row
+}
 import { exportNotesPackage, generateNoteTemplate, importNotesFromZip } from '../utils/export.js'
 import XLSX from 'xlsx'
 
@@ -187,7 +193,7 @@ router.get('/', (req, res) => {
     LIMIT ? OFFSET ?
   `, [...params, Number(pageSize), offset])
 
-  res.json({ code: 0, data: { list: rows, total, page: Number(page), pageSize: Number(pageSize) } })
+  res.json({ code: 0, data: { list: rows.map(cleanNote), total, page: Number(page), pageSize: Number(pageSize) } })
 })
 
 // 查询到期提醒（供 Electron 轮询）
@@ -201,7 +207,7 @@ router.get('/reminders', (_req, res) => {
       AND n.reminder_at <= datetime('now','localtime')
     ORDER BY n.reminder_at ASC
   `)
-  res.json({ code: 0, data: rows })
+  res.json({ code: 0, data: rows.map(cleanNote) })
 })
 
 // 标记已提醒
@@ -219,7 +225,7 @@ router.get('/:id', (req, res) => {
     WHERE n.id = ? AND n.is_deleted = 0
   `, [Number(req.params.id)])
   if (!row) return res.status(404).json({ code: 1, msg: '记录不存在' })
-  res.json({ code: 0, data: row })
+  res.json({ code: 0, data: cleanNote(row) })
 })
 
 // 新增
@@ -229,7 +235,7 @@ router.post('/', (req, res) => {
     INSERT INTO notes (title, content, customer, category_id, images, reminder_at, priority, status, is_pinned)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
   `, [
-    b.title || '未命名',
+    b.title || '',
     b.content || '',
     b.customer || '',
     b.category_id || 0,
