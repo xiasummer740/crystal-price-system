@@ -61,11 +61,11 @@ function summary(text, maxLen = 80) {
   return clean.slice(0, maxLen) + '…'
 }
 
-// 提取内容要点（前 3 行）
+// 提取内容要点（前 20 行，每行 300 字）— 足够完整展示规格参数
 function summarizeContent(content) {
   if (!content || !content.trim()) return ''
   const lines = content.split('\n').filter(l => l.trim())
-  return lines.slice(0, 3).map(l => summary(l, 60)).join(' → ')
+  return lines.slice(0, 20).map(l => summary(l, 300)).join('\n')
 }
 
 router.get('/', async (req, res) => {
