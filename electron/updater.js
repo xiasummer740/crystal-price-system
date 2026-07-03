@@ -533,17 +533,18 @@ export async function downloadUpdate() {
 
   log(`下载${resumeBytes > 0 ? '续传' : '开始'}: ${destPath}`)
 
-  // 获取 SHA512
+  // 先发 downloading 状态，让前端立即显示进度条（不等到 SHA512 取完）
+  send({
+    status: 'downloading',
+    percent: resumeBytes > 0 && release.size ? Math.round(resumeBytes / release.size * 100) : 0,
+    version: release.version
+  })
+
+  // 并行获取 SHA512（从 latest.yml）
   let sha512 = null
-  if (release.latestYmlUrl) {
-    try {
-      const yml = await fetchText(release.latestYmlUrl)
-      sha512 = parseSha512(yml)
-      log(`SHA512: ${sha512 ? '已获取' : '未找到校验值'}`)
-    } catch (e) {
-      log('获取 latest.yml 失败（跳过校验）: ' + e.message)
-    }
-  }
+  const shaPromise = release.latestYmlUrl
+    ? fetchText(release.latestYmlUrl).then(yml => { sha512 = parseSha512(yml); log(`SHA512: ${sha512 ? '已获取' : '未找到'}`) }).catch(e => log('获取 SHA512 失败（跳过）: ' + e.message))
+    : Promise.resolve()
 
   // 保存下载状态（如果从零开始）
   if (resumeBytes === 0) {
@@ -551,20 +552,15 @@ export async function downloadUpdate() {
       version: release.version,
       url: release.downloadUrl,
       destPath,
-      sha512,
       totalBytes: release.size || 0,
       downloadedBytes: 0,
       timestamp: Date.now()
     })
   }
 
-  send({
-    status: 'downloading',
-    percent: resumeBytes > 0 && release.size ? Math.round(resumeBytes / release.size * 100) : 0,
-    version: release.version
-  })
-
   try {
+    // 等 SHA512 取完（不阻塞状态发送）
+    await shaPromise
     let prevBytes = resumeBytes, prevTime = Date.now()
 
     await downloadFile(release.downloadUrl, destPath, (p) => {
