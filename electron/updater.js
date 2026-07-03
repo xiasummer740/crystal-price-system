@@ -16,6 +16,7 @@ const TIMEOUT_MS = 15000
 let mainWindow = null
 let updateInfo = null // { version, fileName, sha512, downloadUrl }
 let downloadPath = null
+let _updating = false // 互斥锁：防止重复检查/下载
 
 // ── 日志（userData 目录，避免权限问题） ──
 function log(msg) {
@@ -131,10 +132,17 @@ function parseLatestYml(text) {
 
 // ── 核心下载逻辑（提取为独立函数，供 IPC 和自动下载共用） ──
 async function startDownload() {
+  if (_updating) {
+    log('startDownload: 已在下载中，跳过重复')
+    return { success: false, msg: '已在下载中' }
+  }
+
   if (!updateInfo) {
     log('startDownload: updateInfo 为空')
     return { success: false, msg: '尚未检测到新版本' }
   }
+
+  _updating = true
 
   // 立即通知前端：正在连接，进度条先动起来（连接 GitHub 可能几秒到几十秒）
   send({ status: 'downloading', percent: 0, version: updateInfo.version })
@@ -163,12 +171,14 @@ async function startDownload() {
 
     send({ status: 'downloaded', version: updateInfo.version })
     log('自动下载完成，已就绪')
+    _updating = false
     return { success: true }
   } catch (e) {
     log('下载更新失败: ' + (e.message || e))
     try { unlinkSync(downloadPath) } catch {}
     downloadPath = null
     send({ status: 'error', message: '下载失败: ' + (e.message || '未知错误') })
+    _updating = false
     return { success: false, msg: e.message }
   }
 }
@@ -178,6 +188,11 @@ async function startDownload() {
 const UPDATE_YML_URL = `${BASE_URL}/latest/download/latest.yml`
 
 export async function checkForUpdates() {
+  if (_updating) {
+    log('checkForUpdates: 已有检查/下载在进行，跳过')
+    return { status: 'busy' }
+  }
+  _updating = true
   send({ status: 'checking' })
   log('正在检查更新...')
 
@@ -209,6 +224,7 @@ export async function checkForUpdates() {
       ? '检查超时，请检查网络连接后重试'
       : '无法连接到 GitHub，请确认网络可访问 github.com'
     send({ status: 'error', message: friendly })
+    _updating = false
     return { status: 'error', message: msg }
   }
 
@@ -219,6 +235,7 @@ export async function checkForUpdates() {
     if (!isNewer(remote.version, app.getVersion())) {
       send({ status: 'not-available' })
       log('已是最新版本')
+      _updating = false
       return { status: 'not-available', version: app.getVersion() }
     }
 
@@ -232,6 +249,8 @@ export async function checkForUpdates() {
     send({ status: 'available', version: remote.version, releaseDate: new Date().toISOString() })
 
     // ── 微信式：检测到新版后自动后台下载（延迟 2 秒，等 UI 先展示） ──
+    // _updating 在 startDownload 中管理，这里释放锁让后续点击能进 startDownload
+    _updating = false
     setTimeout(() => {
       log('自动下载触发')
       startDownload()
@@ -242,6 +261,7 @@ export async function checkForUpdates() {
     const msg = e.message || String(e)
     log('解析更新信息失败: ' + msg)
     send({ status: 'error', message: '解析更新信息失败: ' + msg })
+    _updating = false
     return { status: 'error', message: msg }
   }
 }
