@@ -40,6 +40,7 @@
           <div class="stat-card done"><span class="stat-num">{{ report.byStatus.done || 0 }}</span>已完成</div>
           <div class="stat-card doing"><span class="stat-num">{{ report.byStatus.in_progress || 0 }}</span>进行中</div>
           <div class="stat-card todo"><span class="stat-num">{{ report.byStatus.todo || 0 }}</span>待办</div>
+          <button class="report-btn" @click="showReport = true; generateReport()">📄 一键报告</button>
         </div>
 
         <!-- 要点 -->
@@ -78,6 +79,22 @@
         </div>
       </template>
     </div>
+
+    <!-- 一键报告弹出层 -->
+    <van-overlay :show="showReport" @click="showReport = false">
+      <div class="report-overlay" @click.stop>
+        <div class="report-header">
+          <h3>📄 {{ currentTabLabel }}报告</h3>
+          <div class="report-header-actions">
+            <button class="report-action-btn" @click="copyReport">📋 复制</button>
+            <button class="report-action-btn close" @click="showReport = false">✕</button>
+          </div>
+        </div>
+        <div class="report-body">
+          <pre class="report-text">{{ reportText }}</pre>
+        </div>
+      </div>
+    </van-overlay>
   </div>
 </template>
 
@@ -85,6 +102,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { http } from '../utils/api.js'
+import { showToast } from 'vant'
 
 const router = useRouter()
 
@@ -134,7 +152,7 @@ async function load() {
 
 onMounted(() => load())
 
-// 跳转到公司记事汇总页
+// ── 跳转到公司记事汇总页 ──
 const startDate = computed(() => (report.value?.start || '').slice(0, 10))
 const endDate = computed(() => (report.value?.end || '').slice(0, 10))
 function goCompanyReport(customer) {
@@ -142,6 +160,62 @@ function goCompanyReport(customer) {
   if (startDate.value) params.set('start', startDate.value)
   if (endDate.value) params.set('end', endDate.value)
   router.push('/reports/company/' + encodeURIComponent(customer) + '?' + params.toString())
+}
+
+// ── 一键报告生成 ──
+const showReport = ref(false)
+const reportText = ref('')
+const currentTabLabel = computed(() => tabs.find(t => t.key === range.value)?.label || range.value)
+
+const statusText = { todo: '待办', in_progress: '进行中', done: '已完成', follow_up: '跟进后续' }
+const statusIcon = { todo: '📋', in_progress: '🔄', done: '✅', follow_up: '⏳' }
+
+function generateReport() {
+  const r = report.value
+  if (!r) { reportText.value = '暂无数据'; return }
+
+  const lines = []
+  // 标题
+  const period = rangeLabel.value
+  lines.push(`【${currentTabLabel.value}报告】${period}`)
+  lines.push(`总计 ${r.total} 条 | ✅ 已完成 ${r.byStatus.done || 0} | 🔄 进行中 ${r.byStatus.in_progress || 0} | 📋 待办 ${r.byStatus.todo || 0}`)
+  lines.push('')
+
+  // 各客户
+  for (const group of r.byCustomer) {
+    const done = group.done || 0
+    const pending = group.pending || 0
+    lines.push(`▎${group.customer}（${group.count}条）`)
+    for (const item of group.items) {
+      const icon = statusIcon[item.status] || '📋'
+      const content = (item.title || '(无标题)') + (item.content ? ' — ' + item.content : '')
+      lines.push(`  ${icon} ${content}`)
+    }
+    lines.push('')
+  }
+
+  // 要点总结
+  if (r.highlights.length) {
+    lines.push(`📌 要点：${r.highlights.join('、')}`)
+  }
+
+  reportText.value = lines.join('\n')
+}
+
+async function copyReport() {
+  try {
+    await navigator.clipboard.writeText(reportText.value)
+    showToast('已复制到剪贴板')
+  } catch {
+    // 兜底
+    const ta = document.createElement('textarea')
+    ta.value = reportText.value
+    document.body.appendChild(ta)
+    ta.select()
+    document.execCommand('copy')
+    document.body.removeChild(ta)
+    showToast('已复制到剪贴板')
+  }
 }
 </script>
 
@@ -205,4 +279,21 @@ function goCompanyReport(customer) {
 .item-content{font-size:11px;color:#888;line-height:1.5}
 .item-ocr{font-size:11px;color:#722ed1;line-height:1.5;margin-top:2px;padding:3px 6px;background:#f9f0ff;border-radius:4px}
 .empty-state{padding:60px 0}
+
+/* 一键报告按钮 */
+.report-btn{display:inline-flex;align-items:center;gap:4px;padding:8px 14px;border-radius:8px;border:none;background:linear-gradient(135deg,#722ed1,#531dab);color:#fff;font-size:12px;cursor:pointer;font-family:inherit;transition:all .2s;white-space:nowrap;font-weight:500;min-width:80px;justify-content:center}
+.report-btn:hover{transform:translateY(-1px);box-shadow:0 4px 12px rgba(114,46,209,.35)}
+
+/* 报告弹出层 */
+.report-overlay{position:fixed;top:10vh;left:10%;right:10%;bottom:10vh;background:#fff;border-radius:12px;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 16px 48px rgba(0,0,0,.3)}
+@media(max-width:600px){.report-overlay{left:4%;right:4%;top:6vh;bottom:6vh}}
+.report-header{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid #f0f0f0;flex-shrink:0}
+.report-header h3{margin:0;font-size:15px;color:#323233}
+.report-header-actions{display:flex;gap:8px}
+.report-action-btn{padding:4px 12px;border-radius:4px;border:1px solid #d9d9d9;background:#fff;color:#555;font-size:12px;cursor:pointer;font-family:inherit;transition:all .15s}
+.report-action-btn:hover{border-color:#722ed1;color:#722ed1}
+.report-action-btn.close{border:none;font-size:16px;color:#999;padding:4px 8px}
+.report-action-btn.close:hover{color:#ee0a24}
+.report-body{flex:1;overflow-y:auto;padding:16px;background:#fafafa}
+.report-text{margin:0;white-space:pre-wrap;word-wrap:break-word;font-size:13px;line-height:1.8;color:#323233;font-family:'Microsoft YaHei','PingFang SC',sans-serif}
 </style>
