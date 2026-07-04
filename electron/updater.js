@@ -667,7 +667,14 @@ export async function installUpdate() {
     log('升级状态已记录: ' + currentVer + ' → ' + release.version)
   }
 
-  return runInstaller(exePath)
+  // 不自动安装（便携版/system 权限问题），打开目录让用户双击
+  log('打开下载目录，让用户手动安装: ' + destDir)
+  send({ status: 'downloaded', message: '安装包已下载，请关闭应用后双击安装' })
+  try {
+    const { execFile } = await import('child_process')
+    execFile('explorer', [destDir])
+  } catch {}
+  return { success: true, msg: '请手动安装', filePath: exePath }
 }
 
 // ── 全局暴露，供 Express 路由调用 ──

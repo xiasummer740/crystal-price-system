@@ -237,7 +237,7 @@
               <span v-if="updateStatus === 'checking'">⏳ 检查中...</span>
               <span v-else-if="updateStatus === 'available'">⏳ 准备下载...</span>
               <span v-else-if="updateStatus === 'downloading'">⏳ 下载中 {{ downloadSpeed }}</span>
-              <span v-else-if="updateStatus === 'downloaded'">⚡ 重启安装</span>
+              <span v-else-if="updateStatus === 'downloaded'">⬇ 打开下载文件夹</span>
               <span v-else-if="updateStatus === 'installing'">⏳ 正在安装...</span>
               <span v-else>🔍 检查更新</span>
             </button>
@@ -714,7 +714,7 @@ const updateStatusText = computed(() => {
   const t = {
     available: '发现新版本 v' + updateVersion.value + '，自动下载中...',
     downloading: updatePercent.value > 0 ? '已下载 ' + updatePercent.value + '%' : '正在连接下载服务器...',
-    downloaded: '新版本已就绪，点击「重启安装」立即更新',
+    downloaded: '安装包已下载，点击「打开下载文件夹」手动安装',
     installing: '正在安装更新，应用即将重启...',
     error: updateError.value || '检查失败',
     'not-available': '已是最新版本'
@@ -733,12 +733,10 @@ async function onUpdateClick() {
 
   // available / downloading 不需要用户操作
 
-  // 已下载 → 静默安装
+  // 已下载 → 打开文件夹让用户手动安装
   if (s === 'downloaded') {
-    updateStatus.value = 'installing'
-    // 给用户 500ms 看到「正在安装...」再关窗口
-    await new Promise(r => setTimeout(r, 500))
-    window.electronAPI?.installUpdate()
+    // 后端已自动打开下载目录，前端不需要额外操作
+    window.electronAPI?.openExternal?.(`file:///${encodeURIComponent(updateDownloadUrl.value ? 'C:\\Users\\' + '\\AppData\\Local\\Temp\\crystal-update' : '')}`)
     return
   }
 
