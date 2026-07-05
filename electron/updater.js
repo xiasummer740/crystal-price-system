@@ -77,7 +77,14 @@ export function initUpdater(window) {
 }
 
 function checkForUpdates() {
-  if (autoUpdater) autoUpdater.checkForUpdates().catch(() => {})
+  if (!autoUpdater) return
+  // 30s 超时兜底：electron-updater 在国内网络可能永久挂起
+  const timer = setTimeout(() => {
+    mainWindow?.webContents.send('update:error', { message: '检查超时，请检查网络' })
+  }, 30000)
+  autoUpdater.checkForUpdates()
+    .catch(() => {})
+    .finally(() => clearTimeout(timer))
 }
 
 function downloadUpdate() {
