@@ -232,38 +232,41 @@
         <div class="set-divider"></div>
         <h4>版本升级</h4>
         <div class="update-area">
-          <div class="update-btn-row">
-            <button class="update-btn" :class="{ checking: updateStatus === 'checking' || updateStatus === 'downloading' || updateStatus === 'installing' }" @click="onUpdateClick" :disabled="updateStatus === 'checking' || updateStatus === 'downloading' || updateStatus === 'installing'">
-              <span v-if="updateStatus === 'checking'">⏳ 检查中...</span>
-              <span v-else-if="updateStatus === 'available'">⬇ 下载更新 v{{ updateVersion }}</span>
-              <span v-else-if="updateStatus === 'downloading'">⏳ 下载中 {{ downloadSpeed }}</span>
-              <span v-else-if="updateStatus === 'downloaded'">⚡ 立即安装</span>
-              <span v-else-if="updateStatus === 'installing'">⏳ 正在安装...</span>
-              <span v-else>🔍 检查更新</span>
+          <template v-if="updateStatus === 'idle' || updateStatus === 'not-available' || updateStatus === 'error'">
+            <button class="update-btn" @click="onCheckUpdate">
+              🔍 检查更新
             </button>
             <a v-if="updateStatus === 'error'" :href="'https://github.com/xiasummer740/crystal-price-system/releases/latest'" target="_blank" class="manual-link" @click.stop>⬇ 手动下载</a>
-          </div>
+            <span class="update-status" v-if="updateStatus === 'not-available'">已是最新版本</span>
+          </template>
 
-          <!-- 下载进度条 -->
-          <div v-if="updateStatus === 'downloading' && updatePercent > 0" class="update-progress-wrap">
-            <van-progress :percentage="updatePercent" :stroke-width="6" color="#1989fa" track-color="#e8e8e8" :show-pivot="false" />
-            <span class="update-pct">{{ updatePercent }}%</span>
-          </div>
-          <div v-else-if="updateStatus === 'downloading'" class="update-progress-wrap">
-            <div class="update-progress-bar-indeterminate"></div>
-            <span class="update-pct">连接中...</span>
-          </div>
+          <template v-else-if="updateStatus === 'checking'">
+            <button class="update-btn checking" disabled>⏳ 检查中...</button>
+          </template>
 
-          <span class="update-status" v-if="updateStatusText">{{ updateStatusText }}</span>
-          <p class="set-hint">当前版本 v{{ appVersion }}</p>
+          <template v-else-if="updateStatus === 'available'">
+            <div class="update-info">发现新版本 v{{ updateVersion }}</div>
+            <button class="update-btn" @click="onDownloadUpdate">⬇ 下载更新</button>
+          </template>
 
-          <!-- 更新说明 -->
-          <div v-if="releaseNotes && updateStatus === 'available'" class="release-notes-wrap">
-            <div class="release-notes-title">📝 更新说明</div>
-            <pre class="release-notes-body">{{ releaseNotes }}</pre>
+          <template v-else-if="updateStatus === 'downloading'">
+            <button class="update-btn checking" disabled>⏳ 下载中</button>
+            <div v-if="updatePercent > 0" class="update-progress-wrap">
+              <van-progress :percentage="updatePercent" :stroke-width="6" color="#1989fa" track-color="#e8e8e8" :show-pivot="false" />
+              <span class="update-pct">{{ updatePercent }}%</span>
+            </div>
+          </template>
+
+          <template v-else-if="updateStatus === 'downloaded'">
+            <button class="update-btn" @click="onInstall">⚡ 立即安装</button>
+            <span class="update-status">下载完成，点击安装后应用将自动重启</span>
+          </template>
+
+          <template v-else-if="updateStatus === 'installing'">
+            <button class="update-btn checking" disabled>⏳ 正在安装...</button>
+          </template>
+
           </div>
-
-        </div>
 
         <div class="set-divider"></div>
         <h4>日志管理</h4>
@@ -690,128 +693,53 @@ function formatTime(iso) {
   return d.toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
 }
 
-// 在线升级状态（xnowpost 方式）
+// 在线升级（与 xnowpost 完全一致）
 const updateStatus = ref('idle') // idle | checking | available | downloading | downloaded | installing | not-available | error
 const updateVersion = ref('')
 const updatePercent = ref(0)
-const updateError = ref('')
-const releaseNotes = ref('')
 const downloadSpeed = ref('')
 
-function fmtSpeed(bytesPerSec) {
-  if (!bytesPerSec || bytesPerSec <= 0) return ''
-  if (bytesPerSec > 1024 * 1024) return (bytesPerSec / 1024 / 1024).toFixed(1) + 'MB/s'
-  if (bytesPerSec > 1024) return Math.round(bytesPerSec / 1024) + 'KB/s'
-  return Math.round(bytesPerSec) + 'B/s'
+function fmtSpeed(v) {
+  if (!v || v <= 0) return ''
+  return v > 1024 * 1024 ? (v / 1024 / 1024).toFixed(1) + 'MB/s'
+    : v > 1024 ? Math.round(v / 1024) + 'KB/s'
+    : Math.round(v) + 'B/s'
 }
 
-const updateStatusText = computed(() => {
-  if (updateStatus.value === 'checking') return ''
-  const t = {
-    available: '发现新版本 v' + updateVersion.value,
-    downloading: updatePercent.value > 0 ? '已下载 ' + updatePercent.value + '%' : '正在连接下载服务器...',
-    downloaded: '安装包已下载，点击「立即安装」自动重启',
-    installing: '正在安装更新，应用即将重启...',
-    error: updateError.value || '检查失败',
-    'not-available': '已是最新版本'
-  }
-  return t[updateStatus.value] || ''
-})
+const hasUpdate = computed(() =>
+  ['available', 'downloading', 'downloaded', 'installing'].includes(updateStatus.value)
+)
 
-async function onUpdateClick() {
-  const s = updateStatus.value
-  if (s === 'checking' || s === 'downloading' || s === 'installing') return
-
-  // 已下载 → 立即安装
-  if (s === 'downloaded') {
-    updateStatus.value = 'installing'
-    window.electronAPI?.installUpdate?.()
-    return
-  }
-
-  // 检测到新版本 → 开始下载
-  if (s === 'available') {
-    updateStatus.value = 'downloading'
-    window.electronAPI?.downloadUpdate?.()
-    // 60s 无进度超时
-    setTimeout(() => {
-      if (updateStatus.value === 'downloading' && updatePercent.value === 0) {
-        updateStatus.value = 'error'
-        updateError.value = '下载超时，请检查网络后重试，或点击下方「手动下载」'
-      }
-    }, 60000)
-    return
-  }
-
-  // idle / error / not-available → 检查更新
+// 检查更新
+function onCheckUpdate() {
+  if (updateStatus.value === 'checking') return
   updateStatus.value = 'checking'
-
-  if (window.electronAPI?.checkUpdate) {
-    window.electronAPI.checkUpdate()
-    // 30s 超时兜底
-    setTimeout(() => {
-      if (updateStatus.value === 'checking') {
-        updateStatus.value = 'error'
-        updateError.value = '检查超时，请重试或点击下方「手动下载」'
-      }
-    }, 30000)
-    return
-  }
-
-  // 浏览器模式：走 HTTP
-  try {
-    const r = await fetch('/api/check-update', { signal: AbortSignal.timeout(60000) })
-    const d = await r.json()
-    if (d.code === 0 && d.data) {
-      const st = d.data.status
-      if (st === 'available') {
-        updateStatus.value = 'downloading'
-        if (d.data.version) updateVersion.value = d.data.version
-        const pollTimer = setInterval(async () => {
-          try {
-            const pr = await fetch('/api/download-progress')
-            const pd = await pr.json()
-            if (pd.code === 0 && pd.data) {
-              if (pd.data.status === 'downloading' && pd.data.percent > 0) {
-                updatePercent.value = pd.data.percent
-                if (pd.data.bytesPerSecond) downloadSpeed.value = fmtSpeed(pd.data.bytesPerSecond)
-              } else if (pd.data.status === 'downloaded') {
-                updateStatus.value = 'downloaded'
-                updatePercent.value = 100
-                clearInterval(pollTimer)
-              } else if (pd.data.status === 'error') {
-                updateStatus.value = 'error'
-                updateError.value = pd.data.message || '下载失败'
-                clearInterval(pollTimer)
-              }
-            }
-          } catch {}
-        }, 2000)
-      } else {
-        updateStatus.value = st
-        if (d.data.message) updateError.value = d.data.message
-      }
-    } else {
-      throw new Error(d.msg || '检查失败')
-    }
-  } catch (e) {
-    updateStatus.value = 'error'
-    updateError.value = '网络错误: ' + (e.message || '请求失败')
-  }
+  window.electronAPI?.checkUpdate?.()
 }
 
-// 监听升级事件（独立通道，xnowpost 方式）
+// 下载更新
+function onDownloadUpdate() {
+  updateStatus.value = 'downloading'
+  window.electronAPI?.downloadUpdate?.()
+}
+
+// 立即安装
+function onInstall() {
+  updateStatus.value = 'installing'
+  window.electronAPI?.installUpdate?.()
+}
+
+// 事件监听
 if (window.electronAPI?.onUpdateAvailable) {
   window.electronAPI.onUpdateAvailable((info) => {
     updateStatus.value = 'available'
     if (info?.version) updateVersion.value = info.version
-    if (info?.releaseNotes) releaseNotes.value = info.releaseNotes
   })
   window.electronAPI.onUpdateNotAvailable(() => {
     updateStatus.value = 'not-available'
   })
   window.electronAPI.onUpdateProgress((progress) => {
-    if (updateStatus.value !== 'downloading') updateStatus.value = 'downloading'
+    updateStatus.value = 'downloading'
     if (progress?.percent !== undefined) updatePercent.value = progress.percent
     if (progress?.bytesPerSecond) downloadSpeed.value = fmtSpeed(progress.bytesPerSecond)
   })
@@ -821,28 +749,19 @@ if (window.electronAPI?.onUpdateAvailable) {
   })
   window.electronAPI.onUpdateError((err) => {
     updateStatus.value = 'error'
-    updateError.value = err?.message || '更新出错'
+    console.error('更新错误:', err?.message)
   })
 }
 
-// 是否有新版本（红点 badge）
-const hasUpdate = computed(() =>
-  ['available', 'downloading', 'downloaded', 'installing'].includes(updateStatus.value)
-)
-
-// 打开设置时自动检查更新
+// 打开设置时自动检查
 watch(showSettings, (open) => {
   if (open && ['idle', 'error', 'not-available'].includes(updateStatus.value)) {
-    onUpdateClick()
+    onCheckUpdate()
   }
 })
 
-// 暴露检查更新函数供主进程菜单调用
-window.__checkUpdate = () => {
-  if (['idle', 'not-available', 'error'].includes(updateStatus.value)) {
-    onUpdateClick()
-  }
-}
+// 暴露给主进程菜单
+window.__checkUpdate = onCheckUpdate
 
 onMounted(async () => {
   store.setFilter('page', 1)
@@ -1083,8 +1002,4 @@ onUnmounted(() => { if (clockTimer) clearInterval(clockTimer); if (colFilterTime
 .log-download-link:hover{text-decoration:underline}
 .log-content{flex:1;overflow-y:auto;padding:12px;font-size:11px;line-height:1.6;color:#333;background:#fcfcfc;margin:0;max-height:300px;white-space:pre-wrap;word-break:break-all;font-family:Consolas,'Courier New',monospace}
 
-/* 更新说明 */
-.release-notes-wrap{margin-top:8px;border:1px solid #e8e8e8;border-radius:6px;overflow:hidden}
-.release-notes-title{padding:6px 10px;font-size:12px;font-weight:600;background:#f5f5f5;border-bottom:1px solid #e8e8e8}
-.release-notes-body{margin:0;padding:8px 10px;font-size:11px;line-height:1.6;color:#555;max-height:120px;overflow-y:auto;white-space:pre-wrap;word-break:break-word}
 </style>
