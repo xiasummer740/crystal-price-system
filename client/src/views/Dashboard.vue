@@ -716,7 +716,21 @@ const hasUpdate = computed(() =>
 function onCheckUpdate() {
   if (updateStatus.value === 'checking') return
   updateStatus.value = 'checking'
+  console.log('[UPDATER] onCheckUpdate, electronAPI:', !!window.electronAPI, 'checkUpdate:', !!window.electronAPI?.checkUpdate)
   window.electronAPI?.checkUpdate?.()
+  // 15s 超时兜底
+  const checkTimer = setTimeout(() => {
+    if (updateStatus.value === 'checking') {
+      updateStatus.value = 'error'
+      updateError.value = '检查超时，请检查网络后重试'
+    }
+  }, 15000)
+  // 任何事件都能清除超时
+  const clearTimer = () => clearTimeout(checkTimer)
+  const unsubs = []
+  if (window.electronAPI?.onUpdateAvailable) unsubs.push(window.electronAPI.onUpdateAvailable(clearTimer))
+  if (window.electronAPI?.onUpdateNotAvailable) unsubs.push(window.electronAPI.onUpdateNotAvailable(clearTimer))
+  if (window.electronAPI?.onUpdateError) unsubs.push(window.electronAPI.onUpdateError(clearTimer))
 }
 
 // 下载更新
@@ -755,12 +769,7 @@ if (window.electronAPI?.onUpdateAvailable) {
   })
 }
 
-// 打开设置时自动检查
-watch(showSettings, (open) => {
-  if (open && ['idle', 'error', 'not-available'].includes(updateStatus.value)) {
-    onCheckUpdate()
-  }
-})
+// 打开设置时重置状态（不自动检查，等用户点按钮）
 
 // 暴露给主进程菜单
 window.__checkUpdate = onCheckUpdate

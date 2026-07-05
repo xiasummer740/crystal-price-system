@@ -4,29 +4,37 @@
 // autoInstallOnAppQuit: true — 下载完成后退出时自动安装
 
 import { createRequire } from 'module'
+import { appendFileSync } from 'fs'
 const _require = createRequire(import.meta.url)
 
 let autoUpdater = null
 let mainWindow = null
 let initialized = false
 
+const LOG = (msg) => {
+  try { appendFileSync('C:\\Users\\Administrator\\AppData\\Local\\Temp\\crystal-updater-debug.log', `[${new Date().toISOString()}] ${msg}\n`) } catch {}
+}
+
 export function initUpdater(window) {
   if (initialized) return
   mainWindow = window
   initialized = true
 
+  LOG('initUpdater called')
+
   try {
     const mod = _require('electron-updater')
     autoUpdater = mod.autoUpdater
-    if (!autoUpdater) { console.error('electron-updater: autoUpdater not found'); return }
+    if (!autoUpdater) { LOG('autoUpdater not found'); return }
+    LOG(`electron-updater loaded, isPackaged=${globalThis?.process?.versions?.electron ? 'yes' : 'no'}`)
+    LOG(`forceDevUpdateConfig set to true`)
 
     autoUpdater.autoDownload = false
     autoUpdater.autoInstallOnAppQuit = true
     autoUpdater.forceDevUpdateConfig = true
 
-    autoUpdater.checkForUpdates().catch(() => {})
-
     autoUpdater.on('update-available', (info) => {
+      LOG(`EVENT: update-available v${info.version}`)
       mainWindow?.webContents.send('update:available', {
         version: info.version,
         releaseDate: info.releaseDate,
@@ -36,6 +44,7 @@ export function initUpdater(window) {
     })
 
     autoUpdater.on('update-not-available', () => {
+      LOG('EVENT: update-not-available')
       mainWindow?.webContents.send('update:not-available')
     })
 
@@ -53,10 +62,12 @@ export function initUpdater(window) {
     })
 
     autoUpdater.on('error', (err) => {
-      console.error('自动更新错误:', err.message)
+      LOG(`EVENT: error - ${err.message}`)
     })
+
+    LOG('initUpdater done, listeners registered')
   } catch (err) {
-    console.error('electron-updater 加载失败:', err.message)
+    LOG(`initUpdater CRASH: ${err.message}`)
   }
 }
 
@@ -69,13 +80,17 @@ export function quitAndInstall() {
 }
 
 export function checkForUpdates() {
+  LOG(`checkForUpdates called, autoUpdater=${!!autoUpdater}`)
   if (!autoUpdater) {
     mainWindow?.webContents.send('update:error', { message: '更新模块未就绪' })
     return
   }
-  autoUpdater.checkForUpdates().catch(err => {
+  LOG('calling autoUpdater.checkForUpdates()...')
+  autoUpdater.checkForUpdates().then(result => {
+    LOG(`checkForUpdates resolved: ${JSON.stringify(result?.updateInfo?.version || 'null')}`)
+  }).catch(err => {
     const msg = err?.message || String(err)
-    console.error('检查更新失败:', msg)
+    LOG(`checkForUpdates ERROR: ${msg}`)
     mainWindow?.webContents.send('update:error', { message: msg })
   })
 }

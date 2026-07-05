@@ -348,7 +348,8 @@ function createWindow(port) {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
-      preload: path.join(__dirname, 'preload.js')
+      sandbox: false,
+      preload: path.join(__dirname, 'preload.cjs')
     }
   })
 
@@ -467,7 +468,8 @@ function openNotesWindow(port) {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
-      preload: path.join(__dirname, 'preload.js')
+      sandbox: false,
+      preload: path.join(__dirname, 'preload.cjs')
     }
   })
   notesWindow.setMenuBarVisibility(false)
