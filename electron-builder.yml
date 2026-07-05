@@ -34,3 +34,8 @@ nsis:
   shortcutName: 晶振报价管理系统
   uninstallDisplayName: 晶振报价管理系统
   include: build/installer.nsh
+
+publish:
+  - provider: github
+    owner: xiasummer740
+    repo: crystal-price-system

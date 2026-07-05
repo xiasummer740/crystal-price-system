@@ -5,7 +5,7 @@ import http from 'http'
 import { execSync } from 'child_process'
 import { fileURLToPath } from 'url'
 import { loadUserConfig, saveUserConfig, loadFullConfig, saveFullConfig } from './config.js'
-import { initUpdater, startUpgradeHealthCheck } from './updater.js'
+import { initUpdater } from './updater.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const BASE_PORT = 3266
@@ -569,7 +569,6 @@ app.whenReady().then(async () => {
     mainWindow.once('ready-to-show', () => {
       setTimeout(() => { splash.close() }, 400)
       initUpdater(mainWindow)
-      startUpgradeHealthCheck()
     })
     // 启动记事提醒轮询
     startReminderPolling(port)
@@ -587,7 +586,6 @@ app.whenReady().then(async () => {
           mainWindow.once('ready-to-show', () => {
             splash.close()
             initUpdater(mainWindow)
-            startUpgradeHealthCheck()
           })
         } catch (e2) {
           splash.close()

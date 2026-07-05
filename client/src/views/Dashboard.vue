@@ -233,11 +233,11 @@
         <h4>版本升级</h4>
         <div class="update-area">
           <div class="update-btn-row">
-            <button class="update-btn" :class="{ checking: updateStatus === 'checking' || updateStatus === 'downloading' }" @click="onUpdateClick" :disabled="updateStatus === 'checking' || updateStatus === 'downloading' || updateStatus === 'available' || updateStatus === 'installing'">
+            <button class="update-btn" :class="{ checking: updateStatus === 'checking' || updateStatus === 'downloading' || updateStatus === 'installing' }" @click="onUpdateClick" :disabled="updateStatus === 'checking' || updateStatus === 'downloading' || updateStatus === 'installing'">
               <span v-if="updateStatus === 'checking'">⏳ 检查中...</span>
-              <span v-else-if="updateStatus === 'available'">⏳ 准备下载...</span>
+              <span v-else-if="updateStatus === 'available'">⬇ 下载更新 v{{ updateVersion }}</span>
               <span v-else-if="updateStatus === 'downloading'">⏳ 下载中 {{ downloadSpeed }}</span>
-              <span v-else-if="updateStatus === 'downloaded'">⬇ 打开下载文件夹</span>
+              <span v-else-if="updateStatus === 'downloaded'">⚡ 立即安装</span>
               <span v-else-if="updateStatus === 'installing'">⏳ 正在安装...</span>
               <span v-else>🔍 检查更新</span>
             </button>
@@ -257,15 +257,12 @@
           <span class="update-status" v-if="updateStatusText">{{ updateStatusText }}</span>
           <p class="set-hint">当前版本 v{{ appVersion }}</p>
 
-          <!-- 回滚按钮（仅升级后可回滚时显示） -->
-          <div v-if="rollbackVersion && (updateStatus === 'idle' || updateStatus === 'not-available' || updateStatus === 'error')" style="margin-top:8px">
-            <a class="manual-link" style="font-size:12px" @click.stop="onRollbackClick">↩ 回滚到 v{{ rollbackVersion }}</a>
+          <!-- 更新说明 -->
+          <div v-if="releaseNotes && updateStatus === 'available'" class="release-notes-wrap">
+            <div class="release-notes-title">📝 更新说明</div>
+            <pre class="release-notes-body">{{ releaseNotes }}</pre>
           </div>
-          <div v-if="updateStatus === 'rollback-downloading'" class="update-progress-wrap" style="margin-top:4px">
-            <van-progress :percentage="rollbackPercent" :stroke-width="6" color="#fa8c16" track-color="#e8e8e8" :show-pivot="false" />
-            <span class="update-pct" style="color:#fa8c16">{{ rollbackPercent }}% {{ rollbackSpeed }}</span>
-          </div>
-          <span v-if="updateStatus === 'rollback-downloaded'" class="update-status" style="color:#fa8c16">回滚包已下载，正在安装...</span>
+
         </div>
 
         <div class="set-divider"></div>
@@ -693,14 +690,14 @@ function formatTime(iso) {
   return d.toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
 }
 
-// 在线升级状态
+// 在线升级状态（xnowpost 方式）
 const updateStatus = ref('idle') // idle | checking | available | downloading | downloaded | installing | not-available | error
 const updateVersion = ref('')
 const updatePercent = ref(0)
 const updateError = ref('')
+const releaseNotes = ref('')
 const downloadSpeed = ref('')
 
-// 直接格式化后端传来的下载速度（bytes/s）
 function fmtSpeed(bytesPerSec) {
   if (!bytesPerSec || bytesPerSec <= 0) return ''
   if (bytesPerSec > 1024 * 1024) return (bytesPerSec / 1024 / 1024).toFixed(1) + 'MB/s'
@@ -708,13 +705,12 @@ function fmtSpeed(bytesPerSec) {
   return Math.round(bytesPerSec) + 'B/s'
 }
 
-// 状态文本（独立显示在按钮下方）
 const updateStatusText = computed(() => {
   if (updateStatus.value === 'checking') return ''
   const t = {
-    available: '发现新版本 v' + updateVersion.value + '，自动下载中...',
+    available: '发现新版本 v' + updateVersion.value,
     downloading: updatePercent.value > 0 ? '已下载 ' + updatePercent.value + '%' : '正在连接下载服务器...',
-    downloaded: '安装包已下载，点击「打开下载文件夹」手动安装',
+    downloaded: '安装包已下载，点击「立即安装」自动重启',
     installing: '正在安装更新，应用即将重启...',
     error: updateError.value || '检查失败',
     'not-available': '已是最新版本'
@@ -722,42 +718,34 @@ const updateStatusText = computed(() => {
   return t[updateStatus.value] || ''
 })
 
-const updateDownloadUrl = ref('')
-const rollbackVersion = ref('')
-const rollbackPercent = ref(0)
-const rollbackSpeed = ref('')
-
 async function onUpdateClick() {
   const s = updateStatus.value
-  if (s === 'checking' || s === 'downloading' || s === 'available' || s === 'installing') return
+  if (s === 'checking' || s === 'downloading' || s === 'installing') return
 
-  // available / downloading 不需要用户操作
-
-  // 已下载 → 打开文件夹让用户手动安装
+  // 已下载 → 立即安装
   if (s === 'downloaded') {
-    // 后端已自动打开下载目录，前端不需要额外操作
-    window.electronAPI?.openExternal?.(`file:///${encodeURIComponent(updateDownloadUrl.value ? 'C:\\Users\\' + '\\AppData\\Local\\Temp\\crystal-update' : '')}`)
+    updateStatus.value = 'installing'
+    window.electronAPI?.installUpdate?.()
+    return
+  }
+
+  // 检测到新版本 → 开始下载
+  if (s === 'available') {
+    updateStatus.value = 'downloading'
+    window.electronAPI?.downloadUpdate?.()
     return
   }
 
   // idle / error / not-available → 检查更新
   updateStatus.value = 'checking'
 
-  // Electron 模式：IPC 检查更新 + 主动触发下载
   if (window.electronAPI?.checkUpdate) {
     window.electronAPI.checkUpdate()
-    // 不管 IPC 事件通不通，3 秒后直接叫后端开始下载
+    // 30s 超时兜底
     setTimeout(() => {
-      if (updateStatus.value === 'available' || updateStatus.value === 'checking') {
-        updateStatus.value = 'downloading'
-        window.electronAPI?.downloadUpdate?.()
-      }
-    }, 3000)
-    // 30s 总超时
-    setTimeout(() => {
-      if (updateStatus.value === 'checking' || updateStatus.value === 'available' || (updateStatus.value === 'downloading' && updatePercent.value === 0)) {
+      if (updateStatus.value === 'checking') {
         updateStatus.value = 'error'
-        updateError.value = '检查超时，请检查网络后重试，或点击下方「手动下载」'
+        updateError.value = '检查超时，请重试或点击下方「手动下载」'
       }
     }, 30000)
     return
@@ -771,11 +759,7 @@ async function onUpdateClick() {
       const st = d.data.status
       if (st === 'available') {
         updateStatus.value = 'downloading'
-        if (d.data.version) {
-          updateVersion.value = d.data.version
-          updateDownloadUrl.value = `https://github.com/xiasummer740/crystal-price-system/releases/download/v${d.data.version}/crystal-price-system-setup-${d.data.version}.exe`
-        }
-        // 轮询下载进度（HTTP 模式收不到 IPC 事件）
+        if (d.data.version) updateVersion.value = d.data.version
         const pollTimer = setInterval(async () => {
           try {
             const pr = await fetch('/api/download-progress')
@@ -783,7 +767,7 @@ async function onUpdateClick() {
             if (pd.code === 0 && pd.data) {
               if (pd.data.status === 'downloading' && pd.data.percent > 0) {
                 updatePercent.value = pd.data.percent
-                if (pd.data.speed) downloadSpeed.value = fmtSpeed(pd.data.speed)
+                if (pd.data.bytesPerSecond) downloadSpeed.value = fmtSpeed(pd.data.bytesPerSecond)
               } else if (pd.data.status === 'downloaded') {
                 updateStatus.value = 'downloaded'
                 updatePercent.value = 100
@@ -798,7 +782,6 @@ async function onUpdateClick() {
         }, 2000)
       } else {
         updateStatus.value = st
-        if (d.data.version) updateVersion.value = d.data.version
         if (d.data.message) updateError.value = d.data.message
       }
     } else {
@@ -810,117 +793,46 @@ async function onUpdateClick() {
   }
 }
 
-// 回滚到上一版本
-async function onRollbackClick() {
-  if (!window.electronAPI?.rollbackUpdate) return
-  rollbackPercent.value = 0
-  rollbackSpeed.value = ''
-  updateStatus.value = 'rollback-downloading'
-  await window.electronAPI.rollbackUpdate()
-}
-
-// 监听升级状态事件（IPC 通道）
-let _downloadStartTimer = null
-let _downloadFallbackTimer = null
-if (window.electronAPI?.onUpdateStatus) {
-  window.electronAPI.onUpdateStatus((data) => {
-    const prevStatus = updateStatus.value
-    updateStatus.value = data.status
-
-    // 收到 available → 后端已自动触发下载，立即显示进度条（不等后端发 downloading 事件）
-    if (data.status === 'available') {
-      updateStatus.value = 'downloading'
-      updatePercent.value = 0
-      if (data.version) {
-        updateVersion.value = data.version
-        updateDownloadUrl.value = `https://github.com/xiasummer740/crystal-price-system/releases/download/v${data.version}/crystal-price-system-setup-${data.version}.exe`
-      }
-      // 兜底：20s 还没进度 → 前端主动触发下载（防止后端没自动开始）
-      clearTimeout(_downloadStartTimer)
-      clearTimeout(_downloadFallbackTimer)
-      _downloadStartTimer = setTimeout(async () => {
-        if (updateStatus.value === 'downloading' && updatePercent.value === 0) {
-          updateError.value = '等待下载响应...'
-          const result = await window.electronAPI?.downloadUpdate?.()
-          if (result && result.msg === '已在下载中') {
-            // 后端其实在下，只是还没发进度，再等 20s
-            setTimeout(() => {
-              if (updateStatus.value === 'downloading' && updatePercent.value === 0) {
-                updateStatus.value = 'error'
-                updateError.value = '下载启动超时，请重试或点击下方「手动下载」'
-              }
-            }, 20000)
-          } else if (!result || !result.success) {
-            // 下载启动失败
-            updateStatus.value = 'error'
-            updateError.value = result?.msg || '下载启动失败，请重试'
-          }
-          // result.success === true → 下载已开始，等进度推送
-        }
-      }, 20000)
-      return
-    }
-    // downloading 或 downloaded → 清除超时
-    if (data.status === 'downloading' || data.status === 'downloaded' || data.status === 'error') {
-      clearTimeout(_downloadStartTimer)
-      clearTimeout(_downloadFallbackTimer)
-    }
-
-    // 回滚进度更新走独立变量
-    if (data.status === 'rollback-downloading') {
-      if (data.percent !== undefined) rollbackPercent.value = data.percent
-      if (data.speed !== undefined) rollbackSpeed.value = fmtSpeed(data.speed)
-      if (data.version) rollbackVersion.value = data.version
-      return
-    }
-    if (data.status === 'rollback-downloaded' || data.status === 'rollback-installing') {
-      return
-    }
-
-    if (data.version) {
-      updateVersion.value = data.version
-      updateDownloadUrl.value = `https://github.com/xiasummer740/crystal-price-system/releases/download/v${data.version}/crystal-price-system-setup-${data.version}.exe`
-    }
-    if (data.percent !== undefined) {
-      updatePercent.value = data.percent
-    }
-    if (data.speed !== undefined) {
-      downloadSpeed.value = fmtSpeed(data.speed)
-    }
-    if (data.message) updateError.value = data.message
-
-    // 兜底已废弃：available 直接显示 downloading，不再等 3s
+// 监听升级事件（独立通道，xnowpost 方式）
+if (window.electronAPI?.onUpdateAvailable) {
+  window.electronAPI.onUpdateAvailable((info) => {
+    updateStatus.value = 'available'
+    if (info?.version) updateVersion.value = info.version
+    if (info?.releaseNotes) releaseNotes.value = info.releaseNotes
+  })
+  window.electronAPI.onUpdateNotAvailable(() => {
+    updateStatus.value = 'not-available'
+  })
+  window.electronAPI.onUpdateProgress((progress) => {
+    if (updateStatus.value !== 'downloading') updateStatus.value = 'downloading'
+    if (progress?.percent !== undefined) updatePercent.value = progress.percent
+    if (progress?.bytesPerSecond) downloadSpeed.value = fmtSpeed(progress.bytesPerSecond)
+  })
+  window.electronAPI.onUpdateDownloaded(() => {
+    updateStatus.value = 'downloaded'
+    updatePercent.value = 100
+  })
+  window.electronAPI.onUpdateError((err) => {
+    updateStatus.value = 'error'
+    updateError.value = err?.message || '更新出错'
   })
 }
 
-// 是否有新版本（用于红点 badge）
+// 是否有新版本（红点 badge）
 const hasUpdate = computed(() =>
   ['available', 'downloading', 'downloaded', 'installing'].includes(updateStatus.value)
 )
 
-// 打开设置时自动检查更新（避免用户手动刷新）
+// 打开设置时自动检查更新
 watch(showSettings, (open) => {
-  if (open && (updateStatus.value === 'idle' || updateStatus.value === 'error' || updateStatus.value === 'not-available')) {
+  if (open && ['idle', 'error', 'not-available'].includes(updateStatus.value)) {
     onUpdateClick()
   }
 })
 
-// 检查是否有可回滚的版本
-async function checkRollbackState() {
-  if (!window.electronAPI?.getUpgradeState) return
-  try {
-    const st = await window.electronAPI.getUpgradeState()
-    if (st && st.canRollback) {
-      rollbackVersion.value = st.oldVersion
-    }
-  } catch {}
-}
-// 等待 IPC 就绪后查一次
-setTimeout(checkRollbackState, 2000)
-
 // 暴露检查更新函数供主进程菜单调用
 window.__checkUpdate = () => {
-  if (updateStatus.value === 'idle' || updateStatus.value === 'not-available' || updateStatus.value === 'error') {
+  if (['idle', 'not-available', 'error'].includes(updateStatus.value)) {
     onUpdateClick()
   }
 }
@@ -930,10 +842,7 @@ onMounted(async () => {
   await store.loadMetaOptions()
   await store.loadGroupedList()
   localIp.value = window.electronAPI ? window.electronAPI.getLanIp() : (window.location.hostname || '127.0.0.1')
-  // 延时触发一次更新检查（等 HTTP 服务就绪）
-  setTimeout(() => { try { onUpdateClick() } catch {} }, 8000)
 })
-
 // 实时时钟（每秒刷新）
 const clockTime = ref('')
 const clockDate = ref('')
@@ -1166,4 +1075,9 @@ onUnmounted(() => { if (clockTimer) clearInterval(clockTimer); if (colFilterTime
 .log-download-link{color:var(--color-primary);text-decoration:none;font-weight:500}
 .log-download-link:hover{text-decoration:underline}
 .log-content{flex:1;overflow-y:auto;padding:12px;font-size:11px;line-height:1.6;color:#333;background:#fcfcfc;margin:0;max-height:300px;white-space:pre-wrap;word-break:break-all;font-family:Consolas,'Courier New',monospace}
+
+/* 更新说明 */
+.release-notes-wrap{margin-top:8px;border:1px solid #e8e8e8;border-radius:6px;overflow:hidden}
+.release-notes-title{padding:6px 10px;font-size:12px;font-weight:600;background:#f5f5f5;border-bottom:1px solid #e8e8e8}
+.release-notes-body{margin:0;padding:8px 10px;font-size:11px;line-height:1.6;color:#555;max-height:120px;overflow-y:auto;white-space:pre-wrap;word-break:break-word}
 </style>

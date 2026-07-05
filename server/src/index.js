@@ -184,37 +184,22 @@ app.get('/api/open-data-folder', (_req, res) => {
   res.json({ code: 0 })
 })
 
-// 版本更新检查 HTTP 接口（给渲染进程直连，绕过 IPC）
+// 版本更新检查 HTTP 接口（浏览器模式后备）
 app.get('/api/check-update', async (req, res) => {
   const fn = global.__checkForUpdates
-  const dn = global.__downloadUpdate
-  if (!fn) return res.json({ code: 1, msg: '更新模块未就绪', errorDetail: 'global.__checkForUpdates 未定义' })
+  if (!fn) return res.json({ code: 1, msg: '更新模块未就绪' })
   try {
-    const start = Date.now()
     const result = await fn()
-    // 找到新版本时自动触发下载（不管前端走 HTTP 还是 IPC）
-    if (result.status === 'available' && dn) {
-      dn().catch(e => console.error('自动下载错误:', e.message))
-    }
-    res.json({ code: 0, data: result, elapsed: Date.now() - start })
+    res.json({ code: 0, data: result })
   } catch (e) {
     res.json({ code: 1, msg: e.message, data: { status: 'error', message: e.message } })
   }
 })
 
-// 下载进度查询接口（给走 HTTP 的前端轮询用）
+// 下载进度查询接口
 app.get('/api/download-progress', (req, res) => {
-  const dp = global.__downloadProgress || { status: 'idle', percent: 0, version: '', speed: 0 }
+  const dp = global.__downloadProgress || { status: 'idle', percent: 0, version: '', bytesPerSecond: 0 }
   res.json({ code: 0, data: dp })
-})
-
-// 更新诊断状态接口
-app.get('/api/update-diagnose', (req, res) => {
-  res.json({
-    hasFn: !!global.__checkForUpdates,
-    node: process.version,
-    electron: process.versions?.electron || 'unknown'
-  })
 })
 
 // 全局错误捕获中间件（必须在所有路由之后）
