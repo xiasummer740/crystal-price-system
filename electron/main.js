@@ -5,7 +5,7 @@ import http from 'http'
 import { execSync } from 'child_process'
 import { fileURLToPath } from 'url'
 import { loadUserConfig, saveUserConfig, loadFullConfig, saveFullConfig } from './config.js'
-import { initUpdater } from './updater.js'
+import { initUpdater, downloadUpdate, quitAndInstall, checkForUpdates } from './updater.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const BASE_PORT = 3266
@@ -542,6 +542,11 @@ function startReminderPolling(port) {
 
 // 浏览器打开外部链接（供渲染进程调用）
 ipcMain.handle('open-external', (_, url) => { shell.openExternal(url) })
+
+// === 自动更新 IPC（与 xnowpost 一致） ===
+ipcMain.handle('update:check', () => { checkForUpdates(); return true })
+ipcMain.handle('update:download', () => { downloadUpdate() })
+ipcMain.handle('update:install', () => { quitAndInstall() })
 
 app.whenReady().then(async () => {
   log('App ready')
