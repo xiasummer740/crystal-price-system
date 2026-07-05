@@ -26,10 +26,9 @@ portable:
   artifactName: 晶振报价管理系统-便携版-v${version}.exe
 nsis:
   artifactName: crystal-price-system-setup-${version}.${ext}
-  oneClick: false
+  oneClick: true
   perMachine: false
   allowElevation: false
-  allowToChangeInstallationDirectory: true
   createDesktopShortcut: true
   createStartMenuShortcut: true
   shortcutName: 晶振报价管理系统
