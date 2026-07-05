@@ -24,7 +24,7 @@ win:
 portable:
   artifactName: 晶振报价管理系统-便携版-v${version}.exe
 nsis:
-  artifactName: 晶振报价管理系统-安装版-v${version}.exe
+  artifactName: crystal-price-system-setup-${version}.${ext}
   oneClick: false
   perMachine: false
   allowElevation: false
