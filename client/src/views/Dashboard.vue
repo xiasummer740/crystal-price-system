@@ -248,13 +248,21 @@
           <template v-else-if="updateStatus === 'available'">
             <div class="update-info">发现新版本 v{{ updateVersion }}</div>
             <button class="update-btn" @click="onDownloadUpdate">⬇ 下载更新</button>
+            <div v-if="releaseNotes" class="rn-wrap">
+              <div class="rn-toggle" @click="showRn = !showRn">{{ showRn ? '▼' : '▶' }} 更新说明</div>
+              <pre v-if="showRn" class="rn-body">{{ releaseNotes }}</pre>
+            </div>
           </template>
 
           <template v-else-if="updateStatus === 'downloading'">
-            <button class="update-btn checking" disabled>⏳ 下载中</button>
-            <div v-if="updatePercent > 0" class="update-progress-wrap">
-              <van-progress :percentage="updatePercent" :stroke-width="6" color="#1989fa" track-color="#e8e8e8" :show-pivot="false" />
-              <span class="update-pct">{{ updatePercent }}%</span>
+            <div class="dl-info">
+              <span class="dl-icon">⏳</span>
+              <span class="dl-status">下载中</span>
+              <span v-if="downloadSpeed" class="dl-speed">{{ downloadSpeed }}</span>
+            </div>
+            <div class="dl-bar-wrap">
+              <div class="dl-bar-fill" :style="{ width: (updatePercent > 0 ? updatePercent : 0) + '%' }"></div>
+              <span class="dl-pct">{{ updatePercent > 0 ? updatePercent + '%' : '连接中...' }}</span>
             </div>
           </template>
 
@@ -700,6 +708,8 @@ const updateVersion = ref('')
 const updatePercent = ref(0)
 const downloadSpeed = ref('')
 const updateError = ref('')
+const releaseNotes = ref('')
+const showRn = ref(false)
 
 function fmtSpeed(v) {
   if (!v || v <= 0) return ''
@@ -716,7 +726,6 @@ const hasUpdate = computed(() =>
 function onCheckUpdate() {
   if (updateStatus.value === 'checking') return
   updateStatus.value = 'checking'
-  console.log('[UPDATER] onCheckUpdate, electronAPI:', !!window.electronAPI, 'checkUpdate:', !!window.electronAPI?.checkUpdate)
   window.electronAPI?.checkUpdate?.()
   // 15s 超时兜底
   const checkTimer = setTimeout(() => {
@@ -750,6 +759,7 @@ if (window.electronAPI?.onUpdateAvailable) {
   window.electronAPI.onUpdateAvailable((info) => {
     updateStatus.value = 'available'
     if (info?.version) updateVersion.value = info.version
+    if (info?.releaseNotes) releaseNotes.value = info.releaseNotes
   })
   window.electronAPI.onUpdateNotAvailable(() => {
     updateStatus.value = 'not-available'
@@ -779,6 +789,8 @@ onMounted(async () => {
   await store.loadMetaOptions()
   await store.loadGroupedList()
   localIp.value = window.electronAPI ? window.electronAPI.getLanIp() : (window.location.hostname || '127.0.0.1')
+  // 启动后自动检查更新（小红点提示）
+  setTimeout(() => { if (['idle'].includes(updateStatus.value)) onCheckUpdate() }, 8000)
 })
 // 实时时钟（每秒刷新）
 const clockTime = ref('')
@@ -1012,5 +1024,22 @@ onUnmounted(() => { if (clockTimer) clearInterval(clockTimer); if (colFilterTime
 .log-download-link{color:var(--color-primary);text-decoration:none;font-weight:500}
 .log-download-link:hover{text-decoration:underline}
 .log-content{flex:1;overflow-y:auto;padding:12px;font-size:11px;line-height:1.6;color:#333;background:#fcfcfc;margin:0;max-height:300px;white-space:pre-wrap;word-break:break-all;font-family:Consolas,'Courier New',monospace}
+
+
+/* 更新说明 */
+.rn-wrap{margin-top:6px;border:1px solid #e8e8e8;border-radius:6px;overflow:hidden}
+.rn-toggle{padding:5px 8px;font-size:12px;cursor:pointer;background:#fafafa;user-select:none}
+.rn-toggle:hover{background:#f0f0f0}
+.rn-body{margin:0;padding:6px 8px;font-size:11px;line-height:1.6;color:#555;max-height:150px;overflow-y:auto;white-space:pre-wrap;word-break:break-word;background:#fff}
+
+/* 下载进度动画 */
+.dl-info{display:flex;align-items:center;gap:6px;margin-bottom:6px}
+.dl-icon{font-size:16px}
+.dl-status{font-size:13px;font-weight:500;color:#333}
+.dl-speed{font-size:11px;color:#999;margin-left:auto}
+.dl-bar-wrap{position:relative;height:20px;background:#f0f0f0;border-radius:10px;overflow:hidden}
+.dl-bar-fill{height:100%;border-radius:10px;background:linear-gradient(90deg,#1989fa,#00d4ff,#1989fa);background-size:200% 100%;animation:dlShine 2s linear infinite;transition:width .3s ease}
+@keyframes dlShine{0%{background-position:200% 0}100%{background-position:-200% 0}}
+.dl-pct{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:11px;color:#666;font-weight:500}
 
 </style>
