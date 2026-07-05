@@ -547,6 +547,14 @@ ipcMain.handle('open-external', (_, url) => { shell.openExternal(url) })
 ipcMain.handle('update:check', () => { checkForUpdates(); return true })
 ipcMain.handle('update:download', () => { downloadUpdate() })
 ipcMain.handle('update:install', () => { quitAndInstall() })
+ipcMain.handle('update:diagnose', () => {
+  try {
+    const pkg = require('electron-updater/package.json')
+    return { loaded: true, version: pkg.version, appVersion: app.getVersion() }
+  } catch {
+    return { loaded: false, error: 'electron-updater module not found' }
+  }
+})
 
 app.whenReady().then(async () => {
   log('App ready')

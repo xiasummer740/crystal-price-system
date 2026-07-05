@@ -3,6 +3,9 @@
 // autoDownload: false — 检测到新版本只通知，下载由用户触发
 // autoInstallOnAppQuit: true — 下载完成后退出时自动安装
 
+import { createRequire } from 'module'
+const _require = createRequire(import.meta.url)
+
 let autoUpdater = null
 let mainWindow = null
 let initialized = false
@@ -12,13 +15,14 @@ export function initUpdater(window) {
   mainWindow = window
   initialized = true
 
-  import('electron-updater').then(mod => {
-    const pkg = mod.default || mod
-    autoUpdater = pkg.autoUpdater
+  try {
+    const mod = _require('electron-updater')
+    autoUpdater = mod.autoUpdater
     if (!autoUpdater) { console.error('electron-updater: autoUpdater not found'); return }
 
     autoUpdater.autoDownload = false
     autoUpdater.autoInstallOnAppQuit = true
+    autoUpdater.forceDevUpdateConfig = true
 
     autoUpdater.checkForUpdates().catch(() => {})
 
@@ -51,9 +55,9 @@ export function initUpdater(window) {
     autoUpdater.on('error', (err) => {
       console.error('自动更新错误:', err.message)
     })
-  }).catch(err => {
+  } catch (err) {
     console.error('electron-updater 加载失败:', err.message)
-  })
+  }
 }
 
 export function downloadUpdate() {
@@ -65,5 +69,13 @@ export function quitAndInstall() {
 }
 
 export function checkForUpdates() {
-  if (autoUpdater) autoUpdater.checkForUpdates().catch(() => {})
+  if (!autoUpdater) {
+    mainWindow?.webContents.send('update:error', { message: '更新模块未就绪' })
+    return
+  }
+  autoUpdater.checkForUpdates().catch(err => {
+    const msg = err?.message || String(err)
+    console.error('检查更新失败:', msg)
+    mainWindow?.webContents.send('update:error', { message: msg })
+  })
 }

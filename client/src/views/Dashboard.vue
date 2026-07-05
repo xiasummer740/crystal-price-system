@@ -238,6 +238,7 @@
             </button>
             <a v-if="updateStatus === 'error'" :href="'https://github.com/xiasummer740/crystal-price-system/releases/latest'" target="_blank" class="manual-link" @click.stop>⬇ 手动下载</a>
             <span class="update-status" v-if="updateStatus === 'not-available'">已是最新版本</span>
+            <span class="update-status" v-if="updateStatus === 'error' && updateError" style="color:#e53935;font-size:12px;margin-top:4px">{{ updateError }}</span>
           </template>
 
           <template v-else-if="updateStatus === 'checking'">
@@ -698,6 +699,7 @@ const updateStatus = ref('idle') // idle | checking | available | downloading | 
 const updateVersion = ref('')
 const updatePercent = ref(0)
 const downloadSpeed = ref('')
+const updateError = ref('')
 
 function fmtSpeed(v) {
   if (!v || v <= 0) return ''
@@ -749,7 +751,7 @@ if (window.electronAPI?.onUpdateAvailable) {
   })
   window.electronAPI.onUpdateError((err) => {
     updateStatus.value = 'error'
-    console.error('更新错误:', err?.message)
+    updateError.value = err?.message || '检查失败'
   })
 }
 
