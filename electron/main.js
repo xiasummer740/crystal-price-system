@@ -570,11 +570,12 @@ app.whenReady().then(async () => {
     ])
     Menu.setApplicationMenu(menu)
     createWindow(port)
-    // 窗口就绪后：关闪屏 + 初始化升级
+    // 窗口就绪后关闪屏
     mainWindow.once('ready-to-show', () => {
       setTimeout(() => { splash.close() }, 400)
-      initUpdater(mainWindow)
     })
+    // 初始化升级（必须在 ready-to-show 外，和 xnowpost 一致）
+    initUpdater(mainWindow)
     // 启动记事提醒轮询
     startReminderPolling(port)
   } catch (e) {
@@ -590,8 +591,8 @@ app.whenReady().then(async () => {
           createWindow(port)
           mainWindow.once('ready-to-show', () => {
             splash.close()
-            initUpdater(mainWindow)
           })
+          initUpdater(mainWindow)
         } catch (e2) {
           splash.close()
           dialog.showErrorBox('启动失败', '端口被占用，请关闭所有晶振报价系统窗口后重试')

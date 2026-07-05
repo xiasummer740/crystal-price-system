@@ -10,7 +10,8 @@ files:
   - client/dist/**/*
   - package.json
 asarUnpack:
-  - node_modules/sql.js/dist/*.wasm
+  - "**/*.node"
+  - "node_modules/electron-updater/**"
 extraResources:
   - from: scripts
     to: scripts
