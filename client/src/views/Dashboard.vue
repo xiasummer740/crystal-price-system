@@ -733,6 +733,13 @@ async function onUpdateClick() {
   if (s === 'available') {
     updateStatus.value = 'downloading'
     window.electronAPI?.downloadUpdate?.()
+    // 60s 无进度超时
+    setTimeout(() => {
+      if (updateStatus.value === 'downloading' && updatePercent.value === 0) {
+        updateStatus.value = 'error'
+        updateError.value = '下载超时，请检查网络后重试，或点击下方「手动下载」'
+      }
+    }, 60000)
     return
   }
 

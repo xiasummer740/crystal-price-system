@@ -82,16 +82,39 @@ export async function checkForUpdates() {
   if (!autoUpdater) return { status: 'error', message: '更新模块未就绪' }
   try {
     const result = await autoUpdater.checkForUpdates()
+    // electron-updater 的 checkForUpdates 在有新版本时 resolve，无更新时 reject
+    const remoteVer = result?.updateInfo?.version
+    const currentVer = (await import('electron')).app.getVersion()
+    const isNewer = remoteVer && compareVersions(remoteVer, currentVer) > 0
+    if (!isNewer) {
+      return { status: 'not-available' }
+    }
     return {
       status: 'available',
-      version: result?.updateInfo?.version,
+      version: remoteVer,
       releaseDate: result?.updateInfo?.releaseDate,
       releaseNotes: result?.updateInfo?.releaseNotes,
       releaseName: result?.updateInfo?.releaseName,
     }
   } catch (e) {
+    const msg = (e.message || e || '').toLowerCase()
+    // "No update available" 属于正常情况，不是错误
+    if (msg.includes('no update') || msg.includes('not available')) {
+      return { status: 'not-available' }
+    }
     return { status: 'error', message: e.message || '检查失败' }
   }
+}
+
+// 语义版本比较: >0 = v1 > v2, <0 = v1 < v2, 0 = equal
+function compareVersions(v1, v2) {
+  const a = v1.split('.').map(Number)
+  const b = v2.split('.').map(Number)
+  for (let i = 0; i < Math.max(a.length, b.length); i++) {
+    const diff = (a[i] || 0) - (b[i] || 0)
+    if (diff !== 0) return diff
+  }
+  return 0
 }
 
 // IPC: 下载更新
