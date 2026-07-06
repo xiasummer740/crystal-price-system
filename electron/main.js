@@ -549,15 +549,26 @@ function startReminderPolling(port) {
 
 // ====== 地图地址独立窗口 ======
 let mapWindow = null
+let _mapSaveTimer = null
+function saveMapBounds() {
+  if (!mapWindow || mapWindow.isDestroyed()) return
+  try {
+    const bounds = mapWindow.getBounds()
+    const cfg = loadFullConfig()
+    saveFullConfig({ mapWindow: { ...cfg.mapWindow, ...bounds } })
+  } catch (e) { log('saveMapBounds error: ' + e.message) }
+}
 function openMapWindow(port) {
   if (mapWindow && !mapWindow.isDestroyed()) { mapWindow.focus(); return }
+  const cfg = loadFullConfig()
+  const saved = cfg?.mapWindow || {}
   const mainPos = mainWindow?.getBounds()
   mapWindow = new BrowserWindow({
-    width: 1100,
-    height: 720,
+    width: saved.width || 1100,
+    height: saved.height || 720,
     minWidth: 800, minHeight: 500,
-    x: mainPos ? mainPos.x + 40 : undefined,
-    y: mainPos ? mainPos.y + 40 : undefined,
+    x: saved.x ?? (mainPos ? mainPos.x + 40 : undefined),
+    y: saved.y ?? (mainPos ? mainPos.y + 40 : undefined),
     title: '🗺️ 地图地址',
     frame: true,
     icon: path.join(__dirname, '..', 'client', 'dist', 'SJK-256.png'),
@@ -569,9 +580,18 @@ function openMapWindow(port) {
     }
   })
   mapWindow.setMenuBarVisibility(false)
+  const debounceSave = () => {
+    if (_mapSaveTimer) clearTimeout(_mapSaveTimer)
+    _mapSaveTimer = setTimeout(saveMapBounds, 500)
+  }
+  mapWindow.on('resize', debounceSave)
+  mapWindow.on('move', debounceSave)
   const url = `http://localhost:${port}/#/map-addresses?standalone=1&v=${app.getVersion()}&packaged=${app.isPackaged}`
   mapWindow.loadURL(url)
-  mapWindow.on('closed', () => { mapWindow = null })
+  mapWindow.on('closed', () => {
+    mapWindow = null
+    if (_mapSaveTimer) { clearTimeout(_mapSaveTimer); _mapSaveTimer = null }
+  })
 }
 
 // IPC：渲染进程请求打开地图窗口
