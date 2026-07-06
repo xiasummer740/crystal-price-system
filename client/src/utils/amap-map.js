@@ -10,7 +10,7 @@ export function loadAmapScript(key) {
   return new Promise((resolve, reject) => {
     if (window.AMap) { AMap = window.AMap; resolve(); return }
     const script = document.createElement('script')
-    script.src = `https://webapi.amap.com/maps?v=2.0&key=${encodeURIComponent(key)}&plugin=AMap.MarkerClusterer`
+    script.src = `https://webapi.amap.com/maps?v=2.0&key=${encodeURIComponent(key)}&plugin=AMap.MarkerClusterer,AMap.PlaceSearch,AMap.AutoComplete,AMap.Geolocation`
     script.async = true
     script.onload = () => { AMap = window.AMap; resolve() }
     script.onerror = () => reject(new Error('高德地图 JS API 加载失败，请检查网络'))
@@ -24,11 +24,9 @@ export function createAmapMap(container, center = [114.3, 30.5], zoom = 6) {
   const map = new AMap.Map(container, {
     center: [center[1], center[0]], // Amap 用 [lng, lat]
     zoom,
-    mapStyle: 'amap://styles/light', // 浅色风格
-    layers: [new AMap.TileLayer.Satellite()], // 使用卫星+路网
+    mapStyle: 'amap://styles/light', // 浅色标准地图
+    features: ['bg', 'road', 'building', 'point'], // 背景+道路+建筑+POI点
   })
-  // 路网叠加
-  map.add(new AMap.TileLayer.RoadNet())
   return map
 }
 
@@ -115,6 +113,57 @@ export function addAmapRoute(map, startLat, startLng, endLat, endLng) {
 }
 
 // 点击选点（返回 WGS84 坐标）
+// 地点搜索（浏览器端直接用高德 PlaceSearch，不走服务器，快且准）
+export function searchAmapPoi(keywords, callback) {
+  if (!AMap) return callback([])
+  AMap.plugin('AMap.PlaceSearch', () => {
+    const placeSearch = new AMap.PlaceSearch({
+      pageSize: 10,
+      pageIndex: 1,
+      citylimit: false,
+      type: '全部'
+    })
+    placeSearch.search(keywords, (status, result) => {
+      if (status === 'complete' && result.poiList?.pois) {
+        const list = result.poiList.pois.map(p => ({
+          name: p.name || '',
+          address: p.pname + p.cityname + p.adname + (p.address || ''),
+          lat: p.location.lat,
+          lng: p.location.lng,
+          city: p.cityname || '',
+          district: p.adname || '',
+          province: p.pname || '',
+          type: p.type || '',
+          business: p.businessArea || '',
+          provider: 'amap-poi'
+        }))
+        callback(list)
+      } else {
+        // POI 无结果 → 降级地理编码
+        AMap.plugin('AMap.Geocoder', () => {
+          const geocoder = new AMap.Geocoder({ city: '', radius: 1000 })
+          geocoder.getLocation(keywords, (status2, result2) => {
+            if (status2 === 'complete' && result2.geocodes?.length) {
+              const list = result2.geocodes.map(g => ({
+                name: g.formattedAddress || keywords,
+                address: g.formattedAddress || '',
+                lat: g.location.lat,
+                lng: g.location.lng,
+                city: g.city || '',
+                district: g.district || '',
+                province: g.province || '',
+                type: 'geocode',
+                provider: 'amap-geo'
+              }))
+              callback(list)
+            } else callback([])
+          })
+        })
+      }
+    })
+  })
+}
+
 export function onAmapClickForPick(map, callback) {
   map.on('click', (e) => {
     // Amap 返回 GCJ02，转 WGS84 存库

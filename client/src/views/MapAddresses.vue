@@ -261,7 +261,7 @@ import 'leaflet.markercluster/dist/MarkerCluster.css'
 import 'leaflet.markercluster/dist/MarkerCluster.Default.css'
 import 'leaflet-routing-machine'
 import 'leaflet-routing-machine/dist/leaflet-routing-machine.css'
-import { loadAmapScript, createAmapMap, destroyAmapMap, setAmapView, addAmapMarker, addAmapLabelMarker, bindAmapPopup, addAmapCluster, clearAmapExtraMarkers, addAmapRoute, onAmapClickForPick } from '../utils/amap-map.js'
+import { loadAmapScript, createAmapMap, destroyAmapMap, setAmapView, addAmapMarker, addAmapLabelMarker, bindAmapPopup, addAmapCluster, clearAmapExtraMarkers, addAmapRoute, onAmapClickForPick, searchAmapPoi } from '../utils/amap-map.js'
 
 // ====== 修复 Leaflet 默认图标路径 ======
 delete L.Icon.Default.prototype._getIconUrl
@@ -874,19 +874,19 @@ function onMapSearchInput() {
 async function doPoiSearch() {
   const kw = mapSearchKw.value.trim()
   if (!kw) return
-  const amapKey = getAmapKey()
   try {
     let results = []
-    if (amapKey) {
-      // 有高德 Key → POI 搜索（像手机版）
-      const r = await poiSearch(kw, amapKey)
+    if (useAmapJs && window.AMap) {
+      // 高德 JS API 模式：浏览器端原生搜索，不走服务器，跟网页版高德一样
+      await new Promise(resolve => searchAmapPoi(kw, (list) => { results = list; resolve() }))
+    } else if (getAmapKey()) {
+      // Leaflet 模式但有 Key：服务器中转搜索
+      const r = await poiSearch(kw, getAmapKey())
       results = (r.data || []).map(item => ({
-        ...item,
-        name: item.name || item.address || kw,
-        address: item.address || ''
+        ...item, name: item.name || item.address || kw, address: item.address || ''
       }))
     }
-    // POI 没结果或没 Key → 降级地理编码
+    // 还有结果没？试试地理编码兜底
     if (!results.length) {
       const r = await myGeocode(kw)
       results = (r.data || []).map(item => ({
