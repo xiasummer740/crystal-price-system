@@ -385,14 +385,14 @@ function createWindow(port) {
   })
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    // 拦截记事浮窗请求，创建桌面窗口
-    if (url.includes('/#/notes') || url.includes('?standalone=1')) {
-      openNotesWindow(serverPort)
+    // 地图地址窗口（优先匹配，避免 standalone=1 被记事拦截）
+    if (url.includes('/#/map-addresses')) {
+      openMapWindow(serverPort)
       return { action: 'deny' }
     }
-    // 拦截地图地址请求，创建桌面窗口
-    if (url.includes('/#/map-addresses') || url.includes('map-standalone=1')) {
-      openMapWindow(serverPort)
+    // 拦截记事浮窗请求，创建桌面窗口
+    if (url.includes('/#/notes') && url.includes('?standalone=1')) {
+      openNotesWindow(serverPort)
       return { action: 'deny' }
     }
     // 仅允许 http/https 外部链接通过系统浏览器打开
