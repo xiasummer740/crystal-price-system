@@ -1466,20 +1466,15 @@ onUnmounted(() => {
 
 /* 地图搜索框 */
 .map-search-bar {
-  position: absolute;
-  top: 12px;
-  left: 50%;
-  transform: translateX(-50%);
   display: flex;
   align-items: center;
   gap: 6px;
-  z-index: 1000;
   background: rgba(255,255,255,0.95);
   padding: 6px 8px;
   border-radius: 8px;
   box-shadow: 0 2px 12px rgba(0,0,0,0.15);
-  width: 340px;
-  max-width: 80%;
+  position: relative;
+  z-index: 1;
 }
 .map-search-input {
   flex: 1;
