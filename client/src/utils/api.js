@@ -198,11 +198,18 @@ export function deleteMapCustomer(id) {
 export function importMapCustomersFromNotes() {
   return http.post('/map/customers/import')
 }
-export function geocodeAddress(q) {
-  return http.get('/map/geocode', { params: { q } })
+export function geocodeAddress(q, amapKey) {
+  const params = { q }
+  if (amapKey) params.key = amapKey
+  return http.get('/map/geocode', { params })
 }
-export function reverseGeocode(lat, lng) {
-  return http.get('/map/reverse-geocode', { params: { lat, lng } })
+export function reverseGeocode(lat, lng, amapKey) {
+  const params = { lat, lng }
+  if (amapKey) params.key = amapKey
+  return http.get('/map/reverse-geocode', { params })
+}
+export function getAmapKey() {
+  return localStorage.getItem('crystal_amap_key') || ''
 }
 export function exportMapAddresses() {
   return http.get('/map/export', { responseType: 'blob' })

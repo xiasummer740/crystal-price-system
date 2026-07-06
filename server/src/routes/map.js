@@ -278,11 +278,51 @@ router.put('/trip-points/reorder', (req, res) => {
   res.json({ code: 0, msg: '排序已更新' })
 })
 
-// ====== 地理编码（Nominatim 免费服务） ======
+// ====== 地理编码 ======
+// 支持 Nominatim（免费，全球） 和 高德地图（需要 API Key，中国地址精准）
 
 router.get('/geocode', (req, res) => {
   const q = (req.query.q || '').trim()
   if (!q) return res.json({ code: 0, data: [] })
+  const key = req.query.key || ''
+
+  // 如果有高德 API Key → 优先用高德
+  if (key) {
+    const url = `https://restapi.amap.com/v3/geocode/geo?key=${encodeURIComponent(key)}&address=${encodeURIComponent(q)}&city=&output=json`
+    https.get(url, (resp) => {
+      let data = ''
+      resp.on('data', chunk => data += chunk)
+      resp.on('end', () => {
+        try {
+          const r = JSON.parse(data)
+          if (r.status === '1' && r.geocodes && r.geocodes.length) {
+            const results = r.geocodes.map(g => {
+              const [lng, lat] = (g.location || '').split(',').map(Number)
+              return {
+                label: g.formatted_address || g.address || q,
+                lat, lng,
+                address: g.formatted_address || q,
+                province: g.province || '',
+                city: g.city || '',
+                district: g.district || '',
+                level: g.level || ''
+              }
+            }).filter(r => r.lat && r.lng)
+            return res.json({ code: 0, data: results, provider: 'amap' })
+          }
+          // 高德没结果，fallback 到 Nominatim
+          fallbackNominatim(q, res)
+        } catch { fallbackNominatim(q, res) }
+      })
+    }).on('error', () => fallbackNominatim(q, res))
+    return
+  }
+
+  // 无高德 Key → Nominatim
+  fallbackNominatim(q, res)
+})
+
+function fallbackNominatim(q, res) {
   const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}&limit=5&countrycodes=cn`
   https.get(url, { headers: { 'User-Agent': 'CrystalPriceSystem/1.0' } }, (resp) => {
     let data = ''
@@ -293,19 +333,46 @@ router.get('/geocode', (req, res) => {
           label: r.display_name,
           lat: parseFloat(r.lat),
           lng: parseFloat(r.lon),
-          type: r.type
+          type: r.type,
+          provider: 'nominatim'
         }))
-        res.json({ code: 0, data: results })
-      } catch { res.json({ code: 0, data: [] }) }
+        res.json({ code: 0, data: results, provider: 'nominatim' })
+      } catch { res.json({ code: 0, data: [], provider: 'nominatim' }) }
     })
-  }).on('error', () => res.json({ code: 0, data: [] }))
-})
+  }).on('error', () => res.json({ code: 0, data: [], provider: 'nominatim' }))
+}
 
 // ====== 反向地理编码 ======
 router.get('/reverse-geocode', (req, res) => {
   const lat = parseFloat(req.query.lat)
   const lng = parseFloat(req.query.lng)
+  const key = req.query.key || ''
   if (isNaN(lat) || isNaN(lng)) return res.status(400).json({ code: 1, msg: '参数错误' })
+
+  // 有高德 Key → 优先用高德
+  if (key) {
+    const url = `https://restapi.amap.com/v3/geocode/regeo?key=${encodeURIComponent(key)}&location=${lng},${lat}&output=json`
+    https.get(url, (resp) => {
+      let data = ''
+      resp.on('data', chunk => data += chunk)
+      resp.on('end', () => {
+        try {
+          const r = JSON.parse(data)
+          if (r.status === '1' && r.regeocode) {
+            const addr = r.regeocode.formatted_address || ''
+            return res.json({ code: 0, data: { address: addr, provider: 'amap' } })
+          }
+          fallbackReverseNominatim(lat, lng, res)
+        } catch { fallbackReverseNominatim(lat, lng, res) }
+      })
+    }).on('error', () => fallbackReverseNominatim(lat, lng, res))
+    return
+  }
+
+  fallbackReverseNominatim(lat, lng, res)
+})
+
+function fallbackReverseNominatim(lat, lng, res) {
   const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&accept-language=zh`
   https.get(url, { headers: { 'User-Agent': 'CrystalPriceSystem/1.0' } }, (resp) => {
     let data = ''
@@ -313,11 +380,11 @@ router.get('/reverse-geocode', (req, res) => {
     resp.on('end', () => {
       try {
         const r = JSON.parse(data)
-        res.json({ code: 0, data: { address: r.display_name || '' } })
-      } catch { res.json({ code: 0, data: { address: '' } }) }
+        res.json({ code: 0, data: { address: r.display_name || '', provider: 'nominatim' } })
+      } catch { res.json({ code: 0, data: { address: '', provider: 'nominatim' } }) }
     })
-  }).on('error', () => res.json({ code: 0, data: { address: '' } }))
-})
+  }).on('error', () => res.json({ code: 0, data: { address: '', provider: 'nominatim' } }))
+}
 
 // ====== Excel 导出 ======
 

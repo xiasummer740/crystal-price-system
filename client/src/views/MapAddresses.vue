@@ -235,7 +235,7 @@ import {
   importMapCustomersFromNotes, exportMapAddresses,
   createPurchaser, updatePurchaser, deletePurchaser,
   createAddress, updateAddress, deleteAddress,
-  geocodeAddress, reverseGeocode
+  geocodeAddress, reverseGeocode, getAmapKey
 } from '../utils/api.js'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
@@ -254,6 +254,9 @@ L.Icon.Default.mergeOptions({
 })
 
 const route_ = useRoute()
+// 地理编码包装：自动带高德 Key
+function myGeocode(q) { return myGeocode(q, getAmapKey()) }
+function myReverseGeocode(lat, lng) { return myReverseGeocode(lat, lng, getAmapKey()) }
 const router = useRouter()
 const mapContainer = ref(null)
 let map = null
@@ -485,7 +488,7 @@ async function selectCustomer(c) {
     map.setView([c.latitude, c.longitude], 15)
   } else if (c.address && map) {
     try {
-      const r = await geocodeAddress(c.address)
+      const r = await myGeocode(c.address)
       const results = r.data || []
       if (results.length) {
         const best = results[0]
@@ -709,7 +712,7 @@ async function doMapSearch() {
   const kw = mapSearchKw.value.trim()
   if (!kw) return
   try {
-    const r = await geocodeAddress(kw)
+    const r = await myGeocode(kw)
     const results = r.data || []
     if (results.length) {
       const best = results[0]
@@ -747,7 +750,7 @@ function startCoordPick() {
 }
 async function doPickGeocode(addr) {
   try {
-    const r = await geocodeAddress(addr)
+    const r = await myGeocode(addr)
     const results = r.data || []
     if (results.length && map) {
       const best = results[0]
@@ -823,7 +826,7 @@ async function autoGeocode(val, target) {
   clearTimeout(geoAutoTimer)
   geoAutoTimer = setTimeout(async () => {
     try {
-      const r = await geocodeAddress(val)
+      const r = await myGeocode(val)
       const results = r.data || []
       if (results.length) {
         const best = results[0]
