@@ -342,6 +342,75 @@ function fallbackNominatim(q, res) {
   }).on('error', () => res.json({ code: 0, data: [], provider: 'nominatim' }))
 }
 
+// ====== POI 搜索（高德地点搜索，像手机版一样丰富） ======
+router.get('/poi-search', (req, res) => {
+  const keywords = (req.query.keywords || '').trim()
+  const key = req.query.key || ''
+  if (!keywords) return res.json({ code: 0, data: [] })
+  if (!key) {
+    // 没 Key → 走 Nominatim
+    return fallbackNominatim(keywords, res)
+  }
+  const city = req.query.city || ''
+  const url = `https://restapi.amap.com/v3/place/text?key=${encodeURIComponent(key)}&keywords=${encodeURIComponent(keywords)}&types=&city=${encodeURIComponent(city)}&output=json&offset=10&page=1&extensions=base`
+  https.get(url, (resp) => {
+    let data = ''
+    resp.on('data', chunk => data += chunk)
+    resp.on('end', () => {
+      try {
+        const r = JSON.parse(data)
+        if (r.status === '1' && r.pois && r.pois.length) {
+          const results = r.pois.map(p => {
+            const [lng, lat] = (p.location || '').split(',').map(Number)
+            return {
+              name: p.name || '',
+              label: `${p.name}${p.address ? ' · ' + p.address : ''}`,
+              address: p.address || '',
+              lat, lng,
+              city: p.cityname || '',
+              district: p.adname || '',
+              province: p.pname || '',
+              type: p.type || '',
+              business: p.business_area || '',
+              provider: 'amap-poi'
+            }
+          }).filter(r => r.lat && r.lng)
+          return res.json({ code: 0, data: results, provider: 'amap-poi' })
+        }
+        // 无结果 → 降级到普通地理编码
+        const geoUrl = `https://restapi.amap.com/v3/geocode/geo?key=${encodeURIComponent(key)}&address=${encodeURIComponent(keywords)}&city=${encodeURIComponent(city)}&output=json`
+        https.get(geoUrl, (geoResp) => {
+          let geoData = ''
+          geoResp.on('data', chunk => geoData += chunk)
+          geoResp.on('end', () => {
+            try {
+              const gr = JSON.parse(geoData)
+              if (gr.status === '1' && gr.geocodes && gr.geocodes.length) {
+                const results = gr.geocodes.map(g => {
+                  const [lng, lat] = (g.location || '').split(',').map(Number)
+                  return {
+                    name: g.formatted_address || keywords,
+                    label: g.formatted_address || keywords,
+                    address: g.formatted_address || '',
+                    lat, lng,
+                    city: g.city || '',
+                    district: g.district || '',
+                    province: g.province || '',
+                    type: 'geocode',
+                    provider: 'amap-geo'
+                  }
+                }).filter(r => r.lat && r.lng)
+                return res.json({ code: 0, data: results, provider: 'amap-geo' })
+              }
+              res.json({ code: 0, data: [], provider: 'none' })
+            } catch { res.json({ code: 0, data: [], provider: 'none' }) }
+          })
+        }).on('error', () => res.json({ code: 0, data: [], provider: 'none' }))
+      } catch { res.json({ code: 0, data: [], provider: 'none' }) }
+    })
+  }).on('error', () => fallbackNominatim(keywords, res))
+})
+
 // ====== 反向地理编码 ======
 router.get('/reverse-geocode', (req, res) => {
   const lat = parseFloat(req.query.lat)

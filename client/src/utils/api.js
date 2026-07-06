@@ -208,6 +208,11 @@ export function reverseGeocode(lat, lng, amapKey) {
   if (amapKey) params.key = amapKey
   return http.get('/map/reverse-geocode', { params })
 }
+export function poiSearch(keywords, amapKey) {
+  const params = { keywords }
+  if (amapKey) params.key = amapKey
+  return http.get('/map/poi-search', { params })
+}
 export function getAmapKey() {
   return localStorage.getItem('crystal_amap_key') || ''
 }

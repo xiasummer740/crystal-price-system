@@ -75,22 +75,26 @@
           <button class="tip-confirm" @click="confirmCoordPick">✅ 确认</button>
           <button class="tip-close" @click="selectedMode = ''">✕</button>
         </div>
-        <!-- 地图搜索框（带结果下拉） -->
-        <div class="map-search-wrap" v-if="!selectedMode" ref="searchWrapRef">
+        <!-- 地图搜索框（带结果下拉，不拖地图） -->
+        <div class="map-search-wrap" v-if="!selectedMode" ref="searchWrapRef" @mousedown.stop>
           <div class="map-search-bar">
-            <input v-model="mapSearchKw" placeholder="🔍 搜索地址、地点、客户…" class="map-search-input" @input="onMapSearchInput" @keydown.enter="onSearchKeydown" @keydown.down="onSearchKeyNav(1)" @keydown.up="onSearchKeyNav(-1)" @focus="showSearchResults = true" />
-            <button class="map-search-btn" @click="doMapSearch">搜索</button>
+            <input ref="searchInputRef" v-model="mapSearchKw" placeholder="🔍 搜索地址、地点…" class="map-search-input"
+              @input="onMapSearchInput" @keydown.enter="onSearchKeydown"
+              @keydown.down="onSearchKeyNav(1)" @keydown.up="onSearchKeyNav(-1)"
+              @focus="onSearchFocus" @mousedown.stop />
+            <button class="map-search-btn" @mousedown.stop @click="doMapSearch">搜索</button>
           </div>
           <!-- 搜索结果下拉 -->
           <div class="search-dropdown" v-if="showSearchResults && searchResults.length">
             <div v-for="(r, i) in searchResults" :key="i" class="search-result-item" :class="{ active: searchHighlight === i }" @mousedown.prevent="pickSearchResult(r)">
-              <div class="sr-name">{{ r.name || r.label || '' }}</div>
-              <div class="sr-addr">{{ r.address || r.label || '' }}</div>
-              <div class="sr-meta" v-if="r.city || r.district || r.province">{{ [r.province, r.city, r.district].filter(Boolean).join(' ') }}</div>
+              <div class="sr-name">{{ r.name }}</div>
+              <div class="sr-addr">{{ r.address || '' }}</div>
+              <div class="sr-meta">{{ [r.province, r.district, r.business].filter(Boolean).join(' ') }}</div>
+              <div class="sr-type" v-if="r.type && r.type !== 'geocode'">{{ r.type.split(';')[0] }}</div>
             </div>
           </div>
           <div class="search-dropdown empty" v-else-if="showSearchResults && searchDone && !searchResults.length">
-            <div class="search-result-empty">未找到匹配地址</div>
+            <div class="search-result-empty">未找到匹配地点</div>
           </div>
         </div>
         <!-- 图例 -->
@@ -248,7 +252,7 @@ import {
   importMapCustomersFromNotes, exportMapAddresses,
   createPurchaser, updatePurchaser, deletePurchaser,
   createAddress, updateAddress, deleteAddress,
-  geocodeAddress, reverseGeocode, getAmapKey
+  geocodeAddress, reverseGeocode, getAmapKey, poiSearch
 } from '../utils/api.js'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
@@ -453,12 +457,17 @@ function initMap() {
       mapClickOnPick(e)
     })
 
-    // 搜索框不触发地图拖拽（等 DOM 渲染后）
+    // 搜索框不触发地图拖拽
     setTimeout(() => {
       const wrap = mapContainer.value?.querySelector('.map-search-wrap')
       if (wrap) {
         L.DomEvent.disableClickPropagation(wrap)
         L.DomEvent.disableScrollPropagation(wrap)
+        // 输入框额外拦截 mousedown
+        const input = wrap.querySelector('.map-search-input')
+        if (input) L.DomEvent.disableClickPropagation(input)
+        const btn = wrap.querySelector('.map-search-btn')
+        if (btn) L.DomEvent.disableClickPropagation(btn)
       }
     }, 500)
 
@@ -767,47 +776,72 @@ async function handleDeleteAddress(a) {
   }
 }
 
-// ====== 地图搜索框（带下拉结果，像手机地图） ======
+// ====== 地图搜索框（POI + 地址，像手机地图） ======
 const mapSearchKw = ref('')
 const searchResults = ref([])
 const showSearchResults = ref(false)
 const searchHighlight = ref(-1)
 const searchDone = ref(false)
 const searchWrapRef = ref(null)
+const searchInputRef = ref(null)
 let mapSearchMarker = null
 let mapSearchTimer = null
+
+// 光标移到末尾
+function onSearchFocus(e) {
+  setTimeout(() => {
+    const el = e.target
+    const len = el.value.length
+    el.setSelectionRange(len, len)
+  }, 0)
+}
 
 function onMapSearchInput() {
   searchDone.value = false
   clearTimeout(mapSearchTimer)
   const kw = mapSearchKw.value.trim()
   if (kw.length < 2) { searchResults.value = []; showSearchResults.value = false; return }
-  mapSearchTimer = setTimeout(doMapSearch, 400)
+  mapSearchTimer = setTimeout(doPoiSearch, 350)
 }
 
-async function doMapSearch() {
+// POI 搜索（优先）+ 降级地理编码
+async function doPoiSearch() {
   const kw = mapSearchKw.value.trim()
   if (!kw) return
+  const amapKey = getAmapKey()
   try {
-    const r = await myGeocode(kw)
-    const results = (r.data || []).map(item => ({
-      ...item,
-      name: item.address || item.label || kw,
-      address: item.label || item.address || ''
-    }))
+    let results = []
+    if (amapKey) {
+      // 有高德 Key → POI 搜索（像手机版）
+      const r = await poiSearch(kw, amapKey)
+      results = (r.data || []).map(item => ({
+        ...item,
+        name: item.name || item.address || kw,
+        address: item.address || ''
+      }))
+    }
+    // POI 没结果或没 Key → 降级地理编码
+    if (!results.length) {
+      const r = await myGeocode(kw)
+      results = (r.data || []).map(item => ({
+        ...item,
+        name: item.address || item.label || kw,
+        address: item.label || item.address || ''
+      }))
+    }
     searchResults.value = results
     showSearchResults.value = results.length > 0
     searchDone.value = true
     searchHighlight.value = -1
-
-    if (results.length) {
-      placeSearchMarker(results[0])
-    } else {
-      showToast('未找到该地址')
-    }
+    if (results.length) placeSearchMarker(results[0])
+    else showToast('未找到匹配地点')
   } catch {
     searchDone.value = true
   }
+}
+
+function doMapSearch() {
+  doPoiSearch()
 }
 
 function placeSearchMarker(result) {
@@ -817,13 +851,14 @@ function placeSearchMarker(result) {
   mapSearchMarker = L.marker(ll(result.lat, result.lng), {
     icon: L.divIcon({ className: 'search-marker', html: '📍', iconSize: [24, 24], iconAnchor: [12, 24] })
   }).addTo(map)
-  const addr = result.address || result.label || ''
-  mapSearchMarker.bindPopup(`<div style="font-size:13px;font-weight:600;margin-bottom:2px">${result.name}</div><div style="font-size:11px;color:#888">${addr}</div>`).openPopup()
+  const name = result.name || ''
+  const addr = result.address || ''
+  mapSearchMarker.bindPopup(`<div style="font-size:13px;font-weight:600">${name}</div><div style="font-size:11px;color:#888">${addr}</div>`).openPopup()
 }
 
 function pickSearchResult(r) {
   showSearchResults.value = false
-  mapSearchKw.value = r.name || r.label || ''
+  mapSearchKw.value = r.name || ''
   placeSearchMarker(r)
 }
 
@@ -1472,22 +1507,23 @@ onUnmounted(() => {
 /* 搜索下拉结果 */
 .map-search-wrap {
   position: absolute;
-  top: 12px;
+  top: 8px;
   left: 50%;
   transform: translateX(-50%);
-  z-index: 1000;
-  width: 400px;
-  max-width: 85%;
+  z-index: 10000;
+  width: 420px;
+  max-width: 90%;
 }
 .search-dropdown {
   background: #fff;
-  border-radius: 0 0 8px 8px;
-  box-shadow: 0 4px 16px rgba(0,0,0,0.15);
-  max-height: 280px;
+  border-radius: 0 0 10px 10px;
+  box-shadow: 0 6px 24px rgba(0,0,0,0.18);
+  max-height: 320px;
   overflow-y: auto;
-  margin-top: -1px;
   border: 1px solid #e0e0e0;
   border-top: none;
+  position: relative;
+  z-index: 10001;
 }
 .search-dropdown.empty {
   padding: 12px 16px;
@@ -1498,15 +1534,20 @@ onUnmounted(() => {
 .search-result-item {
   padding: 10px 14px;
   cursor: pointer;
-  border-bottom: 1px solid #f5f5f5;
-  transition: background .1s;
+  border-bottom: 1px solid #f0f0f0;
+  transition: background .08s;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  position: relative;
 }
 .search-result-item:last-child { border-bottom: none; }
 .search-result-item:hover,
-.search-result-item.active { background: #e0f7fa; }
-.sr-name { font-size: 13px; font-weight: 600; color: #333; }
-.sr-addr { font-size: 11px; color: #888; margin-top: 2px; }
-.sr-meta { font-size: 10px; color: #aaa; margin-top: 1px; }
+.search-result-item.active { background: #f0f7fa; }
+.sr-name { font-size: 13px; font-weight: 600; color: #333; width: 100%; margin-bottom: 1px; }
+.sr-addr { font-size: 11px; color: #888; width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sr-meta { font-size: 10px; color: #aaa; margin-top: 2px; }
+.sr-type { font-size: 9px; color: #00695c; background: #e0f7fa; padding: 0 5px; border-radius: 3px; position: absolute; right: 10px; top: 10px; max-width: 80px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .map-legend {
   position: absolute;
   bottom: 20px;
