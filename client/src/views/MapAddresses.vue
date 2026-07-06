@@ -374,6 +374,50 @@ function goBack() {
   }
 }
 
+// ====== 坐标转换：WGS84 ↔ GCJ02（高德/国测局坐标） ======
+// 高德瓦片用 GCJ02，数据库存 WGS84，展示时转换
+const _a = 6378245.0
+const _ee = 0.00669342162296594323
+function _transformLat(x, y) {
+  let ret = -100 + 2*x + 3*y + 0.2*y*y + 0.1*x*y + 0.2*Math.sqrt(Math.abs(x))
+  ret += (20*Math.sin(6*x*Math.PI) + 20*Math.sin(2*x*Math.PI)) * 2/3
+  ret += (20*Math.sin(y*Math.PI) + 40*Math.sin(y/3*Math.PI)) * 2/3
+  ret += (160*Math.sin(y/12*Math.PI) + 320*Math.sin(y*Math.PI/30)) * 2/3
+  return ret
+}
+function _transformLon(x, y) {
+  let ret = 300 + x + 2*y + 0.1*x*x + 0.1*x*y + 0.1*Math.sqrt(Math.abs(x))
+  ret += (20*Math.sin(6*x*Math.PI) + 20*Math.sin(2*x*Math.PI)) * 2/3
+  ret += (20*Math.sin(x*Math.PI) + 40*Math.sin(x/3*Math.PI)) * 2/3
+  ret += (150*Math.sin(x/12*Math.PI) + 300*Math.sin(x/30*Math.PI)) * 2/3
+  return ret
+}
+// 是否在中国境内
+function _inChina(lat, lng) { return lng > 72 && lng < 137 && lat > 1 && lat < 55 }
+// WGS84 → GCJ02（用于展示到高德地图）
+function wgs84ToGcj02(lat, lng) {
+  if (!_inChina(lat, lng)) return { lat, lng }
+  let dLat = _transformLat(lng - 105, lat - 35)
+  let dLng = _transformLon(lng - 105, lat - 35)
+  const radLat = lat / 180 * Math.PI
+  let magic = Math.sin(radLat)
+  magic = 1 - _ee * magic * magic
+  const sqrtMagic = Math.sqrt(magic)
+  dLat = (dLat * 180) / ((_a * (1 - _ee)) / (magic * sqrtMagic) * Math.PI)
+  dLng = (dLng * 180) / (_a / sqrtMagic * Math.cos(radLat) * Math.PI)
+  return { lat: lat + dLat, lng: lng + dLng }
+}
+// GCJ02 → WGS84（用于保存从高德获取的坐标到数据库）
+function gcj02ToWgs84(lat, lng) {
+  if (!_inChina(lat, lng)) return { lat, lng }
+  const wgs = wgs84ToGcj02(lat, lng)
+  return { lat: 2*lat - wgs.lat, lng: 2*lng - wgs.lng }
+}
+// 转成高德坐标（数据库 WGS84 → 展示 GCJ02）
+function ll(lat, lng) { const c = wgs84ToGcj02(lat, lng); return [c.lat, c.lng] }
+// 从高德坐标转回 WGS84（高德 API 返回 → 存数据库）
+function fromAmap(lat, lng) { const c = gcj02ToWgs84(lat, lng); return { lat: c.lat, lng: c.lng } }
+
 // ====== 地图初始化 ======
 function initMap() {
   if (!mapContainer.value || map) return
@@ -387,10 +431,11 @@ function initMap() {
       attributionControl: true
     })
 
-    // 底图：OpenStreetMap
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '&copy; OpenStreetMap contributors',
-      maxZoom: 19
+    // 底图：高德地图瓦片（中国地区详细）+ 坐标偏移转换
+    // 高德瓦片公开可用，无需 Key，显示中文路名/POI/建筑轮廓
+    L.tileLayer('https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}', {
+      attribution: '&copy; 高德地图 &copy; 晶振报价系统',
+      maxZoom: 18
     }).addTo(map)
 
     // 标记聚合
@@ -444,7 +489,7 @@ function loadCustomerMarkers() {
       popupAnchor: [0, -30]
     })
 
-    const marker = L.marker([c.latitude, c.longitude], { icon })
+    const marker = L.marker(ll(c.latitude, c.longitude), { icon })
     marker.bindPopup(`
       <div class="popup-content">
         <div class="popup-name"><strong>${c.name}</strong></div>
@@ -507,7 +552,7 @@ async function selectCustomer(c) {
   selectedCustomer.value = c
   // 在地图上定位：有坐标直接跳转，无坐标但有地址则自动搜索
   if (c.latitude && c.longitude && map) {
-    map.setView([c.latitude, c.longitude], 15)
+    map.setView(ll(c.latitude, c.longitude), 15)
   } else if (c.address && map) {
     try {
       const r = await myGeocode(c.address)
@@ -516,10 +561,10 @@ async function selectCustomer(c) {
         const best = results[0]
         // 在地图上放临时标记（不保存，仅预览）
         if (window._viewMarker) map.removeLayer(window._viewMarker)
-        window._viewMarker = L.marker([best.lat, best.lng], {
+        window._viewMarker = L.marker(ll(best.lat, best.lng), {
           icon: L.divIcon({ className: 'search-marker', html: '📍', iconSize: [24, 24], iconAnchor: [12, 24] })
         }).addTo(map)
-        map.setView([best.lat, best.lng], 15)
+        map.setView(ll(best.lat, best.lng), 15)
       }
     } catch {}
   }
@@ -767,9 +812,9 @@ async function doMapSearch() {
 
 function placeSearchMarker(result) {
   if (!map || !result.lat || !result.lng) return
-  map.setView([result.lat, result.lng], 16)
+  map.setView(ll(result.lat, result.lng), 16)
   if (mapSearchMarker) map.removeLayer(mapSearchMarker)
-  mapSearchMarker = L.marker([result.lat, result.lng], {
+  mapSearchMarker = L.marker(ll(result.lat, result.lng), {
     icon: L.divIcon({ className: 'search-marker', html: '📍', iconSize: [24, 24], iconAnchor: [12, 24] })
   }).addTo(map)
   const addr = result.address || result.label || ''
@@ -830,9 +875,12 @@ async function doPickGeocode(addr) {
     const results = r.data || []
     if (results.length && map) {
       const best = results[0]
-      setFormCoords(best.lat, best.lng)
-      placePickMarker(best.lat, best.lng)
-      map.setView([best.lat, best.lng], 16)
+      const isAmap = r.provider === 'amap'
+      const slat = isAmap ? fromAmap(best.lat, best.lng).lat : best.lat
+      const slng = isAmap ? fromAmap(best.lat, best.lng).lng : best.lng
+      setFormCoords(slat, slng)
+      placePickMarker(slat, slng)
+      map.setView(ll(slat, slng), 16)
       showToast('已定位到：' + (best.label || '').slice(0, 30))
     } else {
       centerMapForPick()
@@ -844,27 +892,30 @@ async function doPickGeocode(addr) {
 }
 function centerMapForPick() {
   if (!map) return
-  const center = map.getCenter()
-  setFormCoords(center.lat, center.lng)
-  placePickMarker(center.lat, center.lng)
+  const center = map.getCenter() // GCJ02（高德瓦片坐标）
+  const wgs = gcj02ToWgs84(center.lat, center.lng) // 转 WGS84 存数据库
+  setFormCoords(wgs.lat, wgs.lng)
+  placePickMarker(wgs.lat, wgs.lng)
 }
 function placePickMarker(lat, lng) {
   if (!map) return
   if (window._pickMarker) map.removeLayer(window._pickMarker)
-  window._pickMarker = L.marker([lat, lng], {
+  window._pickMarker = L.marker(ll(lat, lng), {
     draggable: true,
     icon: L.divIcon({ className: 'pick-marker', html: '📍', iconSize: [24, 24], iconAnchor: [12, 24] })
   }).addTo(map)
   window._pickMarker.on('dragend', () => {
-    const pos = window._pickMarker.getLatLng()
-    setFormCoords(pos.lat, pos.lng)
+    const pos = window._pickMarker.getLatLng() // GCJ02
+    const wgs = gcj02ToWgs84(pos.lat, pos.lng)
+    setFormCoords(wgs.lat, wgs.lng)
   })
 }
 function mapClickOnPick(e) {
   if (selectedMode.value !== 'pick') return
-  const { lat, lng } = e.latlng
-  setFormCoords(lat, lng)
-  placePickMarker(lat, lng)
+  const { lat, lng } = e.latlng // Leaflet 返回 GCJ02（高德瓦片）
+  const wgs = gcj02ToWgs84(lat, lng) // 转 WGS84 存数据库
+  setFormCoords(wgs.lat, wgs.lng)
+  placePickMarker(wgs.lat, wgs.lng)
 }
 function setFormCoords(lat, lng) {
   if (pickOriginForm === 'customer') {
@@ -906,20 +957,24 @@ async function autoGeocode(val, target) {
       const results = r.data || []
       if (results.length) {
         const best = results[0]
+        // 高德返回 GCJ02 → 转 WGS84 存数据库
+        const isAmap = r.provider === 'amap'
+        const saveLat = isAmap ? fromAmap(best.lat, best.lng).lat : best.lat
+        const saveLng = isAmap ? fromAmap(best.lat, best.lng).lng : best.lng
         if (target === 'customer') {
-          customerForm.latitude = best.lat
-          customerForm.longitude = best.lng
+          customerForm.latitude = saveLat
+          customerForm.longitude = saveLng
         } else {
-          addressForm.latitude = best.lat
-          addressForm.longitude = best.lng
+          addressForm.latitude = saveLat
+          addressForm.longitude = saveLng
         }
-        // 在地图上显示标记
+        // 在地图上显示标记（用 GCJ02 坐标）
         if (map) {
           if (window._geoMarker) map.removeLayer(window._geoMarker)
-          window._geoMarker = L.marker([best.lat, best.lng], {
+          window._geoMarker = L.marker(ll(saveLat, saveLng), {
             icon: L.divIcon({ className: 'search-marker', html: '📍', iconSize: [24, 24], iconAnchor: [12, 24] })
           }).addTo(map)
-          map.setView([best.lat, best.lng], 15)
+          map.setView(ll(saveLat, saveLng), 15)
         }
       }
     } catch {}
@@ -945,7 +1000,7 @@ function showMapSearch() {
 // ====== 地图操作 ======
 function locateOnMap(c) {
   if (c.latitude && c.longitude && map) {
-    map.setView([c.latitude, c.longitude], 16)
+    map.setView(ll(c.latitude, c.longitude), 16)
     // 闪烁标记
     if (customerMarkers[c.id]) {
       const m = customerMarkers[c.id]
@@ -973,8 +1028,8 @@ function navigateToCustomer(c) {
     try {
       currentRoute = L.Routing.control({
         waypoints: [
-          L.latLng(start.lat, start.lng),
-          L.latLng(c.latitude, c.longitude)
+          (() => { const c = wgs84ToGcj02(start.lat, start.lng); return L.latLng(c.lat, c.lng) })(),
+          (() => { const c = wgs84ToGcj02(c.latitude, c.longitude); return L.latLng(c.lat, c.lng) })()
         ],
         language: 'zh-CN',
         routeWhileDragging: false,
