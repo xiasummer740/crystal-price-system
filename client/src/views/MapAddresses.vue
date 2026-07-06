@@ -102,10 +102,10 @@
               </div>
               <div class="cc-meta">
                 <span v-if="c.purchaser_count > 0"
-                  >🧑‍💼 {{ c.purchaser_count }}采购</span
+                  >🧑‍💼 {{ c.purchaser_count }}联系人</span
                 >
-                <span v-if="c.address_count > 0"
-                  >📮 {{ c.address_count }}地址</span
+                <span v-if="c.site_count > 0"
+                  >📍 {{ c.site_count }}收货点</span
                 >
                 <span v-if="c.latitude && c.longitude" class="cc-pin"
                   >🟢 已定位</span
@@ -241,125 +241,127 @@
       safe-area-inset-bottom
     >
       <div class="detail-wrap" v-if="detailData">
-        <!-- 客户基本信息 -->
-        <div class="detail-head">
-          <div class="dh-title">
-            <h3>{{ detailData.customer.name }}</h3>
-            <span class="dh-badge" v-if="detailData.customer.latitude"
-              >🟢 已定位</span
-            >
-            <span class="dh-badge muted" v-else>⚪ 未定位</span>
+        <!-- 客户信息头 -->
+        <div class="dt-header">
+          <div class="dt-h-top">
+            <h3 class="dt-h-name">{{ detailData.customer.name }}</h3>
+            <span class="dt-h-badge" :class="{ active: detailData.customer.latitude }">
+              {{ detailData.customer.latitude ? '已定位' : '未定位' }}
+            </span>
           </div>
-          <div class="dh-info">
-            <div v-if="detailData.customer.address" class="dh-row">
-              <span class="dh-label">📍</span>{{ detailData.customer.address }}
+          <div class="dt-h-info">
+            <div v-if="detailData.customer.address" class="dt-h-row">
+              <span class="dt-h-ico">📍</span>
+              <span>{{ detailData.customer.address }}</span>
             </div>
-            <div v-if="detailData.customer.phone" class="dh-row">
-              <span class="dh-label">📞</span>{{ detailData.customer.phone }}
+            <div v-if="detailData.customer.phone" class="dt-h-row">
+              <span class="dt-h-ico">📞</span>
+              <span>{{ detailData.customer.phone }}</span>
             </div>
-            <div v-if="detailData.customer.notes" class="dh-row">
-              <span class="dh-label">📝</span>{{ detailData.customer.notes }}
+            <div v-if="detailData.customer.notes" class="dt-h-row notes">
+              <span class="dt-h-ico">📝</span>
+              <span>{{ detailData.customer.notes }}</span>
             </div>
           </div>
-          <div class="dh-actions">
-            <button class="dh-btn" @click="editCustomer(detailData.customer)">
-              ✏️ 编辑
-            </button>
-            <button class="dh-btn" @click="locateOnMap(detailData.customer)">
-              📍 定位
-            </button>
-            <button class="dh-btn" @click="openAddToTrip(detailData.customer)">
-              📌 添加到行程
-            </button>
-            <button
-              class="dh-btn"
-              @click="navigateToCustomer(detailData.customer)"
-            >
-              🚗 导航到此
-            </button>
-            <button
-              class="dh-btn danger"
-              style="color: #e53935"
-              @click="handleDeleteCustomer(detailData.customer)"
-            >
-              🗑️ 删除
-            </button>
+          <div class="dt-h-actions">
+            <button class="dt-ha" @click="editCustomer(detailData.customer)">✏️ 编辑</button>
+            <button class="dt-ha" @click="locateOnMap(detailData.customer)">📍 定位</button>
+            <button class="dt-ha" @click="openAddToTrip(detailData.customer)">📌 行程</button>
+            <button class="dt-ha" @click="navigateToCustomer(detailData.customer)">🚗 导航</button>
+            <button class="dt-ha danger" @click="handleDeleteCustomer(detailData.customer)">🗑️ 删除</button>
           </div>
         </div>
 
-        <!-- 采购联系人 -->
-        <div class="detail-section">
-          <div class="section-head">
-            <span class="section-title"
-              >🧑‍💼 采购联系人 ({{ detailData.purchasers.length }})</span
-            >
-            <button class="section-add" @click="openAddPurchaser">
-              ＋ 添加
-            </button>
+        <!-- Tab 切换 -->
+        <div class="dt-tabs">
+          <div class="dt-tab" :class="{ active: detailTab === 'contacts' }" @click="detailTab = 'contacts'">
+            <span class="dt-tab-icon">👥</span>
+            <span>联系人</span>
+            <span class="dt-tab-badge">{{ detailData.purchasers.length }}</span>
           </div>
-          <div
-            v-for="p in detailData.purchasers"
-            :key="p.id"
-            class="purchaser-card"
-            :class="{ expanded: expandedPurchaser === p.id }"
-          >
-            <div
-              class="pc-head"
-              @click="
-                expandedPurchaser = expandedPurchaser === p.id ? null : p.id
-              "
-            >
-              <span class="pc-name">{{ p.name }}</span>
-              <span class="pc-phone" v-if="p.phone">📞 {{ p.phone }}</span>
-              <span class="pc-title" v-if="p.title">{{ p.title }}</span>
-              <span class="pc-toggle">{{
-                expandedPurchaser === p.id ? "▼" : "▶"
-              }}</span>
-              <button class="pc-edit" @click.stop="editPurchaser(p)">✏️</button>
-              <button class="pc-del" @click.stop="handleDeletePurchaser(p)">
-                ×
-              </button>
-            </div>
-            <div class="pc-body" v-if="expandedPurchaser === p.id">
-              <!-- 采购下的地址 -->
-              <div v-for="a in p.addresses" :key="a.id" class="address-item">
-                <div class="ai-left">
-                  <span class="ai-label" :class="a.label">{{
-                    a.label || "地址"
-                  }}</span>
-                  <span class="ai-addr">{{ a.address }}</span>
-                  <span class="ai-contact" v-if="a.contact_name"
-                    >{{ a.contact_name }} {{ a.contact_phone }}</span
-                  >
-                  <span class="ai-default" v-if="a.is_default">[默认]</span>
+          <div class="dt-tab" :class="{ active: detailTab === 'sites' }" @click="detailTab = 'sites'">
+            <span class="dt-tab-icon">📍</span>
+            <span>收货点</span>
+            <span class="dt-tab-badge">{{ (detailData.sites || []).length }}</span>
+          </div>
+        </div>
+
+        <!-- 联系人 Tab -->
+        <div class="dt-body" v-if="detailTab === 'contacts'">
+          <div class="dt-body-head">
+            <span>联系人列表</span>
+            <button class="dt-add-btn" @click="openAddPurchaser">＋ 添加联系人</button>
+          </div>
+          <div v-if="detailData.purchasers.length === 0" class="dt-empty">暂无联系人，点击上方按钮添加</div>
+          <div v-for="p in detailData.purchasers" :key="p.id" class="contact-card">
+            <div class="cc-main" @click="editPurchaser(p)">
+              <div class="cc-avatar">{{ p.name.charAt(0) }}</div>
+              <div class="cc-body">
+                <div class="cc-name">{{ p.name }}</div>
+                <div class="cc-meta">
+                  <span v-if="p.title" class="cc-role">{{ p.title }}</span>
+                  <span v-if="p.phone" class="cc-phone">{{ p.phone }}</span>
                 </div>
-                <div class="ai-right">
-                  <button class="ai-btn" @click="editAddress(a)">✏️</button>
-                  <button class="ai-btn" @click="handleDeleteAddress(a)">
-                    ×
-                  </button>
+                <div v-if="getContactSite(p)" class="cc-addr">
+                  <span class="cc-addr-site">{{ getContactSite(p).name }}</span>
+                  <span class="cc-addr-text">{{ getContactSite(p).address }}</span>
                 </div>
               </div>
-              <button class="add-addr-btn" @click="openAddAddress(p)">
-                ➕ 添加收件地址
-              </button>
+              <div class="cc-actions">
+                <span class="cc-del" @click.stop="handleDeletePurchaser(p)">×</span>
+              </div>
+            </div>
+            <div v-if="p.phone || getContactSite(p)?.address" class="cc-copy-row" @click.stop="copyContactInfo(p)">
+              <span class="cc-copy-icon">📋</span>
+              <span class="cc-copy-text">复制收件信息</span>
             </div>
           </div>
-          <!-- 未关联采购的地址 -->
-          <div
-            v-for="a in detailData.unassigned"
-            :key="'u' + a.id"
-            class="address-item unassigned"
-          >
-            <div class="ai-left">
-              <span class="ai-label" :class="a.label">{{
-                a.label || "地址"
-              }}</span>
-              <span class="ai-addr">{{ a.address }}</span>
+        </div>
+
+        <!-- 收货点 Tab -->
+        <div class="dt-body" v-if="detailTab === 'sites'">
+          <div class="dt-body-head">
+            <span>收货点列表</span>
+            <button class="dt-add-btn" @click="openAddSite">＋ 添加收货点</button>
+          </div>
+          <div v-if="!detailData.sites || detailData.sites.length === 0" class="dt-empty">暂无收货点，点击上方按钮添加</div>
+          <div v-for="s in (detailData.sites || [])" :key="s.id" class="site-card">
+            <div class="sc-head">
+              <div class="sc-left">
+                <span class="sc-type-icon">{{ siteTypeIcon(s.site_type) }}</span>
+                <span class="sc-name">{{ s.name }}</span>
+                <span class="sc-type-tag">{{ siteTypeLabel(s.site_type) }}</span>
+                <span v-if="s.is_default" class="sc-default">默认</span>
+              </div>
+              <div class="sc-actions">
+                <button class="sc-edit" @click="editSite(s)">✏️</button>
+                <button class="sc-del" @click="handleDeleteSite(s)">×</button>
+              </div>
             </div>
-            <div class="ai-right">
-              <button class="ai-btn" @click="editAddress(a)">✏️</button>
-              <button class="ai-btn" @click="handleDeleteAddress(a)">×</button>
+            <div class="sc-body">
+              <div v-if="s.address" class="sc-row">
+                <span class="sc-row-ico">📍</span>
+                <span>{{ s.address }}</span>
+              </div>
+              <div v-if="s.latitude && s.longitude" class="sc-row sc-coord">
+                <span class="sc-row-ico">🎯</span>
+                <span>{{ s.latitude.toFixed(6) }}, {{ s.longitude.toFixed(6) }}</span>
+                <button class="sc-locate" @click="locateSite(s)">定位</button>
+              </div>
+              <div v-if="getLinkedContacts(s).length" class="sc-row">
+                <span class="sc-row-ico">👤</span>
+                <span class="sc-linked-contacts">
+                  <span v-for="(pc, pci) in getLinkedContacts(s)" :key="pc.id">
+                    <template v-if="pci > 0">、</template>
+                    {{ pc.name }}<template v-if="pc.phone"> {{ pc.phone }}</template>
+                    <template v-if="pc.title"> ({{ pc.title }})</template>
+                  </span>
+                </span>
+              </div>
+              <div v-if="s.notes" class="sc-row sc-notes">
+                <span class="sc-row-ico">📝</span>
+                <span>{{ s.notes }}</span>
+              </div>
             </div>
           </div>
         </div>
@@ -478,6 +480,15 @@
           type="textarea"
           rows="2"
         />
+        <div class="form-field">
+          <span class="form-field-label">默认收货点</span>
+          <select v-model.number="purchaserForm.default_site_id" class="form-select">
+            <option :value="0">不指定</option>
+            <option v-for="s in (detailData?.sites || [])" :key="s.id" :value="s.id">
+              {{ s.name }}
+            </option>
+          </select>
+        </div>
         <div class="form-btns">
           <van-button
             round
@@ -491,6 +502,89 @@
             type="primary"
             :loading="saving"
             @click="savePurchaser"
+            >保存</van-button
+          >
+        </div>
+      </div>
+    </van-popup>
+
+    <!-- ===== 收货点表单弹出层 ===== -->
+    <van-popup
+      v-model:show="showSiteForm"
+      round
+      position="bottom"
+      :style="{ height: 'auto', maxHeight: '80%' }"
+      closeable
+    >
+      <div class="form-wrap">
+        <h3>{{ editingSite ? "编辑收货点" : "添加收货点" }}</h3>
+        <van-field
+          v-model="siteForm.site_type"
+          label="类型"
+          placeholder="输入类型，如：仓库、代工厂、外协厂"
+          clearable
+        />
+        <div class="st-type-chips">
+          <span v-for="t in typePresets" :key="t.value"
+            class="st-type-chip"
+            :class="{ active: siteForm.site_type === t.value }"
+            @click="siteForm.site_type = t.value">
+            {{ t.label }}
+          </span>
+        </div>
+        <van-field
+          v-model="siteForm.address"
+          label="地址"
+          placeholder="详细地址"
+          @input="onSiteAddrInput"
+        />
+        <div class="coord-pick">
+          <div class="coord-row">
+            <span class="coord-label">坐标</span>
+            <input
+              v-model.number="siteForm.latitude"
+              class="coord-input"
+              placeholder="纬度"
+              type="number"
+              step="0.000001"
+            />
+            <input
+              v-model.number="siteForm.longitude"
+              class="coord-input"
+              placeholder="经度"
+              type="number"
+              step="0.000001"
+            />
+            <button class="coord-btn" @click="startSiteCoordPick">📍 选点</button>
+          </div>
+          <div class="coord-hint">点击「选点」在地图上标记位置，或直接输入坐标</div>
+        </div>
+        <van-field
+          v-model="siteForm.notes"
+          label="备注"
+          placeholder="备注"
+          type="textarea"
+          rows="2"
+        />
+        <div class="form-field">
+          <label class="form-checkbox">
+            <input type="checkbox" v-model="siteForm.is_default" />
+            <span>设为默认收货点</span>
+          </label>
+        </div>
+        <div class="form-btns">
+          <van-button
+            round
+            plain
+            type="default"
+            @click="showSiteForm = false"
+            >取消</van-button
+          >
+          <van-button
+            round
+            type="primary"
+            :loading="saving"
+            @click="saveSite"
             >保存</van-button
           >
         </div>
@@ -605,6 +699,10 @@ import {
   createAddress,
   updateAddress,
   deleteAddress,
+  fetchSites,
+  createSite,
+  updateSite,
+  deleteSite,
   geocodeAddress,
   reverseGeocode,
   getAmapKey,
@@ -653,6 +751,7 @@ const showSidePanel = ref(true);
 const selectedCustomer = ref(null);
 const showDetail = ref(false);
 const detailData = ref(null);
+const detailTab = ref('contacts'); // 'contacts' | 'sites'
 const expandedPurchaser = ref(null);
 const selectedMode = ref(""); // '' | 'pick'
 let geocodeTarget = null; // 'customer' | 'address'
@@ -661,9 +760,11 @@ let geocodeTarget = null; // 'customer' | 'address'
 const showCustomerForm = ref(false);
 const showPurchaserForm = ref(false);
 const showAddressForm = ref(false);
+const showSiteForm = ref(false);
 const editingCustomer = ref(null);
 const editingPurchaser = ref(null);
 const editingAddress = ref(null);
+const editingSite = ref(null);
 const saving = ref(false);
 const customerForm = reactive({
   name: "",
@@ -673,7 +774,7 @@ const customerForm = reactive({
   longitude: null,
   notes: "",
 });
-const purchaserForm = reactive({ name: "", phone: "", title: "", notes: "" });
+const purchaserForm = reactive({ name: "", phone: "", title: "", notes: "", default_site_id: 0 });
 const addressForm = reactive({
   label: "",
   address: "",
@@ -684,6 +785,23 @@ const addressForm = reactive({
   notes: "",
 });
 let addressFormPurchaserId = 0;
+const typePresets = [
+  { value: "自有厂区", label: "自有厂区" },
+  { value: "代工厂", label: "代工厂" },
+  { value: "仓库", label: "仓库" },
+  { value: "办事处", label: "办事处" },
+];
+const siteForm = reactive({
+  name: "",
+  site_type: "",
+  address: "",
+  latitude: null,
+  longitude: null,
+  contact_name: "",
+  contact_phone: "",
+  is_default: false,
+  notes: "",
+});
 
 // ====== 计算属性 ======
 const regionGroups = computed(() => {
@@ -1070,6 +1188,7 @@ function openAddPurchaser() {
   purchaserForm.phone = "";
   purchaserForm.title = "";
   purchaserForm.notes = "";
+  purchaserForm.default_site_id = 0;
   showPurchaserForm.value = true;
 }
 
@@ -1079,6 +1198,7 @@ function editPurchaser(p) {
   purchaserForm.phone = p.phone || "";
   purchaserForm.title = p.title || "";
   purchaserForm.notes = p.notes || "";
+  purchaserForm.default_site_id = p.default_site_id || 0;
   showPurchaserForm.value = true;
 }
 
@@ -1191,6 +1311,151 @@ async function handleDeleteAddress(a) {
   } catch (e) {
     if (e === "cancel" || e?.message?.includes("cancel")) return;
   }
+}
+
+// ====== 收货点（Sites）增删改 ======
+function openAddSite() {
+  if (!detailData.value) return;
+  editingSite.value = null;
+  siteForm.name = "";
+  siteForm.site_type = "";
+  siteForm.address = "";
+  siteForm.latitude = null;
+  siteForm.longitude = null;
+  siteForm.contact_name = "";
+  siteForm.contact_phone = "";
+  siteForm.is_default = false;
+  siteForm.notes = "";
+  showSiteForm.value = true;
+}
+
+function editSite(s) {
+  editingSite.value = s;
+  siteForm.name = s.name;
+  siteForm.site_type = s.site_type || "";
+  siteForm.address = s.address || "";
+  siteForm.latitude = s.latitude;
+  siteForm.longitude = s.longitude;
+  siteForm.contact_name = s.contact_name || "";
+  siteForm.contact_phone = s.contact_phone || "";
+  siteForm.is_default = !!s.is_default;
+  siteForm.notes = s.notes || "";
+  showSiteForm.value = true;
+}
+
+async function saveSite() {
+  if (!siteForm.site_type) return showToast("请输入类型");
+  saving.value = true;
+  try {
+    // 自动生成名称：类型 + 地址前6个字
+    const autoName = siteForm.name || (siteForm.site_type + (siteForm.address ? " · " + siteForm.address.replace(/[省市区县街道]/g,'').slice(0,8) : ""));
+    const data = {
+      ...siteForm,
+      name: autoName,
+      customer_id: detailData.value.customer.id,
+    };
+    if (editingSite.value) {
+      await updateSite(editingSite.value.id, data);
+      showToast("已更新");
+    } else {
+      await createSite(data);
+      showToast("已添加");
+    }
+    showSiteForm.value = false;
+    const r = await getMapCustomer(detailData.value.customer.id);
+    detailData.value = r.data;
+    await loadData();
+  } catch (e) {
+    showToast(e.message || "保存失败");
+  } finally {
+    saving.value = false;
+  }
+}
+
+async function handleDeleteSite(s) {
+  try {
+    await showConfirmDialog({
+      title: "确认删除",
+      message: `确定删除收货点「${s.name}」？`,
+    });
+    await deleteSite(s.id);
+    showToast("已删除");
+    const r = await getMapCustomer(detailData.value.customer.id);
+    detailData.value = r.data;
+    await loadData();
+  } catch (e) {
+    if (e === "cancel" || e?.message?.includes("cancel")) return;
+  }
+}
+
+function locateSite(s) {
+  if (!s.latitude || !s.longitude || !map) return showToast("该收货点尚未定位");
+  const gcj = wgs84ToGcj02(s.latitude, s.longitude);
+  mapSetView(gcj.lat, gcj.lng, 16);
+  if (window._viewMarker) map.remove(window._viewMarker);
+  window._viewMarker = addAmapMarker(map, gcj.lat, gcj.lng);
+  showDetail.value = false;
+  setTimeout(() => { showDetail.value = true }, 100);
+}
+
+let pickSiteForm = false;
+function startSiteCoordPick() {
+  pickSiteForm = true;
+  pickOriginForm = "site";
+  selectedMode.value = "pick";
+  showSiteForm.value = false;
+  setTimeout(() => {
+    const addr = siteForm.address;
+    if (addr && addr.length >= 3) {
+      doPickGeocode(addr);
+    } else {
+      centerMapForPick();
+    }
+  }, 350);
+}
+
+function onSiteAddrInput(val) {
+  autoGeocode(val, "site");
+}
+
+function siteTypeIcon(type) {
+  const m = { office: "🏢", oem: "🏭", warehouse: "📦", branch: "🏢", "自有厂区": "🏢", "代工厂": "🏭", "仓库": "📦", "办事处": "🏢" };
+  return m[type] || "🏷️";
+}
+function siteTypeLabel(type) {
+  const m = { office: "自有厂区", oem: "代工厂", warehouse: "仓库", branch: "办事处" };
+  return m[type] || type || "其他";
+}
+
+// 获取联系人关联的默认收货点
+function getContactSite(p) {
+  if (p.default_site_id === undefined || p.default_site_id === null || p.default_site_id === 0 || !detailData.value?.sites) return null;
+  const sid = Number(p.default_site_id);
+  return detailData.value.sites.find(s => Number(s.id) === sid) || null;
+}
+
+// 获取收货点关联的联系人（哪些联系人把这个收货点设为默认）
+function getLinkedContacts(s) {
+  if (!detailData.value?.purchasers) return [];
+  return detailData.value.purchasers.filter(p => Number(p.default_site_id) === Number(s.id));
+}
+
+// 复制收件信息到剪贴板：收件人 电话 地址
+function copyContactInfo(p) {
+  const site = getContactSite(p);
+  // 收件人 = 联系人姓名
+  const finalName = p.name || "";
+  // 电话 = 联系人电话
+  const finalPhone = p.phone || "";
+  // 地址 = 仅站点地址，不要名称/类型
+  const addr = site?.address || "";
+  const text = [finalName, finalPhone, addr].filter(Boolean).join("  ");
+  if (!text) return showToast("没有可复制的收件信息");
+  navigator.clipboard.writeText(text).then(() => {
+    showToast("✅ 已复制：" + text.slice(0, 35) + (text.length > 35 ? "…" : ""));
+  }).catch(() => {
+    showToast("复制失败，请手动复制");
+  });
 }
 
 // ====== 地图搜索框（AutoComplete + 服务器POI搜索，对标高德） ======
@@ -1478,6 +1743,9 @@ function setFormCoords(lat, lng) {
   if (pickOriginForm === "customer") {
     customerForm.latitude = lat;
     customerForm.longitude = lng;
+  } else if (pickOriginForm === "site") {
+    siteForm.latitude = lat;
+    siteForm.longitude = lng;
   } else {
     addressForm.latitude = lat;
     addressForm.longitude = lng;
@@ -1494,6 +1762,8 @@ function confirmCoordPick() {
   // 重新打开对应表单
   if (pickOriginForm === "customer") {
     showCustomerForm.value = true;
+  } else if (pickOriginForm === "site") {
+    showSiteForm.value = true;
   } else {
     showAddressForm.value = true;
   }
@@ -1509,6 +1779,9 @@ async function autoGeocode(val, target) {
     if (target === "customer") {
       customerForm.latitude = null;
       customerForm.longitude = null;
+    } else if (target === "site") {
+      siteForm.latitude = null;
+      siteForm.longitude = null;
     } else {
       addressForm.latitude = null;
       addressForm.longitude = null;
@@ -1529,6 +1802,9 @@ async function autoGeocode(val, target) {
         if (target === "customer") {
           customerForm.latitude = saveLat;
           customerForm.longitude = saveLng;
+        } else if (target === "site") {
+          siteForm.latitude = saveLat;
+          siteForm.longitude = saveLng;
         } else {
           addressForm.latitude = saveLat;
           addressForm.longitude = saveLng;
@@ -2286,76 +2562,402 @@ onUnmounted(() => {
   background: #004d40;
 }
 
-/* 详情弹出层 */
+/* ===== 详情弹出层（新设计） ===== */
 .detail-wrap {
-  padding: 0 20px 24px;
+  padding: 0 0 24px;
   overflow-y: auto;
   height: 100%;
+  background: #f8f9fc;
 }
-.detail-head {
-  padding: 16px 0 12px;
-  border-bottom: 1px solid #f0f0f0;
+/* 客户信息头 */
+.dt-header {
+  background: linear-gradient(135deg, #e0f7fa 0%, #b2dfdb 100%);
+  padding: 16px 20px 12px;
+  position: sticky;
+  top: 0;
+  z-index: 5;
 }
-.dh-title {
+.dt-h-top {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 8px;
+  margin-bottom: 6px;
 }
-.dh-title h3 {
+.dt-h-name {
   margin: 0;
   font-size: 18px;
   font-weight: 700;
-  color: #333;
+  color: #004d40;
 }
-.dh-badge {
-  font-size: 10px;
-  padding: 1px 6px;
-  border-radius: 8px;
+.dt-h-badge {
+  font-size: 9px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: #f5f5f5;
+  color: #999;
+  font-weight: 500;
+}
+.dt-h-badge.active {
   background: #e8f5e9;
   color: #2e7d32;
 }
-.dh-badge.muted {
-  background: #f5f5f5;
-  color: #999;
+.dt-h-info {
+  margin-bottom: 8px;
 }
-.dh-info {
-  margin-bottom: 10px;
+.dt-h-row {
+  font-size: 12px;
+  color: #555;
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+  margin-bottom: 2px;
+  line-height: 1.4;
 }
-.dh-row {
+.dt-h-row.notes {
+  color: #888;
+  font-style: italic;
+}
+.dt-h-ico {
+  flex-shrink: 0;
+  font-size: 12px;
+}
+.dt-h-actions {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+.dt-ha {
+  padding: 3px 10px;
+  border-radius: 14px;
+  font-size: 10px;
+  cursor: pointer;
+  border: 1px solid rgba(0,0,0,0.08);
+  background: rgba(255,255,255,0.8);
+  color: #00695c;
+  font-family: inherit;
+  white-space: nowrap;
+  transition: all 0.15s;
+}
+.dt-ha:hover {
+  background: #fff;
+  border-color: #00695c;
+}
+.dt-ha.danger {
+  color: #e53935;
+}
+.dt-ha.danger:hover {
+  border-color: #e53935;
+  background: #fff;
+}
+/* Tab 切换 */
+.dt-tabs {
+  display: flex;
+  background: #fff;
+  border-bottom: 1px solid #eee;
+  position: sticky;
+  top: 100px;
+  z-index: 4;
+}
+.dt-tab {
+  flex: 1;
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
+  padding: 11px 0;
   font-size: 13px;
-  color: #666;
-  margin-bottom: 4px;
-}
-.dh-label {
-  font-size: 14px;
-}
-.dh-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-.dh-btn {
-  padding: 5px 12px;
-  border-radius: 6px;
-  font-size: 11px;
+  font-weight: 500;
+  color: #888;
   cursor: pointer;
-  border: 1px solid #d9d9d9;
-  background: #fff;
-  color: #555;
+  border-bottom: 2px solid transparent;
+  transition: all 0.2s;
+  position: relative;
+}
+.dt-tab.active {
+  color: #00695c;
+  border-bottom-color: #00695c;
+  background: #fafffe;
+}
+.dt-tab-icon {
+  font-size: 15px;
+}
+.dt-tab-badge {
+  font-size: 10px;
+  background: #e0f7fa;
+  color: #00695c;
+  padding: 0 6px;
+  border-radius: 8px;
+  font-weight: 600;
+}
+.dt-tab.active .dt-tab-badge {
+  background: #00695c;
+  color: #fff;
+}
+/* Tab 内容区 */
+.dt-body {
+  padding: 12px 16px;
+}
+.dt-body-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  font-size: 12px;
+  color: #888;
+}
+.dt-add-btn {
+  padding: 5px 14px;
+  border-radius: 16px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+  background: #00695c;
+  color: #fff;
   font-family: inherit;
   transition: all 0.15s;
 }
-.dh-btn:hover {
-  color: #00695c;
-  border-color: #00695c;
+.dt-add-btn:hover {
+  background: #004d40;
 }
-.dh-btn.danger:hover {
+.dt-empty {
+  text-align: center;
+  padding: 24px 0;
+  font-size: 12px;
+  color: #bbb;
+}
+/* 联系人卡片 */
+.contact-card {
+  background: #fff;
+  border-radius: 12px;
+  margin-bottom: 8px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+  border: 1px solid #f0f0f0;
+  overflow: hidden;
+  transition: all 0.15s;
+}
+.contact-card:hover {
+  border-color: #b2dfdb;
+  box-shadow: 0 2px 8px rgba(0,105,92,0.08);
+}
+.cc-main {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  cursor: pointer;
+}
+.cc-avatar {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #00695c, #26a69a);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+.cc-body {
+  flex: 1;
+  min-width: 0;
+}
+.cc-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: #333;
+  margin-bottom: 2px;
+}
+.cc-addr {
+  margin-top: 4px;
+  font-size: 11px;
+  color: #888;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+.cc-addr-site {
+  background: #f0f7fa;
+  color: #00695c;
+  padding: 0 5px;
+  border-radius: 3px;
+  font-size: 10px;
+}
+.cc-addr-text {
+  color: #999;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 160px;
+}
+/* 复制收件信息栏 */
+.cc-copy-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border-top: 1px solid #f5f5f5;
+  background: #fafffe;
+  cursor: pointer;
+  transition: all 0.12s;
+}
+.cc-copy-row:hover {
+  background: #e0f7fa;
+}
+.cc-copy-row:active {
+  background: #b2dfdb;
+}
+.cc-copy-icon {
+  font-size: 12px;
+}
+.cc-copy-text {
+  font-size: 11px;
+  color: #00695c;
+  font-weight: 500;
+}
+.cc-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.cc-role {
+  font-size: 10px;
+  color: #00695c;
+  background: #e0f7fa;
+  padding: 1px 8px;
+  border-radius: 8px;
+}
+.cc-phone {
+  font-size: 11px;
+  color: #888;
+}
+.cc-actions {
+  flex-shrink: 0;
+}
+.cc-del {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #f5f5f5;
+  color: #ccc;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.cc-del:hover {
+  background: #ffebee;
   color: #e53935;
-  border-color: #e53935;
+}
+/* 收货点卡片 */
+.site-card {
+  background: #fff;
+  border-radius: 12px;
+  padding: 14px;
+  margin-bottom: 10px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+  border: 1px solid #f0f0f0;
+  transition: all 0.15s;
+}
+.site-card:hover {
+  border-color: #b2dfdb;
+  box-shadow: 0 2px 8px rgba(0,105,92,0.08);
+}
+.sc-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.sc-left {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.sc-type-icon {
+  font-size: 18px;
+}
+.sc-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: #333;
+}
+.sc-type-tag {
+  font-size: 9px;
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: #f0f2f5;
+  color: #666;
+}
+.sc-default {
+  font-size: 9px;
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: #fff3e0;
+  color: #e65100;
+  font-weight: 600;
+}
+.sc-actions {
+  display: flex;
+  gap: 4px;
+}
+.sc-edit, .sc-del {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-size: 13px;
+  color: #999;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+.sc-edit:hover { color: #00695c; background: #e0f7fa; }
+.sc-del:hover { color: #e53935; background: #ffebee; }
+.sc-body {
+  padding-left: 24px;
+}
+.sc-row {
+  font-size: 12px;
+  color: #666;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 3px;
+  line-height: 1.4;
+}
+.sc-row-ico {
+  flex-shrink: 0;
+  font-size: 11px;
+  width: 16px;
+  text-align: center;
+}
+.sc-row.sc-coord span {
+  color: #888;
+  font-family: monospace;
+  font-size: 11px;
+}
+.sc-locate {
+  margin-left: 6px;
+  padding: 1px 8px;
+  border-radius: 8px;
+  font-size: 9px;
+  cursor: pointer;
+  border: 1px solid #b2dfdb;
+  background: #fff;
+  color: #00695c;
+  font-family: inherit;
+}
+.sc-locate:hover {
+  background: #e0f7fa;
+}
+.sc-notes {
+  color: #aaa;
 }
 
 .detail-section {
@@ -2584,6 +3186,78 @@ onUnmounted(() => {
   font-size: 10px;
   color: #bbb;
   margin-top: 4px;
+}
+
+/* 表单选择器和checkbox */
+.form-field {
+  padding: 10px 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.form-field-label {
+  font-size: 12px;
+  color: #666;
+  white-space: nowrap;
+  min-width: 60px;
+}
+.form-select {
+  flex: 1;
+  padding: 8px 10px;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  font-size: 13px;
+  color: #333;
+  background: #fff;
+  font-family: inherit;
+  outline: none;
+  appearance: auto;
+  cursor: pointer;
+}
+.form-select:focus {
+  border-color: #00695c;
+}
+.form-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #555;
+  cursor: pointer;
+}
+.form-checkbox input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: #00695c;
+  cursor: pointer;
+}
+
+/* 类型快捷芯片 */
+.st-type-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 0 16px 10px;
+}
+.st-type-chip {
+  padding: 4px 14px;
+  border-radius: 14px;
+  font-size: 12px;
+  background: #f0f2f5;
+  color: #666;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: all 0.15s;
+  user-select: none;
+}
+.st-type-chip:hover {
+  border-color: #b2dfdb;
+  color: #00695c;
+}
+.st-type-chip.active {
+  background: #00695c;
+  color: #fff;
+  border-color: #00695c;
 }
 
 /* 地理编码搜索 */

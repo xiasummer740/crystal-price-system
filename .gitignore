@@ -40,3 +40,4 @@ skills-lock.json
 startup.log
 Thumbs.db
 test-results/
+.playwright-mcp/

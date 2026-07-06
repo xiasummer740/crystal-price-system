@@ -235,6 +235,49 @@ export async function initDb() {
   try { db.run('CREATE INDEX IF NOT EXISTS idx_map_addresses_cid ON map_addresses(customer_id)') } catch {}
   try { db.run('CREATE INDEX IF NOT EXISTS idx_map_addresses_pid ON map_addresses(purchaser_id)') } catch {}
 
+  // 收货点（厂区/代工厂/仓库 — 客户下的实际收件地）
+  db.run(`
+    CREATE TABLE IF NOT EXISTS map_sites (
+      id              INTEGER PRIMARY KEY AUTOINCREMENT,
+      customer_id     INTEGER NOT NULL,
+      name            TEXT NOT NULL,
+      site_type       TEXT DEFAULT 'office',
+      address         TEXT DEFAULT '',
+      latitude        REAL,
+      longitude       REAL,
+      contact_name    TEXT DEFAULT '',
+      contact_phone   TEXT DEFAULT '',
+      is_default      INTEGER DEFAULT 0,
+      notes           TEXT DEFAULT '',
+      created_at      DATETIME DEFAULT (datetime('now','localtime'))
+    )
+  `)
+  try { db.run('CREATE INDEX IF NOT EXISTS idx_map_sites_cid ON map_sites(customer_id)') } catch {}
+
+  // 兼容旧数据库：给联系人加默认收货点字段
+  try { db.run('ALTER TABLE map_purchasers ADD COLUMN default_site_id INTEGER DEFAULT 0') } catch {}
+
+  // 迁移旧地址 → 收货点：将无关联采购的地址转为收货点
+  try {
+    const addrCount = queryOne("SELECT COUNT(*) as c FROM map_addresses WHERE purchaser_id = 0 OR purchaser_id IS NULL")?.c ?? 0
+    if (addrCount > 0) {
+      const oldAddrs = queryAll("SELECT * FROM map_addresses WHERE (purchaser_id = 0 OR purchaser_id IS NULL) AND customer_id NOT IN (SELECT customer_id FROM map_sites)")
+      for (const a of oldAddrs) {
+        const siteName = a.label || '默认收货点'
+        const exists = queryOne("SELECT id FROM map_sites WHERE customer_id = ? AND name = ?", [a.customer_id, siteName])
+        if (!exists) {
+          executeBatch(
+            `INSERT INTO map_sites (customer_id, name, site_type, address, latitude, longitude, contact_name, contact_phone, is_default, notes)
+             VALUES (?, ?, 'office', ?, ?, ?, ?, ?, ?, ?)`,
+            [a.customer_id, siteName, a.address, a.latitude, a.longitude, a.contact_name, a.contact_phone, a.is_default, a.notes]
+          )
+        }
+      }
+      // 迁移完成后立即存盘
+      if (addrCount > 0) { try { saveNow() } catch {} }
+    }
+  } catch {}
+
   // 行程规划
   db.run(`
     CREATE TABLE IF NOT EXISTS map_trip_plans (

@@ -255,6 +255,19 @@ export function updateAddress(id, data) {
 export function deleteAddress(id) {
   return http.delete(`/map/addresses/${id}`)
 }
+// Sites（收货点）
+export function fetchSites(customerId) {
+  return http.get(`/map/customers/${customerId}/sites`)
+}
+export function createSite(data) {
+  return http.post('/map/sites', data)
+}
+export function updateSite(id, data) {
+  return http.put(`/map/sites/${id}`, data)
+}
+export function deleteSite(id) {
+  return http.delete(`/map/sites/${id}`)
+}
 // Trip plans
 export function fetchTripPlans(params) {
   return http.get('/map/trip-plans', { params })

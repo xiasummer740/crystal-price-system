@@ -13,7 +13,8 @@ router.get("/customers", (req, res) => {
   let sql = `
     SELECT mc.*,
       (SELECT COUNT(*) FROM map_purchasers WHERE customer_id = mc.id) as purchaser_count,
-      (SELECT COUNT(*) FROM map_addresses WHERE customer_id = mc.id) as address_count
+      (SELECT COUNT(*) FROM map_addresses WHERE customer_id = mc.id) as address_count,
+      (SELECT COUNT(*) FROM map_sites WHERE customer_id = mc.id) as site_count
     FROM map_customers mc
   `;
   const params = [];
@@ -41,7 +42,11 @@ router.get("/customers/:id", (req, res) => {
     "SELECT * FROM map_addresses WHERE customer_id = ? ORDER BY is_default DESC, id ASC",
     [customer.id],
   );
-  // 按采购分组
+  const sites = queryAll(
+    "SELECT * FROM map_sites WHERE customer_id = ? ORDER BY is_default DESC, id ASC",
+    [customer.id],
+  );
+  // 按采购分组（旧版兼容）
   const purchaserMap = {};
   for (const p of purchasers) {
     p.addresses = addresses.filter(
@@ -52,7 +57,7 @@ router.get("/customers/:id", (req, res) => {
   const unassigned = addresses.filter(
     (a) => a.purchaser_id !== 0 && !purchaserMap[a.purchaser_id],
   );
-  res.json({ code: 0, data: { customer, purchasers, unassigned } });
+  res.json({ code: 0, data: { customer, purchasers, addresses, sites, unassigned } });
 });
 
 // 新建客户
@@ -171,8 +176,8 @@ router.post("/purchasers", (req, res) => {
   if (!b.customer_id || !b.name)
     return res.status(400).json({ code: 1, msg: "参数不完整" });
   const r = execute(
-    "INSERT INTO map_purchasers (customer_id, name, phone, title, notes) VALUES (?, ?, ?, ?, ?)",
-    [b.customer_id, b.name, b.phone || "", b.title || "", b.notes || ""],
+    "INSERT INTO map_purchasers (customer_id, name, phone, title, notes, default_site_id) VALUES (?, ?, ?, ?, ?, ?)",
+    [b.customer_id, b.name, b.phone || "", b.title || "", b.notes || "", b.default_site_id || 0],
   );
   res.json({ code: 0, data: { id: r.lastInsertRowid } });
 });
@@ -184,12 +189,13 @@ router.put("/purchasers/:id", (req, res) => {
   if (!existing) return res.status(404).json({ code: 1, msg: "采购不存在" });
   const b = req.body;
   execute(
-    "UPDATE map_purchasers SET name=?, phone=?, title=?, notes=? WHERE id=?",
+    "UPDATE map_purchasers SET name=?, phone=?, title=?, notes=?, default_site_id=? WHERE id=?",
     [
       b.name ?? existing.name,
       b.phone ?? existing.phone,
       b.title ?? existing.title,
       b.notes ?? existing.notes,
+      b.default_site_id !== undefined ? b.default_site_id : (existing.default_site_id || 0),
       Number(req.params.id),
     ],
   );
@@ -260,6 +266,79 @@ router.put("/addresses/:id", (req, res) => {
 
 router.delete("/addresses/:id", (req, res) => {
   execute("DELETE FROM map_addresses WHERE id = ?", [Number(req.params.id)]);
+  res.json({ code: 0, msg: "删除成功" });
+});
+
+// ====== 收货点（Sites）CRUD ======
+
+router.get("/customers/:id/sites", (req, res) => {
+  const rows = queryAll(
+    "SELECT * FROM map_sites WHERE customer_id = ? ORDER BY is_default DESC, id ASC",
+    [Number(req.params.id)],
+  );
+  res.json({ code: 0, data: rows });
+});
+
+router.post("/sites", (req, res) => {
+  const b = req.body;
+  if (!b.customer_id || !b.name)
+    return res.status(400).json({ code: 1, msg: "参数不完整" });
+  // 如果设置为默认，清除其他默认
+  if (b.is_default) {
+    execute("UPDATE map_sites SET is_default = 0 WHERE customer_id = ?", [b.customer_id]);
+  }
+  const r = execute(
+    `INSERT INTO map_sites (customer_id, name, site_type, address, latitude, longitude, contact_name, contact_phone, is_default, notes)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      b.customer_id,
+      b.name,
+      b.site_type || 'office',
+      b.address || '',
+      b.latitude || null,
+      b.longitude || null,
+      b.contact_name || '',
+      b.contact_phone || '',
+      b.is_default ? 1 : 0,
+      b.notes || '',
+    ],
+  );
+  res.json({ code: 0, data: { id: r.lastInsertRowid } });
+});
+
+router.put("/sites/:id", (req, res) => {
+  const existing = queryOne("SELECT * FROM map_sites WHERE id = ?", [
+    Number(req.params.id),
+  ]);
+  if (!existing) return res.status(404).json({ code: 1, msg: "收货点不存在" });
+  const b = req.body;
+  // 如果设置为默认，清除同客户其他默认
+  if (b.is_default) {
+    execute("UPDATE map_sites SET is_default = 0 WHERE customer_id = ? AND id != ?", [existing.customer_id, Number(req.params.id)]);
+  }
+  execute(
+    `UPDATE map_sites SET name=?, site_type=?, address=?, latitude=?, longitude=?, contact_name=?, contact_phone=?, is_default=?, notes=? WHERE id=?`,
+    [
+      b.name ?? existing.name,
+      b.site_type ?? existing.site_type,
+      b.address ?? existing.address,
+      b.latitude !== undefined ? b.latitude : existing.latitude,
+      b.longitude !== undefined ? b.longitude : existing.longitude,
+      b.contact_name ?? existing.contact_name,
+      b.contact_phone ?? existing.contact_phone,
+      b.is_default !== undefined ? (b.is_default ? 1 : 0) : existing.is_default,
+      b.notes ?? existing.notes,
+      Number(req.params.id),
+    ],
+  );
+  res.json({ code: 0, msg: "更新成功" });
+});
+
+router.delete("/sites/:id", (req, res) => {
+  const id = Number(req.params.id);
+  // 同时清理关联的地址和联系人默认值
+  execute("UPDATE map_purchasers SET default_site_id = 0 WHERE default_site_id = ?", [id]);
+  execute("DELETE FROM map_sites WHERE id = ?", [id]);
   res.json({ code: 0, msg: "删除成功" });
 });
 
@@ -701,7 +780,8 @@ router.get("/export", (_req, res) => {
   const customers = queryAll(`
     SELECT mc.*,
       (SELECT COUNT(*) FROM map_purchasers WHERE customer_id = mc.id) as purchaser_count,
-      (SELECT COUNT(*) FROM map_addresses WHERE customer_id = mc.id) as address_count
+      (SELECT COUNT(*) FROM map_addresses WHERE customer_id = mc.id) as address_count,
+      (SELECT COUNT(*) FROM map_sites WHERE customer_id = mc.id) as site_count
     FROM map_customers mc ORDER BY mc.name ASC
   `);
   const purchasers = queryAll(
@@ -709,6 +789,9 @@ router.get("/export", (_req, res) => {
   );
   const addresses = queryAll(
     "SELECT ma.*, mc.name as customer_name, mp.name as purchaser_name FROM map_addresses ma LEFT JOIN map_customers mc ON ma.customer_id = mc.id LEFT JOIN map_purchasers mp ON ma.purchaser_id = mp.id ORDER BY mc.name, ma.label",
+  );
+  const sites = queryAll(
+    "SELECT ms.*, mc.name as customer_name FROM map_sites ms LEFT JOIN map_customers mc ON ms.customer_id = mc.id ORDER BY mc.name, ms.name",
   );
 
   const wb = XLSX.utils.book_new();
@@ -783,7 +866,38 @@ router.get("/export", (_req, res) => {
   const ws3 = XLSX.utils.aoa_to_sheet(ws3Data);
   XLSX.utils.book_append_sheet(wb, ws3, "收件地址");
 
-  const buffer = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
+  // Sheet4: 收货点
+  const ws4Data = [
+    [
+      "所属客户",
+      "名称",
+      "类型",
+      "地址",
+      "纬度",
+      "经度",
+      "收件人",
+      "联系电话",
+      "是否默认",
+      "备注",
+    ],
+  ];
+  const siteTypeMap = { office: "自有厂区", oem: "代工厂", warehouse: "仓库", branch: "办事处" };
+  for (const s of sites) {
+    ws4Data.push([
+      s.customer_name,
+      s.name,
+      siteTypeMap[s.site_type] || s.site_type,
+      s.address,
+      s.latitude,
+      s.longitude,
+      s.contact_name,
+      s.contact_phone,
+      s.is_default ? "是" : "否",
+      s.notes,
+    ]);
+  }
+  const ws4 = XLSX.utils.aoa_to_sheet(ws4Data);
+  XLSX.utils.book_append_sheet(wb, ws4, "收货点");
   res.setHeader(
     "Content-Type",
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
