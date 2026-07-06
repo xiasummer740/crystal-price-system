@@ -674,34 +674,17 @@ app.whenReady().then(async () => {
   }
 })
 
-// 关闭前保存数据库 + 自动备份（数据库 + Excel）
+// 关闭前保存数据库（快速退出，不阻塞安装器）
 app.on('before-quit', () => {
   try {
-    // 停止提醒轮询
     if (reminderInterval) { clearInterval(reminderInterval); reminderInterval = null }
-    if (!dbSaveNow) {
-      log('before-quit: dbSaveNow 未初始化（启动失败？），跳过保存')
-      return
+    if (dbSaveNow) {
+      if (doFlushBackupPending) {
+        try { doFlushBackupPending() } catch (e) { log('flushPending error: ' + e.message) }
+      }
+      dbSaveNow()
     }
-    // 先同步落盘节流中的 Excel 自动备份，避免最近改动丢失
-    if (doFlushBackupPending) {
-      try { doFlushBackupPending() } catch (e) { log('flushPending error: ' + e.message) }
-    }
-    dbSaveNow()
-    const dataDir = process.env.DATA_DIR
-    if (!dataDir) { log('before-quit: DATA_DIR 未设置，跳过备份'); return }
-
-    // 数据库备份（保留30份）
-    const dbBackupDir = path.join(dataDir, '备份')
-    if (!fs.existsSync(dbBackupDir)) fs.mkdirSync(dbBackupDir, { recursive: true })
-    const dbPath = path.join(dataDir, '数据库', 'data.db')
-    if (fs.existsSync(dbPath)) {
-      const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
-      fs.copyFileSync(dbPath, path.join(dbBackupDir, `data-backup-${ts}.db`))
-      const files = fs.readdirSync(dbBackupDir).filter(f => f.endsWith('.db')).sort()
-      while (files.length > 30) { fs.unlinkSync(path.join(dbBackupDir, files.shift())) }
-    }
-    log('before-quit: 保存 + 备份完成')
+    log('before-quit: 数据库已保存')
   } catch (e) {
     log('before-quit error: ' + (e.stack || e.message))
   }

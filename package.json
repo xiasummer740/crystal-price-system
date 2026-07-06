@@ -76,7 +76,8 @@
       "installerLanguages": [
         "zh_CN",
         "en_US"
-      ]
+      ],
+      "shortcutName": "晶振报价管理系统"
     },
     "portable": {
       "artifactName": "晶振报价管理系统-便携版-v${version}.${ext}"
