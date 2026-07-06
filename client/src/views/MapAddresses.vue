@@ -473,18 +473,25 @@ async function initMap() {
   try {
     if (useAmapJs) {
       // ===== 高德 JS API（最新地图，无坐标偏移） =====
-      await loadAmapScript(amapKey)
-      map = createAmapMap(mapContainer.value, [114.3, 30.5], 6)
-      // 选点点击
-      map.on('click', (e) => {
-        if (selectedMode.value !== 'pick') return
-        const wgs = gcj02ToWgs84(e.latlng.lat, e.latlng.lng)
-        setFormCoords(wgs.lat, wgs.lng)
-        placePickMarker(wgs.lat, wgs.lng)
-      })
-      mapLoading.value = false
-      setTimeout(loadCustomerMarkers, 300)
-    } else {
+      try {
+        await loadAmapScript(amapKey)
+        map = createAmapMap(mapContainer.value, [114.3, 30.5], 6)
+        map.on('click', (e) => {
+          if (selectedMode.value !== 'pick') return
+          const wgs = gcj02ToWgs84(e.latlng.lat, e.latlng.lng)
+          setFormCoords(wgs.lat, wgs.lng)
+          placePickMarker(wgs.lat, wgs.lng)
+        })
+        mapLoading.value = false
+        setTimeout(loadCustomerMarkers, 300)
+        return // 成功 → 跳过 Leaflet
+      } catch (e) {
+        console.warn('高德 JS API 加载失败，降级到 Leaflet:', e.message)
+        useAmapJs = false
+        showToast('高德地图加载失败，已降级到基础地图。请确认 Key 已开启「Web端(JS API)」服务')
+      }
+    }
+    if (!useAmapJs) {
       // ===== Leaflet（无 Key 时兜底） =====
       map = L.map(mapContainer.value, {
         center: [30.5, 114.3],
