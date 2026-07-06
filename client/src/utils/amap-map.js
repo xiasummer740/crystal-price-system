@@ -59,11 +59,15 @@ export function addAmapMarker(map, lat, lng, opts = {}) {
   return marker;
 }
 
-// 添加带标签的标记（显示客户名缩写）
+// 添加已定位客户标记（显示⭐）
 export function addAmapLabelMarker(map, lat, lng, label = "", onClick) {
+  // 用 DOM 元素而非字符串，方便后续通过 getContent() 拿到元素操作样式
+  const el = document.createElement("div");
+  el.className = "marker-pin";
+  el.textContent = "⭐";
   const marker = new AMap.Marker({
     position: [lng, lat],
-    content: `<div class="a-marker-pin">${label.slice(0, 3)}</div>`,
+    content: el, // DOM 元素
     offset: new AMap.Pixel(-30, -28),
     zIndex: 10,
   });

@@ -638,6 +638,7 @@ const router = useRouter();
 const mapContainer = ref(null);
 let map = null;
 let customerMarkers = {};
+let customerInfoWindows = {};
 let currentRoute = null;
 
 // ====== 状态 ======
@@ -894,6 +895,7 @@ async function initMap() {
 // ====== 加载客户标记（纯高德 JS API） ======
 function loadCustomerMarkers() {
   customerMarkers = {};
+  customerInfoWindows = {};
   const hasCoords = customers.value.filter((c) => c.latitude && c.longitude);
   if (!hasCoords.length) return;
 
@@ -901,10 +903,10 @@ function loadCustomerMarkers() {
   const amapMarkers = [];
   for (const c of hasCoords) {
     const gcj = wgs84ToGcj02(c.latitude, c.longitude);
-    const marker = addAmapLabelMarker(map, gcj.lat, gcj.lng, c.name, () =>
+    const marker = addAmapLabelMarker(map, gcj.lat, gcj.lng, "", () =>
       selectCustomer(c),
     );
-    bindAmapPopup(
+    customerInfoWindows[c.id] = bindAmapPopup(
       marker,
       `
       <div style="min-width:150px;font-family:sans-serif">
@@ -943,14 +945,14 @@ function highlightMarkers() {
   for (const c of customers.value) {
     const marker = customerMarkers[c.id];
     if (!marker) continue;
-    if (!kw) {
-      marker.setOpacity(1);
-    } else {
-      const match =
-        c.name.toLowerCase().includes(kw) ||
-        (c.address || "").toLowerCase().includes(kw);
-      marker.setOpacity(match ? 1 : 0.3);
-    }
+    const match =
+      !kw ||
+      c.name.toLowerCase().includes(kw) ||
+      (c.address || "").toLowerCase().includes(kw);
+    const opacity = match ? 1 : 0.3;
+    // 自定义内容标记不支持 setOpacity，直接操作 DOM
+    const el = marker.getContent();
+    if (el?.style) el.style.opacity = opacity;
   }
 }
 
@@ -963,7 +965,12 @@ async function selectCustomer(c) {
   selectedCustomer.value = c;
   // 在地图上定位：有坐标直接跳转，无坐标但有地址则自动搜索
   if (c.latitude && c.longitude && map) {
-    mapSetView(c.latitude, c.longitude, 15);
+    // 转 GCJ02 再定位，避免 WGS84 偏移
+    const gcj = wgs84ToGcj02(c.latitude, c.longitude);
+    mapSetView(gcj.lat, gcj.lng, 16);
+    // 打开信息窗
+    const iw = customerInfoWindows[c.id];
+    if (iw) iw.open(map, new AMap.LngLat(gcj.lng, gcj.lat));
   } else if (c.address && map) {
     try {
       const r = await myGeocode(c.address);
