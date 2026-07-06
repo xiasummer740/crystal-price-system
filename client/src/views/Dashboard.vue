@@ -7,6 +7,7 @@
           <span class="clock-dot"></span>{{ clockTime }}
         </span>
         <button class="nav-btn" style="margin-right:6px;background:#fff7e6;color:#d48806;border-color:#ffe58f;cursor:pointer" @click="openNotesWin">📝 记事</button>
+        <router-link to="/map-addresses" class="nav-btn" style="margin-right:6px;background:#e0f7fa;color:#00695c;border-color:#b2dfdb">🗺️ 地图地址</router-link>
         <router-link to="/translator" class="nav-btn" style="margin-right:6px;background:#f0f6ff;color:#1565c0;border-color:#bbdefb">规格书翻译</router-link>
         <router-link to="/samples" class="nav-btn" style="margin-right:6px">样品登记</router-link>
         <router-link to="/trash" class="nav-btn" style="margin-right:6px;color:#e53935;border-color:#ffcdd2">回收站</router-link>

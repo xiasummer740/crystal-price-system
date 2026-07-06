@@ -1,127 +1,57 @@
-# CLAUDE.md
+# crystal-price-system
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
-
-## 语言规则
-
-所有回复必须使用中文。代码注释、提交信息、文档都使用中文。
+> 全局规则见 `xiangge-env/CLAUDE.md`（17条规则 + 验证报告 + 独立复审）
+> 本文件只含项目特有信息，不重复全局规则。
 
 ## Project Overview
 
 晶振公司物料价格记录查询系统 — Electron 桌面应用程序。
-PC 端双击 exe 即可运行，手机端通过局域网 WiFi 访问查看。
+PC 端双击 exe 运行，手机端局域网 WiFi 访问。
 数据存储在本地 SQLite 文件，无需外部数据库。
 
 ## Tech Stack
 
-- **桌面端**: Electron 33 — 包裹 Express 后端 + Vue 前端为一个独立 exe
+- **桌面端**: Electron 33 — Express 后端 + Vue 前端
 - **前端**: Vue 3 + Vite + Vant UI 4 + Pinia + Vue Router
-- **后端**: Node.js + Express + sql.js（内嵌在 Electron 主进程启动）
-- **移动端**: 手机浏览器访问局域网地址 + PWA 离线缓存
+- **后端**: Node.js + Express + sql.js（Electron 主进程 fork 启动）
+- **移动端**: 手机浏览器 + PWA
 - **Excel**: SheetJS (xlsx)
 - **打包**: electron-builder (portable exe / nsis installer)
 
 ## Commands
 
 ```bash
-# 安装依赖（首次）
-npm install && cd server && npm install && cd ../client && npm install
-
-# 开发模式 (Electron 窗口 + Vite HMR)
-npm run dev
-
-# 仅构建前端
-npm run build
-
-# 启动桌面程序 (开发模式，不打包)
-npm start
-
-# 重新启动开发版（改完代码后自动重启）
-# 使用: taskkill → 等待端口释放 → start
-
-# 打包为便携版 exe
-npm run package
-
-# 打包为安装版 exe
-npm run package:installer
+npm install && cd server && npm install && cd ../client && npm install  # 首次装依赖
+npm run dev       # 开发模式
+npm run build     # 构建前端
+npm start         # 启动桌面程序
+npm run package   # 打包便携版 exe
 ```
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────┐
-│             Electron 桌面应用                  │
-│  ┌──────────────┐    ┌──────────────────┐   │
-│  │  Main Process │    │  Renderer Process │   │
-│  │  electron/    │    │  (BrowserWindow)  │   │
-│  │  main.js      │    │                   │   │
-│  │               │    │  http://local      │   │
-│  │  fork() 启动   │    │  host:3266        │   │
-│  │  Express 服务  │    │                   │   │
-│  └──────┬───────┘    └──────────────────┘   │
-│         │                                    │
-│  ┌──────▼───────────────────────────────┐   │
-│  │       Express Server (:3266)          │   │
-│  │  ├── /api/*     → CRUD API            │   │
-│  │  ├── /api/export → Excel 导出          │   │
-│  │  ├── /api/import → Excel 导入          │   │
-│  │  └── /*         → client/dist/ 静态文件  │   │
-│  └──────┬────────────────────────────────┘   │
-│         │                                    │
-│  ┌──────▼────────┐                           │
-│  │  SQLite        │                           │
-│  │  server/data.db│                           │
-│  └───────────────┘                           │
-└─────────────────────────────────────────────┘
-
-         📱 手机浏览器 (同WiFi局域网)
-         http://<PC的IP>:3266
+Electron Main Process
+  ├─ fork() → Express Server (:3266)
+  │   ├─ /api/prices → CRUD
+  │   ├─ /api/export → Excel 导出
+  │   └─ /api/import → Excel 导入
+  └─ BrowserWindow → http://localhost:3266
+       ├─ PC: Dashboard.vue（CRUD + 导入导出）
+       └─ Mobile: MobileHome.vue（搜索 + 卡片）
 ```
 
 ## Database
 
-SQLite 单文件 `server/data.db`，首次运行自动创建。
-核心表: `material_prices` — 14 个字段，软删除标记 `is_deleted`。
+SQLite `server/data.db`，核心表 `material_prices`（14字段，软删除）。
+索引: material_code, material_name, factory_code。
 
-索引: material_code, material_name, factory_code, first_inquiry_customer, created_at.
+## 项目特有规则
 
-## API Endpoints
-
-| Method | Path                    | Description              |
-|--------|-------------------------|--------------------------|
-| GET    | /api/prices             | 列表 + 搜索 + 分页         |
-| GET    | /api/prices/:id         | 单条详情                  |
-| POST   | /api/prices             | 新增记录                  |
-| PUT    | /api/prices/:id         | 编辑记录                  |
-| DELETE | /api/prices/:id         | 软删除                    |
-| GET    | /api/prices/meta/options| 工厂/采购员列表（筛选用）    |
-| GET    | /api/export             | 按条件导出 Excel           |
-| POST   | /api/import             | 批量导入 Excel             |
-
-## Frontend Routes
-
-| Path          | View             | Description                |
-|---------------|------------------|----------------------------|
-| /             | Dashboard.vue    | PC 桌面主页: 表格 + CRUD + 导入导出 |
-| /mobile       | MobileHome.vue   | 手机查询: 搜索 + 筛选 + 卡片列表 |
-| /list         | RecordList.vue   | 通用列表页                   |
-| /add          | AddRecord.vue    | 新增记录表单                 |
-| /edit/:id     | AddRecord.vue    | 编辑记录（复用 AddRecord）    |
-| /detail/:id   | RecordDetail.vue | 记录详情                    |
-
-## 开发工作流
-
-- **改完代码自动重启**: 修改 Electron 主进程文件（`electron/*.js`）或前端代码后，立即重启开发版应用。先 `taskkill /f /im electron.exe` 清理旧进程，确认端口 3266 释放后，再 `node node_modules/electron/cli.js . --no-sandbox --disable-gpu` 启动新实例。不需要等祥哥说"启动看看"。
-- **仅改前端 CSS/模板**（`client/src/**/*.vue`）：只需 `npm run build`，Electron 自动加载新构建产物，无需重启主进程。
-- **改 API 路由**（`server/src/routes/*.js`）：修改后立即重启主进程（同上）。
-- **发版流程**: `npm run package` → 更新 `latest.yml` → commit → tag → `gh release create`。
-- **❌ 禁止开发版跑通就当完成**：发版前必须 `npm run package` 打包完整 exe，**安装运行确认功能正常**，不能只靠 `npm start` 开发版测试。开发版环境与正式版 asar 环境有差异（函数引用、路径、asar 解包等），正式版出问题等于没做完。
-
-- **Electron 子进程模式**: Express 服务在 Main Process 中通过 `fork()` 启动，与渲染进程解耦
-- **preload.js**: 通过 `contextBridge` 向渲染进程暴露局域网 IP 获取能力
-- **移动端自动跳转**: App.vue 检测 UserAgent → 自动跳转到 `/mobile`
-- **Vant 自动导入**: `unplugin-vue-components` 按需加载，模板中无需手动 import
-- **币种**: `CNY` 人民币 / `USD` 美元 — 价格显示自动加 ¥/$ 前缀
-- **筛选状态**: Pinia store 集中管理，跨视图共享
-- **无需登录**: 局域网内部使用，无鉴权
-- **软删除**: `is_deleted = 1` 标记，数据不物理删除
+- **发版必须打包 exe 验证**：不能只靠 `npm start` 开发版测试，必须 `npm run package` → 安装 exe → 确认功能正常
+- **Electron 主进程文件改后自动重启**：`taskkill /f /im electron.exe` → 确认端口释放 → 重新启动
+- **仅改前端 CSS/模板**：只需 `npm run build`，无需重启主进程
+- **手机自动跳转**：App.vue 检测 UserAgent → `/mobile`
+- **无鉴权**：局域网内部使用
+- **软删除**：is_deleted=1，数据不物理删除
+- **Windows 特定**：SSH/路径/端口排查等见 xiangge-env `env-windows.md`

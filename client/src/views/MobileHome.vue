@@ -83,7 +83,11 @@
       <van-tabbar-item icon="search" to="/mobile">查询</van-tabbar-item>
       <van-tabbar-item icon="add-o" to="/add">新增</van-tabbar-item>
       <van-tabbar-item icon="desktop-o" to="/">PC后台</van-tabbar-item>
+      <van-tabbar-item icon="map-marked" @click="showMapPicker = true">🗺️</van-tabbar-item>
     </van-tabbar>
+
+    <!-- 地图 APP 选择 -->
+    <van-action-sheet v-model:show="showMapPicker" :actions="mapApps" cancel-text="取消" close-on-click-action @select="onOpenMap" />
 
     <!-- 筛选弹出层 -->
     <van-popup v-model:show="showFilter" position="right" :style="{ width: '85%', height: '100%' }">
@@ -177,6 +181,30 @@ const quickActive = ref({})
 const quickFilters = ref([])
 const showAdvFilter = ref(false)
 const advFilters = ref([{field:'',op:'contains',value:''}])
+// 地图导航
+const showMapPicker = ref(false)
+const mapApps = [
+  { name: '🗺️ 高德地图', value: 'amap' },
+  { name: '🗺️ 百度地图', value: 'baidu' },
+  { name: '🗺️ 腾讯地图', value: 'tencent' },
+  { name: '🗺️ Apple 地图', value: 'apple' },
+]
+function onOpenMap(item) {
+  showMapPicker.value = false
+  const url = getMapUrl(item.value)
+  if (url) window.location.href = url
+}
+function getMapUrl(app) {
+  // 使用搜索关键词让用户选择目的地，通用方案
+  const dst = encodeURIComponent('')
+  switch (app) {
+    case 'amap': return `https://uri.amap.com/search?keyword=${dst}`
+    case 'baidu': return `https://api.map.baidu.com/place/search?query=${dst}`
+    case 'tencent': return `https://apis.map.qq.com/uri/v1/search?keyword=${dst}`
+    case 'apple': return `https://maps.apple.com/?q=${dst}`
+    default: return ''
+  }
+}
 const advFieldOptions = [{label:'物料编码',value:'material_code'},{label:'物料名称',value:'material_name'},{label:'物料规格',value:'material_spec'},{label:'品类',value:'category'},{label:'品牌',value:'brand'},{label:'尺寸',value:'dimension'},{label:'频点',value:'frequency'},{label:'负载',value:'load_cap'},{label:'模式',value:'mode'},{label:'含税价',value:'price_with_tax'},{label:'未税价',value:'price_without_tax'},{label:'币种',value:'currency'},{label:'工厂',value:'factory_code'},{label:'报价人',value:'quoter'},{label:'交期',value:'standard_lead_time'},{label:'客户',value:'first_inquiry_customer'}]
 let page = 1
 let keywordTimer = null

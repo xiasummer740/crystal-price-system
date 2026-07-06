@@ -183,6 +183,90 @@ export async function initDb() {
   `)
   try { db.run('CREATE INDEX IF NOT EXISTS idx_customers_name ON customers(name)') } catch {}
 
+  // ====== 地图地址模块（5张表） ======
+
+  // 客户位置（独立于 customers 表，带坐标和联系方式）
+  db.run(`
+    CREATE TABLE IF NOT EXISTS map_customers (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      name        TEXT NOT NULL UNIQUE,
+      phone       TEXT DEFAULT '',
+      address     TEXT DEFAULT '',
+      latitude    REAL,
+      longitude   REAL,
+      notes       TEXT DEFAULT '',
+      source      TEXT DEFAULT 'manual',
+      created_at  DATETIME DEFAULT (datetime('now','localtime'))
+    )
+  `)
+  try { db.run('CREATE INDEX IF NOT EXISTS idx_map_customers_name ON map_customers(name)') } catch {}
+
+  // 采购联系人
+  db.run(`
+    CREATE TABLE IF NOT EXISTS map_purchasers (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      customer_id INTEGER NOT NULL,
+      name        TEXT NOT NULL,
+      phone       TEXT DEFAULT '',
+      title       TEXT DEFAULT '',
+      notes       TEXT DEFAULT '',
+      created_at  DATETIME DEFAULT (datetime('now','localtime'))
+    )
+  `)
+  try { db.run('CREATE INDEX IF NOT EXISTS idx_map_purchasers_cid ON map_purchasers(customer_id)') } catch {}
+
+  // 收件地址
+  db.run(`
+    CREATE TABLE IF NOT EXISTS map_addresses (
+      id            INTEGER PRIMARY KEY AUTOINCREMENT,
+      customer_id   INTEGER NOT NULL,
+      purchaser_id  INTEGER DEFAULT 0,
+      label         TEXT DEFAULT '',
+      address       TEXT NOT NULL,
+      contact_name  TEXT DEFAULT '',
+      contact_phone TEXT DEFAULT '',
+      latitude      REAL,
+      longitude     REAL,
+      is_default    INTEGER DEFAULT 0,
+      notes         TEXT DEFAULT '',
+      created_at    DATETIME DEFAULT (datetime('now','localtime'))
+    )
+  `)
+  try { db.run('CREATE INDEX IF NOT EXISTS idx_map_addresses_cid ON map_addresses(customer_id)') } catch {}
+  try { db.run('CREATE INDEX IF NOT EXISTS idx_map_addresses_pid ON map_addresses(purchaser_id)') } catch {}
+
+  // 行程规划
+  db.run(`
+    CREATE TABLE IF NOT EXISTS map_trip_plans (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      plan_date   TEXT NOT NULL,
+      title       TEXT DEFAULT '',
+      notes       TEXT DEFAULT '',
+      created_at  DATETIME DEFAULT (datetime('now','localtime'))
+    )
+  `)
+  try { db.run('CREATE INDEX IF NOT EXISTS idx_map_trip_plans_date ON map_trip_plans(plan_date)') } catch {}
+
+  // 行程点
+  db.run(`
+    CREATE TABLE IF NOT EXISTS map_trip_points (
+      id            INTEGER PRIMARY KEY AUTOINCREMENT,
+      plan_id       INTEGER NOT NULL,
+      sort_order    INTEGER DEFAULT 0,
+      customer_id   INTEGER,
+      address_id    INTEGER,
+      customer_name TEXT NOT NULL,
+      address       TEXT DEFAULT '',
+      latitude      REAL,
+      longitude     REAL,
+      contact_name  TEXT DEFAULT '',
+      contact_phone TEXT DEFAULT '',
+      notes         TEXT DEFAULT '',
+      created_at    DATETIME DEFAULT (datetime('now','localtime'))
+    )
+  `)
+  try { db.run('CREATE INDEX IF NOT EXISTS idx_map_trip_points_pid ON map_trip_points(plan_id)') } catch {}
+
   return db
 }
 

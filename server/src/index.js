@@ -12,6 +12,7 @@ import translatorRouter from './routes/translator.js'
 import notesRouter from './routes/notes.js'
 import reportsRouter from './routes/reports.js'
 import logsRouter from './routes/logs.js'
+import mapRouter from './routes/map.js'
 import { exportToExcel, importFromExcel, generateTemplate, generateSampleTemplate, generateNoteTemplate } from './utils/export.js'
 import { initDb, saveNow } from './db.js'
 import { triggerBackup, flushPending } from './utils/excelBackup.js'
@@ -86,6 +87,7 @@ app.use('/api/translator', translatorRouter)
 app.use('/api/notes', notesRouter)
 app.use('/api/reports', reportsRouter)
 app.use('/api/logs', logsRouter)
+app.use('/api/map', mapRouter)
 
 // 导出 Excel
 app.get('/api/export', (req, res) => {

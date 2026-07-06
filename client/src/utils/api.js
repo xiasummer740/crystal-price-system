@@ -178,3 +178,90 @@ export function updateCategory(id, data) {
 export function deleteCategory(id) {
   return http.delete(`/notes/categories/${id}`)
 }
+
+// ====== 地图地址 ======
+export function fetchMapCustomers(params) {
+  return http.get('/map/customers', { params })
+}
+export function getMapCustomer(id) {
+  return http.get(`/map/customers/${id}`)
+}
+export function createMapCustomer(data) {
+  return http.post('/map/customers', data)
+}
+export function updateMapCustomer(id, data) {
+  return http.put(`/map/customers/${id}`, data)
+}
+export function deleteMapCustomer(id) {
+  return http.delete(`/map/customers/${id}`)
+}
+export function importMapCustomersFromNotes() {
+  return http.post('/map/customers/import')
+}
+export function geocodeAddress(q) {
+  return http.get('/map/geocode', { params: { q } })
+}
+export function reverseGeocode(lat, lng) {
+  return http.get('/map/reverse-geocode', { params: { lat, lng } })
+}
+export function exportMapAddresses() {
+  return http.get('/map/export', { responseType: 'blob' })
+}
+// Map purchasers
+export function fetchPurchasers(customerId) {
+  return http.get(`/map/customers/${customerId}/purchasers`)
+}
+export function createPurchaser(data) {
+  return http.post('/map/purchasers', data)
+}
+export function updatePurchaser(id, data) {
+  return http.put(`/map/purchasers/${id}`, data)
+}
+export function deletePurchaser(id) {
+  return http.delete(`/map/purchasers/${id}`)
+}
+// Map addresses
+export function fetchAddresses(customerId) {
+  return http.get(`/map/customers/${customerId}/addresses`)
+}
+export function createAddress(data) {
+  return http.post('/map/addresses', data)
+}
+export function updateAddress(id, data) {
+  return http.put(`/map/addresses/${id}`, data)
+}
+export function deleteAddress(id) {
+  return http.delete(`/map/addresses/${id}`)
+}
+// Trip plans
+export function fetchTripPlans(params) {
+  return http.get('/map/trip-plans', { params })
+}
+export function getTripPlan(id) {
+  return http.get(`/map/trip-plans/${id}`)
+}
+export function createTripPlan(data) {
+  return http.post('/map/trip-plans', data)
+}
+export function updateTripPlan(id, data) {
+  return http.put(`/map/trip-plans/${id}`, data)
+}
+export function deleteTripPlan(id) {
+  return http.delete(`/map/trip-plans/${id}`)
+}
+// Trip points
+export function getTripPoints(planId) {
+  return http.get(`/map/trip-plans/${planId}/points`)
+}
+export function createTripPoint(data) {
+  return http.post('/map/trip-points', data)
+}
+export function updateTripPoint(id, data) {
+  return http.put(`/map/trip-points/${id}`, data)
+}
+export function deleteTripPoint(id) {
+  return http.delete(`/map/trip-points/${id}`)
+}
+export function reorderTripPoints(planId, pointIds) {
+  return http.put('/map/trip-points/reorder', { plan_id: planId, point_ids: pointIds })
+}
