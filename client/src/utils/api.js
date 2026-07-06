@@ -208,10 +208,20 @@ export function reverseGeocode(lat, lng, amapKey) {
   if (amapKey) params.key = amapKey
   return http.get('/map/reverse-geocode', { params })
 }
-export function poiSearch(keywords, amapKey) {
-  const params = { keywords }
+export function poiSearch(keywords, amapKey, page = 1, city = '') {
+  const params = { keywords, page, merge: '1' }
   if (amapKey) params.key = amapKey
+  if (city) params.city = city
+  // 安全密钥
+  const jscode = localStorage.getItem('crystal_amap_jscode') || ''
+  if (jscode) params.jscode = jscode
   return http.get('/map/poi-search', { params })
+}
+
+// 保存高德安全密钥
+export function setAmapJscode(code) {
+  if (code) localStorage.setItem('crystal_amap_jscode', code)
+  else localStorage.removeItem('crystal_amap_jscode')
 }
 export function getAmapKey() {
   return localStorage.getItem('crystal_amap_key') || ''

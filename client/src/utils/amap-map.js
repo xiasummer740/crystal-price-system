@@ -126,6 +126,36 @@ export function addAmapRoute(map, startLat, startLng, endLat, endLng) {
   });
 }
 
+// 自动补全（AMap.AutoComplete，输入时弹出建议列表）
+export function searchAmapTips(keywords, callback, city = "440300") {
+  if (!AMap) return callback([]);
+  if (!keywords || keywords.length < 2) return callback([]);
+  AMap.plugin("AMap.AutoComplete", () => {
+    const auto = new AMap.AutoComplete({
+      city: city, // 默认深圳宝安区，避免跨省干扰
+      citylimit: true,
+      datatype: "all",
+    });
+    auto.search(keywords, (status, result) => {
+      if (status === "complete" && result.tips) {
+        const list = result.tips
+          .filter((t) => t.name)
+          .map((t) => ({
+            name: t.name,
+            address: t.district || "",
+            lat: t.location?.lat,
+            lng: t.location?.lng,
+            district: t.district || "",
+            adcode: t.adcode || "",
+          }));
+        callback(list);
+      } else {
+        callback([]);
+      }
+    });
+  });
+}
+
 // 点击选点（返回 WGS84 坐标）
 // 地点搜索（浏览器端直接用高德 PlaceSearch，不走服务器，快且准）
 export function searchAmapPoi(keywords, callback) {
@@ -254,4 +284,5 @@ export default {
   clearAmapExtraMarkers,
   addAmapRoute,
   onAmapClickForPick,
+  searchAmapTips,
 };

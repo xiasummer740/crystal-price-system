@@ -128,6 +128,10 @@
           <van-loading size="24" />
           <span>加载地图中...</span>
         </div>
+        <div class="map-error" v-else-if="mapError">
+          <span class="map-error-icon">⚠️</span>
+          <span>{{ mapError }}</span>
+        </div>
         <!-- 地图控件提示 + 确认按钮 -->
         <div class="map-tip" v-if="selectedMode === 'pick'">
           📍 点击地图设置位置，可拖拽标记微调
@@ -163,23 +167,46 @@
             class="search-dropdown"
             v-if="showSearchResults && searchResults.length"
           >
+            <!-- 结果计数 -->
+            <div class="sr-count" v-if="searchTotal > 0">
+              找到 {{ searchTotal }} 个结果
+            </div>
             <div
               v-for="(r, i) in searchResults"
-              :key="i"
+              :key="r.id || i"
               class="search-result-item"
               :class="{ active: searchHighlight === i }"
               @mousedown.prevent="pickSearchResult(r)"
             >
-              <div class="sr-name">{{ r.name }}</div>
-              <div class="sr-addr">{{ r.address || "" }}</div>
-              <div class="sr-meta">
-                {{
-                  [r.province, r.district, r.business].filter(Boolean).join(" ")
-                }}
+              <div class="sr-left">
+                <div class="sr-type-icon">
+                  {{ poiTypeIcon(r.type || r.typecode) }}
+                </div>
               </div>
-              <div class="sr-type" v-if="r.type && r.type !== 'geocode'">
-                {{ r.type.split(";")[0] }}
+              <div class="sr-body">
+                <div class="sr-name">{{ r.name }}</div>
+                <div class="sr-addr">{{ r.address || r.district || "" }}</div>
+                <div class="sr-meta">
+                  {{ [r.city, r.district].filter(Boolean).join(" ") }}
+                </div>
               </div>
+              <div
+                class="sr-type"
+                v-if="r.typecode || (r.type && r.type !== 'geocode')"
+              >
+                {{ poiTypeLabel(r.typecode, r.type) }}
+              </div>
+            </div>
+            <!-- 加载更多 -->
+            <div
+              class="sr-load-more"
+              v-if="searchTotal > searchResults.length && !searchLoading"
+              @mousedown.prevent="loadMoreResults"
+            >
+              📄 查看更多结果（{{ searchResults.length }}/{{ searchTotal }}）
+            </div>
+            <div class="sr-load-more loading" v-if="searchLoading">
+              <van-loading size="14" /> 搜索中...
             </div>
           </div>
           <div
@@ -583,13 +610,6 @@ import {
   getAmapKey,
   poiSearch,
 } from "../utils/api.js";
-import L from "leaflet";
-import "leaflet/dist/leaflet.css";
-import "leaflet.markercluster";
-import "leaflet.markercluster/dist/MarkerCluster.css";
-import "leaflet.markercluster/dist/MarkerCluster.Default.css";
-import "leaflet-routing-machine";
-import "leaflet-routing-machine/dist/leaflet-routing-machine.css";
 import {
   loadAmapScript,
   createAmapMap,
@@ -603,16 +623,8 @@ import {
   addAmapRoute,
   onAmapClickForPick,
   searchAmapPoi,
+  searchAmapTips,
 } from "../utils/amap-map.js";
-
-// ====== 修复 Leaflet 默认图标路径 ======
-delete L.Icon.Default.prototype._getIconUrl;
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl:
-    "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
-  iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
-  shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
-});
 
 const route_ = useRoute();
 // 地理编码包装：自动带高德 Key
@@ -625,11 +637,11 @@ function myReverseGeocode(lat, lng) {
 const router = useRouter();
 const mapContainer = ref(null);
 let map = null;
-let markerCluster = null;
 let customerMarkers = {};
 let currentRoute = null;
 
 // ====== 状态 ======
+const mapError = ref("");
 const isStandalone = ref(route_.query.standalone === "1");
 const customers = ref([]);
 const loading = ref(false);
@@ -814,208 +826,105 @@ function fromAmap(lat, lng) {
   return { lat: c.lat, lng: c.lng };
 }
 
-// ====== 地图抽象层（同时支持高德 JS API / Leaflet） ======
+// ====== 地图抽象层（纯高德 JS API） ======
 function mapSetView(lat, lng, zoom) {
   if (!map) return;
-  if (useAmapJs) setAmapView(map, lat, lng, zoom || 15);
-  else map.setView(ll(lat, lng), zoom || 15);
+  setAmapView(map, lat, lng, zoom || 15);
 }
 function mapAddDivMarker(lat, lng, html, onClick) {
-  if (useAmapJs) return addAmapLabelMarker(map, lat, lng, html, onClick);
-  const marker = L.marker(ll(lat, lng), {
-    icon: L.divIcon({
-      className: "search-marker",
-      html,
-      iconSize: [24, 24],
-      iconAnchor: [12, 24],
-    }),
-  }).addTo(map);
-  if (onClick) marker.on("click", onClick);
-  return marker;
+  return addAmapLabelMarker(map, lat, lng, html, onClick);
 }
 function mapRemoveMarker(marker) {
   if (!marker) return;
-  if (useAmapJs) {
-    try {
-      map.remove(marker);
-    } catch {}
-  } else {
-    try {
-      map.removeLayer(marker);
-    } catch {}
-  }
+  try { map.remove(marker); } catch {}
+}
+function mapOpenPopup(marker, html) {
+  if (!marker || !map) return;
+  const info = new AMap.InfoWindow({ content: html, offset: new AMap.Pixel(0, -30) });
+  info.open(map, marker.getPosition());
+  return info;
 }
 function mapLocate(successCb, errorCb) {
-  if (useAmapJs) {
-    AMap.plugin("AMap.Geolocation", () => {
-      const geo = new AMap.Geolocation({
-        enableHighAccuracy: true,
-        timeout: 10000,
-      });
-      geo.getCurrentPosition((status, result) => {
-        if (status === "complete") {
-          const wgs = gcj02ToWgs84(result.position.lat, result.position.lng);
-          successCb({ lat: wgs.lat, lng: wgs.lng });
-        } else errorCb();
-      });
+  AMap.plugin("AMap.Geolocation", () => {
+    const geo = new AMap.Geolocation({
+      enableHighAccuracy: true,
+      timeout: 10000,
     });
-  } else {
-    map.locate({ setView: false, enableHighAccuracy: true });
-    map.once("locationfound", (e) => successCb(e.latlng));
-    map.once("locationerror", () => errorCb());
-    setTimeout(() => map.stopLocate(), 10000);
-  }
+    geo.getCurrentPosition((status, result) => {
+      if (status === "complete") {
+        const wgs = gcj02ToWgs84(result.position.lat, result.position.lng);
+        successCb({ lat: wgs.lat, lng: wgs.lng });
+      } else errorCb();
+    });
+  });
 }
 
-// ====== 地图初始化（有 Key 用高德 JS API，否则 Leaflet） ======
-let useAmapJs = false;
+// ====== 地图初始化（纯高德 JS API，无 Key 提示配置） ======
 async function initMap() {
   if (!mapContainer.value || map) return;
   mapLoading.value = true;
+  mapError.value = "";
 
   const amapKey = getAmapKey();
-  useAmapJs = !!amapKey;
+  if (!amapKey) {
+    mapError.value = "请先设置高德地图 Key（设置 → 高德地图 Key）";
+    mapLoading.value = false;
+    return;
+  }
 
   try {
-    if (useAmapJs) {
-      // ===== 高德 JS API（最新地图，无坐标偏移） =====
-      try {
-        await loadAmapScript(amapKey);
-        map = createAmapMap(mapContainer.value, [114.3, 30.5], 6);
-        map.on("click", (e) => {
-          if (selectedMode.value !== "pick") return;
-          const wgs = gcj02ToWgs84(e.latlng.lat, e.latlng.lng);
-          setFormCoords(wgs.lat, wgs.lng);
-          placePickMarker(wgs.lat, wgs.lng);
-        });
-        mapLoading.value = false;
-        setTimeout(loadCustomerMarkers, 300);
-        return; // 成功 → 跳过 Leaflet
-      } catch (e) {
-        console.warn("高德 JS API 加载失败，降级到 Leaflet:", e.message);
-        useAmapJs = false;
-        showToast(
-          "高德地图加载失败，已降级到基础地图。请确认 Key 已开启「Web端(JS API)」服务",
-        );
-      }
-    }
-    if (!useAmapJs) {
-      // ===== Leaflet（无 Key 时兜底） =====
-      map = L.map(mapContainer.value, {
-        center: [30.5, 114.3],
-        zoom: 6,
-        zoomControl: true,
-        attributionControl: true,
-      });
-      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        attribution: "&copy; OpenStreetMap",
-        maxZoom: 18,
-      }).addTo(map);
-      markerCluster = L.markerClusterGroup({
-        chunkedLoading: true,
-        maxClusterRadius: 50,
-        spiderfyOnMaxZoom: true,
-        showCoverageOnHover: false,
-        zoomToBoundsOnClick: true,
-      });
-      map.addLayer(markerCluster);
-      map.on("click", (e) => {
-        if (selectedMode.value === "pick") mapClickOnPick(e);
-      });
-      // 搜索框不触发地图拖拽
-      setTimeout(() => {
-        const wrap = mapContainer.value?.querySelector(".map-search-wrap");
-        if (wrap) {
-          L.DomEvent.disableClickPropagation(wrap);
-          L.DomEvent.disableScrollPropagation(wrap);
-          const input = wrap.querySelector(".map-search-input");
-          if (input) L.DomEvent.disableClickPropagation(input);
-        }
-      }, 500);
-      mapLoading.value = false;
-      setTimeout(loadCustomerMarkers, 300);
-    }
-  } catch (e) {
-    console.error("地图初始化失败:", e);
+    await loadAmapScript(amapKey);
+    map = createAmapMap(mapContainer.value, [114.3, 30.5], 6);
+    map.on("click", (e) => {
+      if (selectedMode.value !== "pick") return;
+      const wgs = gcj02ToWgs84(e.latlng.lat, e.latlng.lng);
+      setFormCoords(wgs.lat, wgs.lng);
+      placePickMarker(wgs.lat, wgs.lng);
+    });
     mapLoading.value = false;
-    showToast("地图加载失败，请检查网络");
+    setTimeout(loadCustomerMarkers, 300);
+  } catch (e) {
+    console.error("高德地图加载失败:", e);
+    mapError.value = "高德地图加载失败，请检查网络与 Key 配置";
+    mapLoading.value = false;
+    showToast("高德地图加载失败，请确认 Key 已开启「Web端(JS API)」服务");
   }
 }
 
-// ====== 加载客户标记（支持高德 JS API / Leaflet） ======
+// ====== 加载客户标记（纯高德 JS API） ======
 function loadCustomerMarkers() {
   customerMarkers = {};
   const hasCoords = customers.value.filter((c) => c.latitude && c.longitude);
   if (!hasCoords.length) return;
 
-  if (useAmapJs) {
-    // 高德 JS API：原生标记 + 聚合
-    const amapMarkers = [];
-    for (const c of hasCoords) {
-      const gcj = wgs84ToGcj02(c.latitude, c.longitude);
-      const marker = addAmapLabelMarker(map, gcj.lat, gcj.lng, c.name, () =>
-        selectCustomer(c),
-      );
-      bindAmapPopup(
-        marker,
-        `
-        <div style="min-width:150px;font-family:sans-serif">
-          <div style="font-size:14px;font-weight:600;margin-bottom:4px">${c.name}</div>
-          <div style="font-size:11px;color:#888">${c.address || ""}</div>
-          <div style="font-size:11px;color:#888">${c.phone || ""}</div>
-          <div style="font-size:10px;color:#aaa;margin-top:4px">🧑‍💼 ${c.purchaser_count || 0}采购 · 📮 ${c.address_count || 0}地址</div>
-          <button onclick="window._selectMapCustomer(${c.id})" style="background:#00695c;color:#fff;border:none;border-radius:4px;padding:4px 12px;font-size:11px;cursor:pointer;margin-top:4px">查看详情</button>
-        </div>
-      `,
-      );
-      amapMarkers.push(marker);
-      customerMarkers[c.id] = marker;
-    }
-    window._selectMapCustomer = (id) => {
-      const c = customers.value.find((x) => x.id === id);
-      if (c) selectCustomer(c);
-    };
-    addAmapCluster(map, amapMarkers);
-    // 缩放到所有标记
-    map.setFitView(amapMarkers, false, [50, 50, 50, 50]);
-  } else {
-    // Leaflet
-    if (!markerCluster) return;
-    markerCluster.clearLayers();
-    for (const c of hasCoords) {
-      const icon = L.divIcon({
-        className: "custom-marker",
-        html: `<div class="marker-pin ${c.address_count > 0 ? "has-addr" : ""}">${c.name.slice(0, 3)}</div>`,
-        iconSize: [60, 28],
-        iconAnchor: [30, 28],
-        popupAnchor: [0, -30],
-      });
-      const marker = L.marker(ll(c.latitude, c.longitude), { icon });
-      marker.bindPopup(`
-        <div class="popup-content">
-          <div class="popup-name"><strong>${c.name}</strong></div>
-          <div class="popup-addr">${c.address || ""}</div>
-          <div class="popup-phone">${c.phone || ""}</div>
-          <div class="popup-meta">🧑‍💼 ${c.purchaser_count || 0}采购 · 📮 ${c.address_count || 0}地址</div>
-          <button class="popup-btn" data-id="${c.id}">查看详情</button>
-        </div>
-      `);
-      marker.on("popupopen", () => {
-        setTimeout(() => {
-          const btn = document.querySelector(
-            '.popup-btn[data-id="' + c.id + '"]',
-          );
-          if (btn) btn.onclick = () => selectCustomer(c);
-        }, 100);
-      });
-      markerCluster.addLayer(marker);
-      customerMarkers[c.id] = marker;
-    }
-    map.fitBounds(markerCluster.getBounds(), {
-      padding: [30, 30],
-      maxZoom: 14,
-    });
+  if (!map) return;
+  const amapMarkers = [];
+  for (const c of hasCoords) {
+    const gcj = wgs84ToGcj02(c.latitude, c.longitude);
+    const marker = addAmapLabelMarker(map, gcj.lat, gcj.lng, c.name, () =>
+      selectCustomer(c),
+    );
+    bindAmapPopup(
+      marker,
+      `
+      <div style="min-width:150px;font-family:sans-serif">
+        <div style="font-size:14px;font-weight:600;margin-bottom:4px">${c.name}</div>
+        <div style="font-size:11px;color:#888">${c.address || ""}</div>
+        <div style="font-size:11px;color:#888">${c.phone || ""}</div>
+        <div style="font-size:10px;color:#aaa;margin-top:4px">🧑‍💼 ${c.purchaser_count || 0}采购 · 📮 ${c.address_count || 0}地址</div>
+        <button onclick="window._selectMapCustomer(${c.id})" style="background:#00695c;color:#fff;border:none;border-radius:4px;padding:4px 12px;font-size:11px;cursor:pointer;margin-top:4px">查看详情</button>
+      </div>
+    `,
+    );
+    amapMarkers.push(marker);
+    customerMarkers[c.id] = marker;
   }
+  window._selectMapCustomer = (id) => {
+    const c = customers.value.find((x) => x.id === id);
+    if (c) selectCustomer(c);
+  };
+  addAmapCluster(map, amapMarkers);
+  map.setFitView(amapMarkers, false, [50, 50, 50, 50]);
 }
 
 // ====== 搜索 / 筛选 ======
@@ -1062,16 +971,10 @@ async function selectCustomer(c) {
       if (results.length) {
         const best = results[0];
         // 在地图上放临时标记（不保存，仅预览）
-        if (window._viewMarker) map.removeLayer(window._viewMarker);
-        window._viewMarker = L.marker(ll(best.lat, best.lng), {
-          icon: L.divIcon({
-            className: "search-marker",
-            html: "📍",
-            iconSize: [24, 24],
-            iconAnchor: [12, 24],
-          }),
-        }).addTo(map);
-        map.setView(ll(best.lat, best.lng), 15);
+        if (window._viewMarker) map.remove(window._viewMarker);
+        const gj = wgs84ToGcj02(best.lat, best.lng);
+        window._viewMarker = addAmapMarker(map, gj.lat, gj.lng);
+        map.setView([gj.lng, gj.lat], 15);
       }
     } catch {}
   }
@@ -1283,7 +1186,7 @@ async function handleDeleteAddress(a) {
   }
 }
 
-// ====== 地图搜索框（POI + 地址，像手机地图） ======
+// ====== 地图搜索框（AutoComplete + 服务器POI搜索，对标高德） ======
 const mapSearchKw = ref("");
 const searchResults = ref([]);
 const showSearchResults = ref(false);
@@ -1291,8 +1194,12 @@ const searchHighlight = ref(-1);
 const searchDone = ref(false);
 const searchWrapRef = ref(null);
 const searchInputRef = ref(null);
+const searchTotal = ref(0);
+const searchPage = ref(1);
+const searchLoading = ref(false);
 let mapSearchMarker = null;
 let mapSearchTimer = null;
+let autoTimer = null;
 
 // 光标移到末尾
 function onSearchFocus(e) {
@@ -1303,8 +1210,10 @@ function onSearchFocus(e) {
   }, 0);
 }
 
+// 输入时 → AutoComplete 建议
 function onMapSearchInput() {
   searchDone.value = false;
+  clearTimeout(autoTimer);
   clearTimeout(mapSearchTimer);
   const kw = mapSearchKw.value.trim();
   if (kw.length < 2) {
@@ -1312,54 +1221,119 @@ function onMapSearchInput() {
     showSearchResults.value = false;
     return;
   }
-  mapSearchTimer = setTimeout(doPoiSearch, 350);
+  // 先出 AutoComplete 建议（快）
+  autoTimer = setTimeout(async () => {
+    if (!window.AMap) return;
+    searchAmapTips(kw, (tips) => {
+      if (tips.length) {
+        searchResults.value = tips.map((t) => ({
+          ...t,
+          _type: "suggestion",
+        }));
+        showSearchResults.value = true;
+        searchDone.value = false;
+      }
+    });
+  }, 200);
+  // 同时准备完整搜索（稍后触发）
+  mapSearchTimer = setTimeout(doPoiSearchFromInput, 600);
 }
 
-// POI 搜索（优先）+ 降级地理编码
-async function doPoiSearch() {
+// 输入触发的完整搜索（回车时走这个）
+async function doPoiSearchFromInput() {
   const kw = mapSearchKw.value.trim();
-  if (!kw) return;
+  if (!kw || !getAmapKey()) return;
+  searchLoading.value = true;
   try {
-    let results = [];
-    if (useAmapJs && window.AMap) {
-      // 高德 JS API 模式：浏览器端原生搜索，不走服务器，跟网页版高德一样
-      await new Promise((resolve) =>
-        searchAmapPoi(kw, (list) => {
-          results = list;
-          resolve();
-        }),
-      );
-    } else if (getAmapKey()) {
-      // Leaflet 模式但有 Key：服务器中转搜索
-      const r = await poiSearch(kw, getAmapKey());
-      results = (r.data || []).map((item) => ({
-        ...item,
-        name: item.name || item.address || kw,
-        address: item.address || "",
-      }));
+    // 传城市adcode避免搜索到异地同名结果
+    const searchCity = localStorage.getItem('crystal_search_city') || '440300';
+    const r = await poiSearch(kw, getAmapKey(), 1, searchCity);
+    const list = (r.data || []).map((item) => ({
+      ...item,
+      _type: "poi",
+    }));
+    if (list.length) {
+      searchResults.value = list;
+      searchTotal.value = r.total || list.length;
+      searchPage.value = 1;
+      showSearchResults.value = true;
+      if (list.length) placeSearchMarker(list[0]);
+    } else {
+      // 服务器搜索无结果 → 降级浏览器端 PlaceSearch（不需要 Web服务API 权限）
+      let browserResults = [];
+      if (window.AMap) {
+        await new Promise((resolve) =>
+          searchAmapPoi(kw, (res) => {
+            browserResults = res;
+            resolve();
+          }),
+        );
+      }
+      if (browserResults.length) {
+        searchResults.value = browserResults.map((item) => ({
+          ...item,
+          _type: "poi",
+        }));
+        searchTotal.value = browserResults.length;
+        showSearchResults.value = true;
+        placeSearchMarker(browserResults[0]);
+      } else {
+        // 还不行 → 地理编码兜底
+        const gr = await myGeocode(kw);
+        const geoList = (gr.data || []).map((item) => ({
+          ...item,
+          _type: "poi",
+          name: item.address || item.label || kw,
+        }));
+        if (geoList.length) {
+          searchResults.value = geoList;
+          searchTotal.value = geoList.length;
+          showSearchResults.value = true;
+          placeSearchMarker(geoList[0]);
+        }
+      }
     }
-    // 还有结果没？试试地理编码兜底
-    if (!results.length) {
-      const r = await myGeocode(kw);
-      results = (r.data || []).map((item) => ({
-        ...item,
-        name: item.address || item.label || kw,
-        address: item.label || item.address || "",
-      }));
-    }
-    searchResults.value = results;
-    showSearchResults.value = results.length > 0;
     searchDone.value = true;
     searchHighlight.value = -1;
-    if (results.length) placeSearchMarker(results[0]);
-    else showToast("未找到匹配地点");
   } catch {
     searchDone.value = true;
+  } finally {
+    searchLoading.value = false;
   }
 }
 
+// 搜索按钮 / 回车
 function doMapSearch() {
-  doPoiSearch();
+  doPoiSearchFromInput();
+}
+
+// 加载更多
+async function loadMoreResults() {
+  const kw = mapSearchKw.value.trim();
+  if (!kw || searchLoading.value) return;
+  const nextPage = searchPage.value + 1;
+  searchLoading.value = true;
+  try {
+    const searchCity = localStorage.getItem('crystal_search_city') || '440300';
+    const r = await poiSearch(kw, getAmapKey(), nextPage, searchCity);
+    const list = (r.data || []).map((item) => ({
+      ...item,
+      _type: "poi",
+    }));
+    if (list.length) {
+      // 去重
+      const existingNames = new Set(searchResults.value.map((x) => x.name));
+      for (const item of list) {
+        if (!existingNames.has(item.name)) {
+          existingNames.add(item.name);
+          searchResults.value.push(item);
+        }
+      }
+      searchPage.value = nextPage;
+    }
+  } catch {} finally {
+    searchLoading.value = false;
+  }
 }
 
 function placeSearchMarker(result) {
@@ -1400,6 +1374,31 @@ function onSearchKeyNav(dir) {
   if (idx < 0) idx = searchResults.value.length - 1;
   if (idx >= searchResults.value.length) idx = 0;
   searchHighlight.value = idx;
+}
+
+// POI 类型标签映射
+function poiTypeLabel(typecode, type) {
+  const tc = (typecode || "").toString();
+  if (tc === "120100" || tc === "120200") return "工业园区";
+  if (tc === "150700") return "公交站";
+  if (tc === "150904") return "停车场";
+  if (tc.startsWith("99")) return "出入口";
+  if (tc === "190403") return "建筑物";
+  if (tc.startsWith("06")) return "餐饮";
+  if (tc.startsWith("05")) return "购物";
+  if (type?.includes("工业园区")) return "工业园区";
+  if (type?.includes("地名")) return "地址";
+  return "地点";
+}
+
+function poiTypeIcon(type) {
+  const t = (type || "").toLowerCase();
+  if (t.includes("公交") || t.includes("bus")) return "🚌";
+  if (t.includes("停车场") || t.includes("park")) return "🅿️";
+  if (t.includes("餐饮") || t.includes("food") || t.includes("餐")) return "🍽️";
+  if (t.includes("购物") || t.includes("shop") || t.includes("mall")) return "🛒";
+  if (t.includes("门") || t.includes("出入口")) return "🚪";
+  return "📍";
 }
 
 // 点击其他地方关闭搜索结果
@@ -1461,36 +1460,12 @@ function centerMapForPick() {
 function placePickMarker(lat, lng) {
   if (!map) return;
   mapRemoveMarker(window._pickMarker);
-  if (useAmapJs) {
-    window._pickMarker = addAmapMarker(map, lat, lng, { draggable: true });
-    window._pickMarker.on("dragend", (e) => {
-      const p = e.target.getPosition();
-      const wgs = gcj02ToWgs84(p.lat, p.lng);
-      setFormCoords(wgs.lat, wgs.lng);
-    });
-  } else {
-    window._pickMarker = L.marker(ll(lat, lng), {
-      draggable: true,
-      icon: L.divIcon({
-        className: "pick-marker",
-        html: "📍",
-        iconSize: [24, 24],
-        iconAnchor: [12, 24],
-      }),
-    }).addTo(map);
-    window._pickMarker.on("dragend", () => {
-      const pos = window._pickMarker.getLatLng();
-      const wgs = gcj02ToWgs84(pos.lat, pos.lng);
-      setFormCoords(wgs.lat, wgs.lng);
-    });
-  }
-}
-function mapClickOnPick(e) {
-  if (selectedMode.value !== "pick") return;
-  const { lat, lng } = e.latlng; // Leaflet 返回 GCJ02（高德瓦片）
-  const wgs = gcj02ToWgs84(lat, lng); // 转 WGS84 存数据库
-  setFormCoords(wgs.lat, wgs.lng);
-  placePickMarker(wgs.lat, wgs.lng);
+  window._pickMarker = addAmapMarker(map, lat, lng, { draggable: true });
+  window._pickMarker.on("dragend", (e) => {
+    const p = e.target.getPosition();
+    const wgs = gcj02ToWgs84(p.lat, p.lng);
+    setFormCoords(wgs.lat, wgs.lng);
+  });
 }
 function setFormCoords(lat, lng) {
   if (pickOriginForm === "customer") {
@@ -1506,7 +1481,7 @@ function confirmCoordPick() {
   selectedMode.value = "";
   // 移除临时标记
   if (window._pickMarker && map) {
-    map.removeLayer(window._pickMarker);
+    map.remove(window._pickMarker);
     window._pickMarker = null;
   }
   // 重新打开对应表单
@@ -1553,16 +1528,10 @@ async function autoGeocode(val, target) {
         }
         // 在地图上显示标记（用 GCJ02 坐标）
         if (map) {
-          if (window._geoMarker) map.removeLayer(window._geoMarker);
-          window._geoMarker = L.marker(ll(saveLat, saveLng), {
-            icon: L.divIcon({
-              className: "search-marker",
-              html: "📍",
-              iconSize: [24, 24],
-              iconAnchor: [12, 24],
-            }),
-          }).addTo(map);
-          map.setView(ll(saveLat, saveLng), 15);
+          if (window._geoMarker) map.remove(window._geoMarker);
+          const gj2 = wgs84ToGcj02(saveLat, saveLng);
+          window._geoMarker = addAmapMarker(map, gj2.lat, gj2.lng);
+          map.setView([gj2.lng, gj2.lat], 15);
         }
       }
     } catch {}
@@ -1606,54 +1575,17 @@ function navigateToCustomer(c) {
     showToast("该客户尚未定位，请先设置坐标");
     return;
   }
-  // 清除旧导航
-  if (useAmapJs) {
-    if (currentRoute) {
-      map.remove(currentRoute);
-      currentRoute = null;
-    }
-  } else {
-    if (currentRoute && map) {
-      map.removeControl(currentRoute);
-      currentRoute = null;
-    }
+  if (currentRoute && map) {
+    map.remove(currentRoute);
+    currentRoute = null;
   }
-  // 定位起点并导航
   mapLocate(
     (start) => {
-      if (useAmapJs) {
-        addAmapRoute(map, start.lat, start.lng, c.latitude, c.longitude).then(
-          (r) => {
-            if (r) showToast(`距离 ${r.distance} · 预计 ${r.time}`);
-          },
-        );
-      } else {
-        try {
-          currentRoute = L.Routing.control({
-            waypoints: [
-              (() => {
-                const c = wgs84ToGcj02(start.lat, start.lng);
-                return L.latLng(c.lat, c.lng);
-              })(),
-              (() => {
-                const c = wgs84ToGcj02(c.latitude, c.longitude);
-                return L.latLng(c.lat, c.lng);
-              })(),
-            ],
-            language: "zh-CN",
-            routeWhileDragging: false,
-            showAlternatives: false,
-            lineOptions: {
-              styles: [{ color: "#00695c", weight: 4, opacity: 0.8 }],
-            },
-          }).addTo(map);
-        } catch {
-          window.open(
-            `https://www.google.com/maps/dir/?api=1&destination=${c.latitude},${c.longitude}`,
-            "_blank",
-          );
-        }
-      }
+      addAmapRoute(map, start.lat, start.lng, c.latitude, c.longitude).then(
+        (r) => {
+          if (r) showToast(`距离 ${r.distance} · 预计 ${r.time}`);
+        },
+      );
     },
     () => {
       window.open(
@@ -1739,11 +1671,9 @@ onMounted(async () => {
 onUnmounted(() => {
   document.removeEventListener("mousedown", onMapClickCloseSearch);
   if (map) {
-    if (useAmapJs) destroyAmapMap(map);
-    else map.remove();
+    destroyAmapMap(map);
     map = null;
   }
-  markerCluster = null;
   customerMarkers = {};
   currentRoute = null;
 });
@@ -2141,6 +2071,13 @@ onUnmounted(() => {
   position: relative;
   z-index: 10001;
 }
+.sr-count {
+  padding: 6px 14px;
+  font-size: 10px;
+  color: #999;
+  border-bottom: 1px solid #f0f0f0;
+  background: #fafafa;
+}
 .search-dropdown.empty {
   padding: 12px 16px;
   color: #999;
@@ -2148,12 +2085,12 @@ onUnmounted(() => {
   text-align: center;
 }
 .search-result-item {
-  padding: 10px 14px;
+  padding: 8px 14px;
   cursor: pointer;
   border-bottom: 1px solid #f0f0f0;
   transition: background 0.08s;
   display: flex;
-  flex-wrap: wrap;
+  gap: 8px;
   align-items: flex-start;
   position: relative;
 }
@@ -2164,17 +2101,28 @@ onUnmounted(() => {
 .search-result-item.active {
   background: #f0f7fa;
 }
+.sr-left {
+  flex-shrink: 0;
+  padding-top: 2px;
+}
+.sr-type-icon {
+  font-size: 16px;
+  width: 24px;
+  text-align: center;
+}
+.sr-body {
+  flex: 1;
+  min-width: 0;
+}
 .sr-name {
   font-size: 13px;
   font-weight: 600;
   color: #333;
-  width: 100%;
   margin-bottom: 1px;
 }
 .sr-addr {
   font-size: 11px;
   color: #888;
-  width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2190,13 +2138,51 @@ onUnmounted(() => {
   background: #e0f7fa;
   padding: 0 5px;
   border-radius: 3px;
-  position: absolute;
-  right: 10px;
-  top: 10px;
+  flex-shrink: 0;
+  margin-top: 2px;
   max-width: 80px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.sr-load-more {
+  padding: 8px 14px;
+  font-size: 11px;
+  color: #00695c;
+  text-align: center;
+  cursor: pointer;
+  border-top: 1px solid #f0f0f0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+.sr-load-more:hover {
+  background: #f0f7fa;
+}
+.sr-load-more.loading {
+  color: #999;
+  cursor: default;
+}
+
+/* map-error overlay */
+.map-error {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: #fef6f0;
+  z-index: 1000;
+  color: #d46b08;
+  font-size: 13px;
+  padding: 20px;
+  text-align: center;
+}
+.map-error-icon {
+  font-size: 32px;
 }
 .map-legend {
   position: absolute;

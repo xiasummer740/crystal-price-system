@@ -487,95 +487,147 @@ function fallbackNominatim(q, res) {
     .on("error", () => res.json({ code: 0, data: [], provider: "nominatim" }));
 }
 
-// ====== POI 搜索（高德地点搜索，像手机版一样丰富） ======
-router.get("/poi-search", (req, res) => {
+// ====== POI 搜索（pageSize=25+翻页+区域展开+周边搜索） ======
+router.get("/poi-search", async (req, res) => {
   const keywords = (req.query.keywords || "").trim();
   const key = req.query.key || "";
-  if (!keywords) return res.json({ code: 0, data: [] });
-  if (!key) {
-    // 没 Key → 走 Nominatim
-    return fallbackNominatim(keywords, res);
-  }
+  if (!keywords) return res.json({ code: 0, data: [], total: 0 });
+  if (!key) return res.json({ code: 0, data: [], total: 0 });
+
   const city = req.query.city || "";
-  const url = `https://restapi.amap.com/v3/place/text?key=${encodeURIComponent(key)}&keywords=${encodeURIComponent(keywords)}&types=&city=${encodeURIComponent(city)}&output=json&offset=10&page=1&extensions=base`;
-  https
-    .get(url, (resp) => {
-      let data = "";
-      resp.on("data", (chunk) => (data += chunk));
-      resp.on("end", () => {
-        try {
-          const r = JSON.parse(data);
-          if (r.status === "1" && r.pois && r.pois.length) {
-            const results = r.pois
-              .map((p) => {
-                const [lng, lat] = (p.location || "").split(",").map(Number);
-                return {
-                  name: p.name || "",
-                  label: `${p.name}${p.address ? " · " + p.address : ""}`,
-                  address: p.address || "",
-                  lat,
-                  lng,
-                  city: p.cityname || "",
-                  district: p.adname || "",
-                  province: p.pname || "",
-                  type: p.type || "",
-                  business: p.business_area || "",
-                  provider: "amap-poi",
-                };
-              })
-              .filter((r) => r.lat && r.lng);
-            return res.json({ code: 0, data: results, provider: "amap-poi" });
+  const page = Math.max(1, parseInt(req.query.page) || 1);
+  const offset = 25; // AMap Web API 最大 pageSize
+  const mergeKey = req.query.merge === "1"; // 是否合并周边搜索
+  const jscode = req.query.jscode || ""; // 安全密钥
+  const sjsc = jscode ? `&jscode=${encodeURIComponent(jscode)}` : "";
+
+  // 通用 HTTPS GET 封装
+  function httpGet(url) {
+    return new Promise((resolve, reject) => {
+      https.get(url, (resp) => {
+        let d = "";
+        resp.on("data", (c) => (d += c));
+        resp.on("end", () => {
+          try {
+            resolve(JSON.parse(d));
+          } catch {
+            reject(new Error("parse error"));
           }
-          // 无结果 → 降级到普通地理编码
-          const geoUrl = `https://restapi.amap.com/v3/geocode/geo?key=${encodeURIComponent(key)}&address=${encodeURIComponent(keywords)}&city=${encodeURIComponent(city)}&output=json`;
-          https
-            .get(geoUrl, (geoResp) => {
-              let geoData = "";
-              geoResp.on("data", (chunk) => (geoData += chunk));
-              geoResp.on("end", () => {
-                try {
-                  const gr = JSON.parse(geoData);
-                  if (gr.status === "1" && gr.geocodes && gr.geocodes.length) {
-                    const results = gr.geocodes
-                      .map((g) => {
-                        const [lng, lat] = (g.location || "")
-                          .split(",")
-                          .map(Number);
-                        return {
-                          name: g.formatted_address || keywords,
-                          label: g.formatted_address || keywords,
-                          address: g.formatted_address || "",
-                          lat,
-                          lng,
-                          city: g.city || "",
-                          district: g.district || "",
-                          province: g.province || "",
-                          type: "geocode",
-                          provider: "amap-geo",
-                        };
-                      })
-                      .filter((r) => r.lat && r.lng);
-                    return res.json({
-                      code: 0,
-                      data: results,
-                      provider: "amap-geo",
-                    });
-                  }
-                  res.json({ code: 0, data: [], provider: "none" });
-                } catch {
-                  res.json({ code: 0, data: [], provider: "none" });
+        });
+      }).on("error", reject);
+    });
+  }
+
+  // 格式化 POI
+  function formatPoi(p) {
+    const [lng, lat] = (p.location || "").split(",").map(Number);
+    return {
+      id: p.id || "",
+      name: p.name || "",
+      address: p.address || "",
+      lat, lng,
+      city: p.cityname || "",
+      district: p.adname || "",
+      province: p.pname || "",
+      type: p.type || "",
+      typecode: p.typecode || p.biz_type || "",
+      distance: p.distance || "",
+      business: p.business_area || "",
+      provider: "amap-poi",
+    };
+  }
+
+  try {
+    // 第一轮：文字搜索
+    const textUrl = `https://restapi.amap.com/v3/place/text?key=${encodeURIComponent(key)}&keywords=${encodeURIComponent(keywords)}&types=&city=${encodeURIComponent(city)}&output=json&offset=${offset}&page=${page}&extensions=base${sjsc}`;
+    const textResult = await httpGet(textUrl);
+
+    let results = [];
+    let total = 0;
+
+    if (textResult.status === "1" && textResult.pois?.length) {
+      results = textResult.pois.map(formatPoi).filter((r) => r.lat && r.lng);
+      total = parseInt(textResult.count) || results.length;
+
+      // 第一页且搜到区域型POI → 追加周边搜索
+      if (mergeKey && page === 1 && total > 0) {
+        // 找最匹配的区域型POI（工业园区/公司企业/住宅小区/地名）
+        const areaPoi = results.find((p) => {
+          const tc = p.typecode || "";
+          return (
+            tc === "120100" || // 公司企业/工业园区
+            tc === "120200" || // 公司企业
+            tc === "120300" || // 产业园区
+            tc === "190403" || // 门牌地址
+            tc.startsWith("12") ||
+            p.type?.includes("园区") ||
+            p.type?.includes("工业")
+          );
+        });
+
+        if (areaPoi) {
+          try {
+            // 周边搜索 500m 范围内，类型不限但限制数量
+            const aroundUrl = `https://restapi.amap.com/v3/place/around?key=${encodeURIComponent(key)}&location=${areaPoi.lng},${areaPoi.lat}&radius=500&offset=25&page=1&output=json&extensions=base${sjsc}`;
+            const aroundResult = await httpGet(aroundUrl);
+
+            if (aroundResult.status === "1" && aroundResult.pois?.length) {
+              const aroundPois = aroundResult.pois
+                .map(formatPoi)
+                .filter((r) => r.lat && r.lng);
+
+              // 去重（按 id）
+              const existingIds = new Set(results.map((r) => r.id));
+              for (const ap of aroundPois) {
+                if (!existingIds.has(ap.id)) {
+                  existingIds.add(ap.id);
+                  results.push(ap);
                 }
-              });
-            })
-            .on("error", () =>
-              res.json({ code: 0, data: [], provider: "none" }),
-            );
-        } catch {
-          res.json({ code: 0, data: [], provider: "none" });
+              }
+            }
+          } catch {
+            // around 失败不影响主结果
+          }
         }
-      });
-    })
-    .on("error", () => fallbackNominatim(keywords, res));
+      }
+    }
+
+    // 第一页且主搜索没结果 → 降级地理编码
+    if (page === 1 && results.length === 0) {
+      try {
+        const geoUrl = `https://restapi.amap.com/v3/geocode/geo?key=${encodeURIComponent(key)}&address=${encodeURIComponent(keywords)}&city=${encodeURIComponent(city)}&output=json${sjsc}`;
+        const geoResult = await httpGet(geoUrl);
+        if (geoResult.status === "1" && geoResult.geocodes?.length) {
+          results = geoResult.geocodes
+            .map((g) => {
+              const [lng, lat] = (g.location || "").split(",").map(Number);
+              return {
+                id: "",
+                name: g.formatted_address || keywords,
+                address: g.formatted_address || "",
+                lat, lng,
+                city: g.city || "",
+                district: g.district || "",
+                province: g.province || "",
+                type: "geocode",
+                typecode: "",
+                distance: "",
+                business: "",
+                provider: "amap-geo",
+              };
+            })
+            .filter((r) => r.lat && r.lng);
+          total = results.length;
+        }
+      } catch {
+        // geo 降级失败不炸
+      }
+    }
+
+    res.json({ code: 0, data: results, total, provider: "amap-poi" });
+  } catch (e) {
+    res.json({ code: 0, data: [], total: 0 });
+  }
 });
 
 // ====== 反向地理编码 ======
