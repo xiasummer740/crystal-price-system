@@ -228,12 +228,10 @@
     Goto unCleanupTemp
 
   unKeepData:
-    ; ----- 保留数据：先弹明确告知框（含完整路径）→ 再打开 Explorer -----
+    ; ----- 保留数据：只告知，不打开文件夹 -----
     MessageBox MB_OK|MB_ICONINFORMATION \
-      "✓ 数据已保留$\n$\n位置：$4$\n$\n下次安装可继续用。点确定后会打开数据文件夹。" \
+      "✓ 数据已保留至：$4$\n$\n下次安装可继续用。" \
       /SD IDOK
-    ExecShell "open" "$4"
-    Sleep 500
 
   unCleanupTemp:
     RMDir /r "$TEMP\晶振备份"
