@@ -387,9 +387,9 @@ function initMap() {
     })
     map.addLayer(markerCluster)
 
-    // 点击地图事件（选点模式）—— 不关闭模式，让用户拖拽微调后点「确认」
+    // 点击地图事件（选点模式）
     map.on('click', (e) => {
-      onMapClick(e)
+      mapClickOnPick(e)
     })
 
     mapLoading.value = false
@@ -480,9 +480,23 @@ function toggleRegion(region) {
 // ====== 客户选择 ======
 async function selectCustomer(c) {
   selectedCustomer.value = c
-  // 在地图上定位
+  // 在地图上定位：有坐标直接跳转，无坐标但有地址则自动搜索
   if (c.latitude && c.longitude && map) {
     map.setView([c.latitude, c.longitude], 15)
+  } else if (c.address && map) {
+    try {
+      const r = await geocodeAddress(c.address)
+      const results = r.data || []
+      if (results.length) {
+        const best = results[0]
+        // 在地图上放临时标记（不保存，仅预览）
+        if (window._viewMarker) map.removeLayer(window._viewMarker)
+        window._viewMarker = L.marker([best.lat, best.lng], {
+          icon: L.divIcon({ className: 'search-marker', html: '📍', iconSize: [24, 24], iconAnchor: [12, 24] })
+        }).addTo(map)
+        map.setView([best.lat, best.lng], 15)
+      }
+    } catch {}
   }
   // 加载详情
   try {
@@ -713,65 +727,50 @@ async function doMapSearch() {
   } catch {}
 }
 
-// ====== 坐标选点 ======
+// ====== 坐标选点（关闭表单 → 全屏地图选点 → 确认后回填） ======
+let pickOriginForm = '' // 'customer' | 'address'
 function startCoordPick() {
+  pickOriginForm = showCustomerForm.value ? 'customer' : 'address'
   selectedMode.value = 'pick'
-  // 如果已有地址，自动搜索定位
-  const addr = showCustomerForm.value ? customerForm.address : addressForm.address
-  if (addr && addr.length >= 3) {
-    geocodeAddress(addr).then(r => {
-      const results = r.data || []
-      if (results.length && map) {
-        const best = results[0]
-        customerForm.latitude = best.lat
-        customerForm.longitude = best.lng
-        if (window._pickMarker) map.removeLayer(window._pickMarker)
-        window._pickMarker = L.marker([best.lat, best.lng], {
-          draggable: true,
-          icon: L.divIcon({ className: 'pick-marker', html: '📍', iconSize: [24, 24], iconAnchor: [12, 24] })
-        }).addTo(map)
-        window._pickMarker.on('dragend', () => {
-          const pos = window._pickMarker.getLatLng()
-          setFormCoords(pos.lat, pos.lng)
-        })
-        map.setView([best.lat, best.lng], 16)
-      }
-    }).catch(() => {
+  // 关闭表单弹窗，让地图全屏可见
+  showCustomerForm.value = false
+  showAddressForm.value = false
+  // 加个延时等弹窗关闭动画完成
+  setTimeout(() => {
+    const addr = pickOriginForm === 'customer' ? customerForm.address : addressForm.address
+    if (addr && addr.length >= 3) {
+      doPickGeocode(addr)
+    } else {
       centerMapForPick()
-    })
-  } else {
+    }
+  }, 350)
+}
+async function doPickGeocode(addr) {
+  try {
+    const r = await geocodeAddress(addr)
+    const results = r.data || []
+    if (results.length && map) {
+      const best = results[0]
+      setFormCoords(best.lat, best.lng)
+      placePickMarker(best.lat, best.lng)
+      map.setView([best.lat, best.lng], 16)
+      showToast('已定位到：' + (best.label || '').slice(0, 30))
+    } else {
+      centerMapForPick()
+      showToast('未搜到精确位置，请在地图上点击或拖拽')
+    }
+  } catch {
     centerMapForPick()
   }
 }
 function centerMapForPick() {
   if (!map) return
   const center = map.getCenter()
-  if (window._pickMarker) map.removeLayer(window._pickMarker)
-  window._pickMarker = L.marker([center.lat, center.lng], {
-    draggable: true,
-    icon: L.divIcon({ className: 'pick-marker', html: '📍', iconSize: [24, 24], iconAnchor: [12, 24] })
-  }).addTo(map)
-  window._pickMarker.on('dragend', () => {
-    const pos = window._pickMarker.getLatLng()
-    setFormCoords(pos.lat, pos.lng)
-  })
   setFormCoords(center.lat, center.lng)
+  placePickMarker(center.lat, center.lng)
 }
-function setFormCoords(lat, lng) {
-  if (showCustomerForm.value) {
-    customerForm.latitude = lat
-    customerForm.longitude = lng
-  } else if (showAddressForm.value) {
-    addressForm.latitude = lat
-    addressForm.longitude = lng
-  }
-}
-
-// 地图点击选点
-function onMapClick(e) {
-  if (selectedMode.value !== 'pick') return
-  const { lat, lng } = e.latlng
-  setFormCoords(lat, lng)
+function placePickMarker(lat, lng) {
+  if (!map) return
   if (window._pickMarker) map.removeLayer(window._pickMarker)
   window._pickMarker = L.marker([lat, lng], {
     draggable: true,
@@ -782,12 +781,35 @@ function onMapClick(e) {
     setFormCoords(pos.lat, pos.lng)
   })
 }
-
-// 确认选点
+function mapClickOnPick(e) {
+  if (selectedMode.value !== 'pick') return
+  const { lat, lng } = e.latlng
+  setFormCoords(lat, lng)
+  placePickMarker(lat, lng)
+}
+function setFormCoords(lat, lng) {
+  if (pickOriginForm === 'customer') {
+    customerForm.latitude = lat
+    customerForm.longitude = lng
+  } else {
+    addressForm.latitude = lat
+    addressForm.longitude = lng
+  }
+}
+// 确认选点 → 回填坐标 + 重新打开表单
 function confirmCoordPick() {
   selectedMode.value = ''
-  showToast('已定位 ✓')
+  // 移除临时标记
+  if (window._pickMarker && map) { map.removeLayer(window._pickMarker); window._pickMarker = null }
+  // 重新打开对应表单
+  if (pickOriginForm === 'customer') {
+    showCustomerForm.value = true
+  } else {
+    showAddressForm.value = true
+  }
+  showToast('坐标已定位 ✓')
 }
+// 确认选点（在模板中通过 confirmCoordPick 调用）
 
 // ====== 地址自动搜索定位（表单输入时） ======
 let geoAutoTimer = null
