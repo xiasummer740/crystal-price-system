@@ -1,8 +1,8 @@
 version: 1.0.123
 files:
   - url: crystal-price-system-setup-1.0.123.exe
-    sha512: PLACEHOLDER
-    size: 0
+    sha512: 6PbJKJ8aMInEeukijZMjnBYJc4TLr3hbniIV7O5XRzp7MmA//14xFMwq/7wuTMQUzeY9lgc4IZfjv6uYdJ5y6Q==
+    size: 119759230
 path: crystal-price-system-setup-1.0.123.exe
-sha512: PLACEHOLDER
-releaseDate: '2026-07-06T23:00:00.000Z'
+sha512: 6PbJKJ8aMInEeukijZMjnBYJc4TLr3hbniIV7O5XRzp7MmA//14xFMwq/7wuTMQUzeY9lgc4IZfjv6uYdJ5y6Q==
+releaseDate: '2026-07-06T15:56:38.642Z'
