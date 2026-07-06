@@ -674,7 +674,7 @@ app.whenReady().then(async () => {
   }
 })
 
-// 关闭前保存数据库（快速退出，不阻塞安装器）
+// 关闭前保存数据库 + 强制退出（NSIS 安装器升级需要进程立即消失）
 app.on('before-quit', () => {
   try {
     if (reminderInterval) { clearInterval(reminderInterval); reminderInterval = null }
@@ -688,6 +688,8 @@ app.on('before-quit', () => {
   } catch (e) {
     log('before-quit error: ' + (e.stack || e.message))
   }
+  // 强制退出：Express 服务等句柄会拖住进程，NSIS 等不了
+  app.exit()
 })
 
 app.on('window-all-closed', () => {
