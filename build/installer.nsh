@@ -35,11 +35,16 @@
 ; 改用 customUnInstall 宏内寄存器 $4 暂存数据目录路径。
 ;
 ; ===========================================================
-;  安装前：强杀旧版进程（不加 USERNAME 过滤，避免中文编码问题）
+;  安装前：强杀旧版进程（用 nsProcess 原生插件，比 taskkill 更可靠）
 ; ===========================================================
 !macro customCheckAppRunning
   DetailPrint `正在强制关闭旧版 ${PRODUCT_NAME}...`
-  nsExec::Exec `"$SYSDIR\cmd.exe" /c taskkill /f /im "${APP_EXECUTABLE_FILENAME}"`
+  nsProcess::_KillProcess /NOUNLOAD "${APP_EXECUTABLE_FILENAME}"
+  Pop $R0
+  ${if} $R0 != 0
+    DetailPrint `nsProcess kill 返回: $R0，尝试 taskkill 兜底...`
+    nsExec::Exec `"$SYSDIR\cmd.exe" /c taskkill /f /im "${APP_EXECUTABLE_FILENAME}" 2>nul`
+  ${endIf}
   Sleep 1000
 !macroend
 
