@@ -75,10 +75,23 @@
           <button class="tip-confirm" @click="confirmCoordPick">✅ 确认</button>
           <button class="tip-close" @click="selectedMode = ''">✕</button>
         </div>
-        <!-- 地图搜索框 -->
-        <div class="map-search-bar" v-if="!selectedMode">
-          <input v-model="mapSearchKw" placeholder="🔍 搜索地址或地点" class="map-search-input" @input="onMapSearchInput" @keydown.enter="doMapSearch" />
-          <button class="map-search-btn" @click="doMapSearch">搜索</button>
+        <!-- 地图搜索框（带结果下拉） -->
+        <div class="map-search-wrap" v-if="!selectedMode" ref="searchWrapRef">
+          <div class="map-search-bar">
+            <input v-model="mapSearchKw" placeholder="🔍 搜索地址、地点、客户…" class="map-search-input" @input="onMapSearchInput" @keydown.enter="onSearchKeydown" @keydown.down="onSearchKeyNav(1)" @keydown.up="onSearchKeyNav(-1)" @focus="showSearchResults = true" />
+            <button class="map-search-btn" @click="doMapSearch">搜索</button>
+          </div>
+          <!-- 搜索结果下拉 -->
+          <div class="search-dropdown" v-if="showSearchResults && searchResults.length">
+            <div v-for="(r, i) in searchResults" :key="i" class="search-result-item" :class="{ active: searchHighlight === i }" @mousedown.prevent="pickSearchResult(r)">
+              <div class="sr-name">{{ r.name || r.label || '' }}</div>
+              <div class="sr-addr">{{ r.address || r.label || '' }}</div>
+              <div class="sr-meta" v-if="r.city || r.district || r.province">{{ [r.province, r.city, r.district].filter(Boolean).join(' ') }}</div>
+            </div>
+          </div>
+          <div class="search-dropdown empty" v-else-if="showSearchResults && searchDone && !searchResults.length">
+            <div class="search-result-empty">未找到匹配地址</div>
+          </div>
         </div>
         <!-- 图例 -->
         <div class="map-legend">
@@ -395,6 +408,15 @@ function initMap() {
       mapClickOnPick(e)
     })
 
+    // 搜索框不触发地图拖拽（等 DOM 渲染后）
+    setTimeout(() => {
+      const wrap = mapContainer.value?.querySelector('.map-search-wrap')
+      if (wrap) {
+        L.DomEvent.disableClickPropagation(wrap)
+        L.DomEvent.disableScrollPropagation(wrap)
+      }
+    }, 500)
+
     mapLoading.value = false
 
     // 延迟加载客户标记
@@ -700,34 +722,88 @@ async function handleDeleteAddress(a) {
   }
 }
 
-// ====== 地图搜索框（地址/POI 搜索） ======
+// ====== 地图搜索框（带下拉结果，像手机地图） ======
 const mapSearchKw = ref('')
+const searchResults = ref([])
+const showSearchResults = ref(false)
+const searchHighlight = ref(-1)
+const searchDone = ref(false)
+const searchWrapRef = ref(null)
 let mapSearchMarker = null
 let mapSearchTimer = null
+
 function onMapSearchInput() {
+  searchDone.value = false
   clearTimeout(mapSearchTimer)
-  mapSearchTimer = setTimeout(doMapSearch, 500)
+  const kw = mapSearchKw.value.trim()
+  if (kw.length < 2) { searchResults.value = []; showSearchResults.value = false; return }
+  mapSearchTimer = setTimeout(doMapSearch, 400)
 }
+
 async function doMapSearch() {
   const kw = mapSearchKw.value.trim()
   if (!kw) return
   try {
     const r = await myGeocode(kw)
-    const results = r.data || []
+    const results = (r.data || []).map(item => ({
+      ...item,
+      name: item.address || item.label || kw,
+      address: item.label || item.address || ''
+    }))
+    searchResults.value = results
+    showSearchResults.value = results.length > 0
+    searchDone.value = true
+    searchHighlight.value = -1
+
     if (results.length) {
-      const best = results[0]
-      if (map) {
-        map.setView([best.lat, best.lng], 15)
-        if (mapSearchMarker) map.removeLayer(mapSearchMarker)
-        mapSearchMarker = L.marker([best.lat, best.lng], {
-          icon: L.divIcon({ className: 'search-marker', html: '📍', iconSize: [24, 24], iconAnchor: [12, 24] })
-        }).addTo(map)
-        mapSearchMarker.bindPopup(`<div style="font-size:12px">${best.label}</div>`).openPopup()
-      }
+      placeSearchMarker(results[0])
     } else {
       showToast('未找到该地址')
     }
-  } catch {}
+  } catch {
+    searchDone.value = true
+  }
+}
+
+function placeSearchMarker(result) {
+  if (!map || !result.lat || !result.lng) return
+  map.setView([result.lat, result.lng], 16)
+  if (mapSearchMarker) map.removeLayer(mapSearchMarker)
+  mapSearchMarker = L.marker([result.lat, result.lng], {
+    icon: L.divIcon({ className: 'search-marker', html: '📍', iconSize: [24, 24], iconAnchor: [12, 24] })
+  }).addTo(map)
+  const addr = result.address || result.label || ''
+  mapSearchMarker.bindPopup(`<div style="font-size:13px;font-weight:600;margin-bottom:2px">${result.name}</div><div style="font-size:11px;color:#888">${addr}</div>`).openPopup()
+}
+
+function pickSearchResult(r) {
+  showSearchResults.value = false
+  mapSearchKw.value = r.name || r.label || ''
+  placeSearchMarker(r)
+}
+
+function onSearchKeydown(e) {
+  if (searchHighlight.value >= 0 && searchResults.value[searchHighlight.value]) {
+    pickSearchResult(searchResults.value[searchHighlight.value])
+    e.preventDefault()
+  } else if (searchResults.value.length) {
+    pickSearchResult(searchResults.value[0])
+  }
+}
+
+function onSearchKeyNav(dir) {
+  if (!searchResults.value.length) return
+  let idx = searchHighlight.value + dir
+  if (idx < 0) idx = searchResults.value.length - 1
+  if (idx >= searchResults.value.length) idx = 0
+  searchHighlight.value = idx
+}
+
+// 点击其他地方关闭搜索结果
+function onMapClickCloseSearch(e) {
+  if (searchWrapRef.value && !searchWrapRef.value.contains(e.target)) {
+    showSearchResults.value = false
+  }
 }
 
 // ====== 坐标选点（关闭表单 → 全屏地图选点 → 确认后回填） ======
@@ -978,9 +1054,12 @@ onMounted(async () => {
   nextTick(() => {
     setTimeout(initMap, 100)
   })
+  // 点击别处关闭搜索结果
+  document.addEventListener('mousedown', onMapClickCloseSearch)
 })
 
 onUnmounted(() => {
+  document.removeEventListener('mousedown', onMapClickCloseSearch)
   if (map) {
     map.remove()
     map = null
@@ -1334,6 +1413,45 @@ onUnmounted(() => {
   white-space: nowrap;
 }
 .map-search-btn:hover { background: #004d40; }
+
+/* 搜索下拉结果 */
+.map-search-wrap {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1000;
+  width: 400px;
+  max-width: 85%;
+}
+.search-dropdown {
+  background: #fff;
+  border-radius: 0 0 8px 8px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+  max-height: 280px;
+  overflow-y: auto;
+  margin-top: -1px;
+  border: 1px solid #e0e0e0;
+  border-top: none;
+}
+.search-dropdown.empty {
+  padding: 12px 16px;
+  color: #999;
+  font-size: 12px;
+  text-align: center;
+}
+.search-result-item {
+  padding: 10px 14px;
+  cursor: pointer;
+  border-bottom: 1px solid #f5f5f5;
+  transition: background .1s;
+}
+.search-result-item:last-child { border-bottom: none; }
+.search-result-item:hover,
+.search-result-item.active { background: #e0f7fa; }
+.sr-name { font-size: 13px; font-weight: 600; color: #333; }
+.sr-addr { font-size: 11px; color: #888; margin-top: 2px; }
+.sr-meta { font-size: 10px; color: #aaa; margin-top: 1px; }
 .map-legend {
   position: absolute;
   bottom: 20px;
