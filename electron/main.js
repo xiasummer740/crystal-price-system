@@ -390,6 +390,11 @@ function createWindow(port) {
       openNotesWindow(serverPort)
       return { action: 'deny' }
     }
+    // 拦截地图地址请求，创建桌面窗口
+    if (url.includes('/#/map-addresses') || url.includes('map-standalone=1')) {
+      openMapWindow(serverPort)
+      return { action: 'deny' }
+    }
     // 仅允许 http/https 外部链接通过系统浏览器打开
     if (url.startsWith('http://') || url.startsWith('https://')) {
       shell.openExternal(url)
@@ -541,6 +546,38 @@ function startReminderPolling(port) {
   }, 10000)
   log('Reminder polling started (interval: 60s)')
 }
+
+// ====== 地图地址独立窗口 ======
+let mapWindow = null
+function openMapWindow(port) {
+  if (mapWindow && !mapWindow.isDestroyed()) { mapWindow.focus(); return }
+  const mainPos = mainWindow?.getBounds()
+  mapWindow = new BrowserWindow({
+    width: 1100,
+    height: 720,
+    minWidth: 800, minHeight: 500,
+    x: mainPos ? mainPos.x + 40 : undefined,
+    y: mainPos ? mainPos.y + 40 : undefined,
+    title: '🗺️ 地图地址',
+    frame: true,
+    icon: path.join(__dirname, '..', 'client', 'dist', 'SJK-256.png'),
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true,
+      sandbox: false,
+      preload: path.join(__dirname, 'preload.cjs')
+    }
+  })
+  mapWindow.setMenuBarVisibility(false)
+  const url = `http://localhost:${port}/#/map-addresses?standalone=1&v=${app.getVersion()}&packaged=${app.isPackaged}`
+  mapWindow.loadURL(url)
+  mapWindow.on('closed', () => { mapWindow = null })
+}
+
+// IPC：渲染进程请求打开地图窗口
+ipcMain.handle('open-map-window', () => {
+  openMapWindow(serverPort)
+})
 
 // 浏览器打开外部链接（供渲染进程调用）
 ipcMain.handle('open-external', (_, url) => { shell.openExternal(url) })

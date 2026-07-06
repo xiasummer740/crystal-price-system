@@ -7,7 +7,7 @@
           <span class="clock-dot"></span>{{ clockTime }}
         </span>
         <button class="nav-btn" style="margin-right:6px;background:#fff7e6;color:#d48806;border-color:#ffe58f;cursor:pointer" @click="openNotesWin">📝 记事</button>
-        <router-link to="/map-addresses" class="nav-btn" style="margin-right:6px;background:#e0f7fa;color:#00695c;border-color:#b2dfdb">🗺️ 地图地址</router-link>
+        <button class="nav-btn" style="margin-right:6px;background:#e0f7fa;color:#00695c;border-color:#b2dfdb;cursor:pointer" @click="openMapWin">🗺️ 地图地址</button>
         <router-link to="/translator" class="nav-btn" style="margin-right:6px;background:#f0f6ff;color:#1565c0;border-color:#bbdefb">规格书翻译</router-link>
         <router-link to="/samples" class="nav-btn" style="margin-right:6px">样品登记</router-link>
         <router-link to="/trash" class="nav-btn" style="margin-right:6px;color:#e53935;border-color:#ffcdd2">回收站</router-link>
@@ -438,6 +438,14 @@ function openNotesWin() {
   // 浏览器: window.open 被拦截或关掉 → 页面内跳转
   if (!win || win.closed) {
     if (!isElectron) router.push('/notes')
+  }
+}
+function openMapWin() {
+  const isElectron = navigator.userAgent.indexOf('Electron') !== -1
+  const win = window.open('/#/map-addresses?standalone=1', '_blank')
+  // Electron: setWindowOpenHandler 拦截成功
+  if (!win || win.closed) {
+    if (!isElectron) router.push('/map-addresses')
   }
 }
 const showPopup = ref(false)

@@ -69,10 +69,16 @@
           <van-loading size="24" />
           <span>加载地图中...</span>
         </div>
-        <!-- 地图控件提示 -->
+        <!-- 地图控件提示 + 确认按钮 -->
         <div class="map-tip" v-if="selectedMode === 'pick'">
           📍 点击地图设置位置，可拖拽标记微调
+          <button class="tip-confirm" @click="confirmCoordPick">✅ 确认</button>
           <button class="tip-close" @click="selectedMode = ''">✕</button>
+        </div>
+        <!-- 地图搜索框 -->
+        <div class="map-search-bar" v-if="!selectedMode">
+          <input v-model="mapSearchKw" placeholder="🔍 搜索地址或地点" class="map-search-input" @input="onMapSearchInput" @keydown.enter="doMapSearch" />
+          <button class="map-search-btn" @click="doMapSearch">搜索</button>
         </div>
         <!-- 图例 -->
         <div class="map-legend">
@@ -217,19 +223,6 @@
       </div>
     </van-popup>
 
-    <!-- ===== Geocode 搜索结果提示 ===== -->
-    <van-popup v-model:show="showGeocode" round position="bottom" :style="{ height: 'auto', maxHeight: '50%' }" closeable>
-      <div class="geocode-wrap">
-        <h4>搜索结果</h4>
-        <div v-for="r in geocodeResults" :key="r.label" class="geo-item" @click="pickGeocode(r)">
-          <span class="geo-label">{{ r.label }}</span>
-          <span class="geo-coord">{{ r.lat?.toFixed(4) }}, {{ r.lng?.toFixed(4) }}</span>
-        </div>
-        <div v-if="!geocodeResults.length" class="geo-empty">无结果，请尝试更精确的地址</div>
-      </div>
-    </van-popup>
-
-    <!-- ===== 选点模式提示（在地图容器中） ===== -->
   </div>
 </template>
 
@@ -260,6 +253,7 @@ L.Icon.Default.mergeOptions({
   shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png'
 })
 
+const route_ = useRoute()
 const router = useRouter()
 const mapContainer = ref(null)
 let map = null
@@ -268,6 +262,7 @@ let customerMarkers = {}
 let currentRoute = null
 
 // ====== 状态 ======
+const isStandalone = ref(route_.query.standalone === '1')
 const customers = ref([])
 const loading = ref(false)
 const mapLoading = ref(true)
@@ -279,8 +274,6 @@ const showDetail = ref(false)
 const detailData = ref(null)
 const expandedPurchaser = ref(null)
 const selectedMode = ref('') // '' | 'pick'
-const geocodeResults = ref([])
-const showGeocode = ref(false)
 let geocodeTarget = null // 'customer' | 'address'
 
 // 表单
@@ -358,7 +351,11 @@ function truncate(s, len) {
 }
 
 function goBack() {
-  router.push('/')
+  if (isStandalone.value) {
+    window.close()
+  } else {
+    router.push('/')
+  }
 }
 
 // ====== 地图初始化 ======
@@ -390,14 +387,9 @@ function initMap() {
     })
     map.addLayer(markerCluster)
 
-    // 点击地图事件（选点模式）
+    // 点击地图事件（选点模式）—— 不关闭模式，让用户拖拽微调后点「确认」
     map.on('click', (e) => {
-      if (selectedMode.value === 'pick') {
-        const { lat, lng } = e.latlng
-        setPickedCoord(lat, lng)
-        selectedMode.value = ''
-        showToast('已选择位置')
-      }
+      onMapClick(e)
     })
 
     mapLoading.value = false
@@ -691,75 +683,162 @@ async function handleDeleteAddress(a) {
   }
 }
 
+// ====== 地图搜索框（地址/POI 搜索） ======
+const mapSearchKw = ref('')
+let mapSearchMarker = null
+let mapSearchTimer = null
+function onMapSearchInput() {
+  clearTimeout(mapSearchTimer)
+  mapSearchTimer = setTimeout(doMapSearch, 500)
+}
+async function doMapSearch() {
+  const kw = mapSearchKw.value.trim()
+  if (!kw) return
+  try {
+    const r = await geocodeAddress(kw)
+    const results = r.data || []
+    if (results.length) {
+      const best = results[0]
+      if (map) {
+        map.setView([best.lat, best.lng], 15)
+        if (mapSearchMarker) map.removeLayer(mapSearchMarker)
+        mapSearchMarker = L.marker([best.lat, best.lng], {
+          icon: L.divIcon({ className: 'search-marker', html: '📍', iconSize: [24, 24], iconAnchor: [12, 24] })
+        }).addTo(map)
+        mapSearchMarker.bindPopup(`<div style="font-size:12px">${best.label}</div>`).openPopup()
+      }
+    } else {
+      showToast('未找到该地址')
+    }
+  } catch {}
+}
+
 // ====== 坐标选点 ======
 function startCoordPick() {
   selectedMode.value = 'pick'
-  showToast('请在地图上点击选择位置')
+  // 如果已有地址，自动搜索定位
+  const addr = showCustomerForm.value ? customerForm.address : addressForm.address
+  if (addr && addr.length >= 3) {
+    geocodeAddress(addr).then(r => {
+      const results = r.data || []
+      if (results.length && map) {
+        const best = results[0]
+        customerForm.latitude = best.lat
+        customerForm.longitude = best.lng
+        if (window._pickMarker) map.removeLayer(window._pickMarker)
+        window._pickMarker = L.marker([best.lat, best.lng], {
+          draggable: true,
+          icon: L.divIcon({ className: 'pick-marker', html: '📍', iconSize: [24, 24], iconAnchor: [12, 24] })
+        }).addTo(map)
+        window._pickMarker.on('dragend', () => {
+          const pos = window._pickMarker.getLatLng()
+          setFormCoords(pos.lat, pos.lng)
+        })
+        map.setView([best.lat, best.lng], 16)
+      }
+    }).catch(() => {
+      centerMapForPick()
+    })
+  } else {
+    centerMapForPick()
+  }
 }
-
-function setPickedCoord(lat, lng) {
+function centerMapForPick() {
+  if (!map) return
+  const center = map.getCenter()
+  if (window._pickMarker) map.removeLayer(window._pickMarker)
+  window._pickMarker = L.marker([center.lat, center.lng], {
+    draggable: true,
+    icon: L.divIcon({ className: 'pick-marker', html: '📍', iconSize: [24, 24], iconAnchor: [12, 24] })
+  }).addTo(map)
+  window._pickMarker.on('dragend', () => {
+    const pos = window._pickMarker.getLatLng()
+    setFormCoords(pos.lat, pos.lng)
+  })
+  setFormCoords(center.lat, center.lng)
+}
+function setFormCoords(lat, lng) {
   if (showCustomerForm.value) {
     customerForm.latitude = lat
     customerForm.longitude = lng
-    // 反向地理编码获取地址
-    reverseGeocode(lat, lng).then(r => {
-      if (r.data?.address && !customerForm.address) customerForm.address = r.data.address
-    }).catch(() => {})
   } else if (showAddressForm.value) {
     addressForm.latitude = lat
     addressForm.longitude = lng
-    reverseGeocode(lat, lng).then(r => {
-      if (r.data?.address && !addressForm.address) addressForm.address = r.data.address
-    }).catch(() => {})
-  }
-  // 在地图上放置临时标记
-  if (map) {
-    if (window._pickMarker) map.removeLayer(window._pickMarker)
-    window._pickMarker = L.marker([lat, lng], {
-      icon: L.divIcon({ className: 'pick-marker', html: '📍', iconSize: [24, 24], iconAnchor: [12, 24] })
-    }).addTo(map)
-    map.setView([lat, lng], 16)
   }
 }
 
-// ====== 地址搜索（地理编码） ======
-async function onAddressInput(val) {
-  geocodeTarget = 'customer'
-  if (!val || val.length < 3) return
-  clearTimeout(window._geoDebounce)
-  window._geoDebounce = setTimeout(async () => {
-    try {
-      const r = await geocodeAddress(val)
-      geocodeResults.value = r.data || []
-      if (geocodeResults.value.length) showGeocode.value = true
-    } catch {}
-  }, 500)
-}
-async function onAddrInput(val) {
-  geocodeTarget = 'address'
-  if (!val || val.length < 3) return
-  clearTimeout(window._geoDebounce)
-  window._geoDebounce = setTimeout(async () => {
-    try {
-      const r = await geocodeAddress(val)
-      geocodeResults.value = r.data || []
-      if (geocodeResults.value.length) showGeocode.value = true
-    } catch {}
-  }, 500)
+// 地图点击选点
+function onMapClick(e) {
+  if (selectedMode.value !== 'pick') return
+  const { lat, lng } = e.latlng
+  setFormCoords(lat, lng)
+  if (window._pickMarker) map.removeLayer(window._pickMarker)
+  window._pickMarker = L.marker([lat, lng], {
+    draggable: true,
+    icon: L.divIcon({ className: 'pick-marker', html: '📍', iconSize: [24, 24], iconAnchor: [12, 24] })
+  }).addTo(map)
+  window._pickMarker.on('dragend', () => {
+    const pos = window._pickMarker.getLatLng()
+    setFormCoords(pos.lat, pos.lng)
+  })
 }
 
-function pickGeocode(r) {
-  showGeocode.value = false
-  if (geocodeTarget === 'customer') {
-    customerForm.latitude = r.lat
-    customerForm.longitude = r.lng
-    if (!customerForm.address) customerForm.address = r.label
-  } else {
-    addressForm.latitude = r.lat
-    addressForm.longitude = r.lng
-    if (!addressForm.address) addressForm.address = r.label
+// 确认选点
+function confirmCoordPick() {
+  selectedMode.value = ''
+  showToast('已定位 ✓')
+}
+
+// ====== 地址自动搜索定位（表单输入时） ======
+let geoAutoTimer = null
+async function autoGeocode(val, target) {
+  geocodeTarget = target
+  if (!val || val.length < 3) {
+    if (target === 'customer') { customerForm.latitude = null; customerForm.longitude = null }
+    else { addressForm.latitude = null; addressForm.longitude = null }
+    return
   }
-  setPickedCoord(r.lat, r.lng)
+  clearTimeout(geoAutoTimer)
+  geoAutoTimer = setTimeout(async () => {
+    try {
+      const r = await geocodeAddress(val)
+      const results = r.data || []
+      if (results.length) {
+        const best = results[0]
+        if (target === 'customer') {
+          customerForm.latitude = best.lat
+          customerForm.longitude = best.lng
+        } else {
+          addressForm.latitude = best.lat
+          addressForm.longitude = best.lng
+        }
+        // 在地图上显示标记
+        if (map) {
+          if (window._geoMarker) map.removeLayer(window._geoMarker)
+          window._geoMarker = L.marker([best.lat, best.lng], {
+            icon: L.divIcon({ className: 'search-marker', html: '📍', iconSize: [24, 24], iconAnchor: [12, 24] })
+          }).addTo(map)
+          map.setView([best.lat, best.lng], 15)
+        }
+      }
+    } catch {}
+  }, 600)
+}
+
+function onAddressInput(val) {
+  autoGeocode(val, 'customer')
+}
+function onAddrInput(val) {
+  autoGeocode(val, 'address')
+}
+
+// 地图搜索按钮
+function showMapSearch() {
+  // 如果表单已打开且有地址，自动定位
+  const addr = showCustomerForm.value ? customerForm.address : addressForm.value?.address
+  if (addr && addr.length >= 3) {
+    doMapSearch()
+  }
 }
 
 // ====== 地图操作 ======
@@ -1170,6 +1249,18 @@ onUnmounted(() => {
   gap: 8px;
   white-space: nowrap;
 }
+.tip-confirm {
+  background: #52c41a;
+  border: none;
+  color: #fff;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 4px 14px;
+  border-radius: 14px;
+  font-weight: 600;
+  font-family: inherit;
+}
+.tip-confirm:hover { background: #389e0d; }
 .tip-close {
   background: transparent;
   border: none;
@@ -1178,6 +1269,46 @@ onUnmounted(() => {
   font-size: 14px;
   padding: 0;
 }
+
+/* 地图搜索框 */
+.map-search-bar {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  z-index: 1000;
+  background: rgba(255,255,255,0.95);
+  padding: 6px 8px;
+  border-radius: 8px;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.15);
+  width: 340px;
+  max-width: 80%;
+}
+.map-search-input {
+  flex: 1;
+  border: none;
+  outline: none;
+  font-size: 13px;
+  color: #333;
+  background: transparent;
+  font-family: inherit;
+}
+.map-search-input::placeholder { color: #aaa; }
+.map-search-btn {
+  padding: 4px 12px;
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+  border: none;
+  background: #00695c;
+  color: #fff;
+  font-family: inherit;
+  white-space: nowrap;
+}
+.map-search-btn:hover { background: #004d40; }
 .map-legend {
   position: absolute;
   bottom: 20px;
