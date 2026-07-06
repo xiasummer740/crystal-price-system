@@ -233,6 +233,9 @@
         <van-field v-model="settingsAmapKey" label="高德地图 Key" placeholder="留空则使用 OpenStreetMap" @update:model-value="saveSettingsDebounced">
           <template #extra><a href="https://console.amap.com/" target="_blank" style="color:var(--color-primary);font-size:11px">申请</a></template>
         </van-field>
+        <van-field v-model="settingsAmapJscode" label="安全密钥" placeholder="jscode（选填）" @update:model-value="saveSettingsDebounced">
+          <template #extra><a href="https://console.amap.com/" target="_blank" style="color:var(--color-primary);font-size:11px">查看</a></template>
+        </van-field>
         <p class="set-hint" :style="{color: amapKeyStatus}">{{ amapKeyHint }}</p>
         <div class="set-divider"></div>
         <h4>版本升级</h4>
@@ -661,7 +664,8 @@ const showSettings = ref(false)
 const settingsTaxRate = ref(Number(localStorage.getItem('crystal_taxRate')) || 13)
 const settingsFxRate = ref(Number(localStorage.getItem('crystal_rate')) || 7)
 const settingsAmapKey = ref(localStorage.getItem('crystal_amap_key') || '')
-function saveSettings() { localStorage.setItem('crystal_taxRate', settingsTaxRate.value); localStorage.setItem('crystal_rate', settingsFxRate.value); localStorage.setItem('crystal_amap_key', settingsAmapKey.value) }
+const settingsAmapJscode = ref(localStorage.getItem('crystal_amap_jscode') || '')
+function saveSettings() { localStorage.setItem('crystal_taxRate', settingsTaxRate.value); localStorage.setItem('crystal_rate', settingsFxRate.value); localStorage.setItem('crystal_amap_key', settingsAmapKey.value); localStorage.setItem('crystal_amap_jscode', settingsAmapJscode.value) }
 let saveTimer = null
 function saveSettingsDebounced() {
   clearTimeout(saveTimer)
@@ -672,7 +676,7 @@ const amapKeyHint = computed(() => settingsAmapKey.value
   ? '✅ Key 已保存，地图搜索将使用高德定位'
   : '填写高德地图 API Key 后，地图搜索和地址定位更精准（免费，5000次/天）。不填则使用 OpenStreetMap 定位。')
 // 打开设置时重新加载值
-watch(showSettings, (v) => { if (v) { settingsAmapKey.value = localStorage.getItem('crystal_amap_key') || '' } })
+watch(showSettings, (v) => { if (v) { settingsAmapKey.value = localStorage.getItem('crystal_amap_key') || ''; settingsAmapJscode.value = localStorage.getItem('crystal_amap_jscode') || '' } })
 
 // 日志查看器
 const showLogViewer = ref(false)
