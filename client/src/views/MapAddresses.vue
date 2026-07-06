@@ -228,7 +228,7 @@
 
 <script setup>
 import { ref, reactive, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { showToast, showConfirmDialog, showDialog } from 'vant'
 import {
   fetchMapCustomers, getMapCustomer, createMapCustomer, updateMapCustomer, deleteMapCustomer,
