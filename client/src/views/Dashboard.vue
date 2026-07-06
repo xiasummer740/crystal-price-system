@@ -230,10 +230,10 @@
           <template #extra>1 USD = ? CNY</template>
         </van-field>
         <p class="set-hint">税率用于含税/未税自动换算，汇率用于美金人民币折合显示。修改后即时生效。</p>
-        <van-field v-model="settingsAmapKey" label="高德地图 Key" placeholder="留空则使用 OpenStreetMap" @change="saveSettings">
+        <van-field v-model="settingsAmapKey" label="高德地图 Key" placeholder="留空则使用 OpenStreetMap" @update:model-value="saveSettingsDebounced">
           <template #extra><a href="https://console.amap.com/" target="_blank" style="color:var(--color-primary);font-size:11px">申请</a></template>
         </van-field>
-        <p class="set-hint">填写高德地图 API Key 后，地图搜索和地址定位更精准（免费，5000次/天）。不填则使用 OpenStreetMap 定位。</p>
+        <p class="set-hint" :style="{color: amapKeyStatus}">{{ amapKeyHint }}</p>
         <div class="set-divider"></div>
         <h4>版本升级</h4>
         <div class="update-area">
@@ -662,6 +662,15 @@ const settingsTaxRate = ref(Number(localStorage.getItem('crystal_taxRate')) || 1
 const settingsFxRate = ref(Number(localStorage.getItem('crystal_rate')) || 7)
 const settingsAmapKey = ref(localStorage.getItem('crystal_amap_key') || '')
 function saveSettings() { localStorage.setItem('crystal_taxRate', settingsTaxRate.value); localStorage.setItem('crystal_rate', settingsFxRate.value); localStorage.setItem('crystal_amap_key', settingsAmapKey.value) }
+let saveTimer = null
+function saveSettingsDebounced() {
+  clearTimeout(saveTimer)
+  saveTimer = setTimeout(saveSettings, 300)
+}
+const amapKeyStatus = computed(() => settingsAmapKey.value ? '#52c41a' : '#999')
+const amapKeyHint = computed(() => settingsAmapKey.value
+  ? '✅ Key 已保存，地图搜索将使用高德定位'
+  : '填写高德地图 API Key 后，地图搜索和地址定位更精准（免费，5000次/天）。不填则使用 OpenStreetMap 定位。')
 // 打开设置时重新加载值
 watch(showSettings, (v) => { if (v) { settingsAmapKey.value = localStorage.getItem('crystal_amap_key') || '' } })
 

@@ -255,8 +255,8 @@ L.Icon.Default.mergeOptions({
 
 const route_ = useRoute()
 // 地理编码包装：自动带高德 Key
-function myGeocode(q) { return myGeocode(q, getAmapKey()) }
-function myReverseGeocode(lat, lng) { return myReverseGeocode(lat, lng, getAmapKey()) }
+function myGeocode(q) { return geocodeAddress(q, getAmapKey()) }
+function myReverseGeocode(lat, lng) { return reverseGeocode(lat, lng, getAmapKey()) }
 const router = useRouter()
 const mapContainer = ref(null)
 let map = null
