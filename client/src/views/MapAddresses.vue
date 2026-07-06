@@ -261,6 +261,7 @@ import 'leaflet.markercluster/dist/MarkerCluster.css'
 import 'leaflet.markercluster/dist/MarkerCluster.Default.css'
 import 'leaflet-routing-machine'
 import 'leaflet-routing-machine/dist/leaflet-routing-machine.css'
+import { loadAmapScript, createAmapMap, destroyAmapMap, setAmapView, addAmapMarker, addAmapLabelMarker, bindAmapPopup, addAmapCluster, clearAmapExtraMarkers, addAmapRoute, onAmapClickForPick } from '../utils/amap-map.js'
 
 // ====== 修复 Leaflet 默认图标路径 ======
 delete L.Icon.Default.prototype._getIconUrl
@@ -422,59 +423,98 @@ function ll(lat, lng) { const c = wgs84ToGcj02(lat, lng); return [c.lat, c.lng] 
 // 从高德坐标转回 WGS84（高德 API 返回 → 存数据库）
 function fromAmap(lat, lng) { const c = gcj02ToWgs84(lat, lng); return { lat: c.lat, lng: c.lng } }
 
-// ====== 地图初始化 ======
-function initMap() {
+// ====== 地图抽象层（同时支持高德 JS API / Leaflet） ======
+function mapSetView(lat, lng, zoom) {
+  if (!map) return
+  if (useAmapJs) setAmapView(map, lat, lng, zoom || 15)
+  else map.setView(ll(lat, lng), zoom || 15)
+}
+function mapAddDivMarker(lat, lng, html, onClick) {
+  if (useAmapJs) return addAmapLabelMarker(map, lat, lng, html, onClick)
+  const marker = L.marker(ll(lat, lng), {
+    icon: L.divIcon({ className: 'search-marker', html, iconSize: [24, 24], iconAnchor: [12, 24] })
+  }).addTo(map)
+  if (onClick) marker.on('click', onClick)
+  return marker
+}
+function mapRemoveMarker(marker) {
+  if (!marker) return
+  if (useAmapJs) { try { map.remove(marker) } catch {} }
+  else { try { map.removeLayer(marker) } catch {} }
+}
+function mapLocate(successCb, errorCb) {
+  if (useAmapJs) {
+    AMap.plugin('AMap.Geolocation', () => {
+      const geo = new AMap.Geolocation({ enableHighAccuracy: true, timeout: 10000 })
+      geo.getCurrentPosition((status, result) => {
+        if (status === 'complete') {
+          const wgs = gcj02ToWgs84(result.position.lat, result.position.lng)
+          successCb({ lat: wgs.lat, lng: wgs.lng })
+        } else errorCb()
+      })
+    })
+  } else {
+    map.locate({ setView: false, enableHighAccuracy: true })
+    map.once('locationfound', (e) => successCb(e.latlng))
+    map.once('locationerror', () => errorCb())
+    setTimeout(() => map.stopLocate(), 10000)
+  }
+}
+
+// ====== 地图初始化（有 Key 用高德 JS API，否则 Leaflet） ======
+let useAmapJs = false
+async function initMap() {
   if (!mapContainer.value || map) return
   mapLoading.value = true
 
+  const amapKey = getAmapKey()
+  useAmapJs = !!amapKey
+
   try {
-    map = L.map(mapContainer.value, {
-      center: [30.5, 114.3], // 中国中部
-      zoom: 6,
-      zoomControl: true,
-      attributionControl: true
-    })
-
-    // 底图：高德地图瓦片（中国地区详细）+ 坐标偏移转换
-    // 高德瓦片公开可用，无需 Key，显示中文路名/POI/建筑轮廓
-    L.tileLayer('https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}', {
-      attribution: '&copy; 高德地图 &copy; 晶振报价系统',
-      maxZoom: 18
-    }).addTo(map)
-
-    // 标记聚合
-    markerCluster = L.markerClusterGroup({
-      chunkedLoading: true,
-      maxClusterRadius: 50,
-      spiderfyOnMaxZoom: true,
-      showCoverageOnHover: false,
-      zoomToBoundsOnClick: true
-    })
-    map.addLayer(markerCluster)
-
-    // 点击地图事件（选点模式）
-    map.on('click', (e) => {
-      mapClickOnPick(e)
-    })
-
-    // 搜索框不触发地图拖拽
-    setTimeout(() => {
-      const wrap = mapContainer.value?.querySelector('.map-search-wrap')
-      if (wrap) {
-        L.DomEvent.disableClickPropagation(wrap)
-        L.DomEvent.disableScrollPropagation(wrap)
-        // 输入框额外拦截 mousedown
-        const input = wrap.querySelector('.map-search-input')
-        if (input) L.DomEvent.disableClickPropagation(input)
-        const btn = wrap.querySelector('.map-search-btn')
-        if (btn) L.DomEvent.disableClickPropagation(btn)
-      }
-    }, 500)
-
-    mapLoading.value = false
-
-    // 延迟加载客户标记
-    setTimeout(loadCustomerMarkers, 300)
+    if (useAmapJs) {
+      // ===== 高德 JS API（最新地图，无坐标偏移） =====
+      await loadAmapScript(amapKey)
+      map = createAmapMap(mapContainer.value, [114.3, 30.5], 6)
+      // 选点点击
+      map.on('click', (e) => {
+        if (selectedMode.value !== 'pick') return
+        const wgs = gcj02ToWgs84(e.latlng.lat, e.latlng.lng)
+        setFormCoords(wgs.lat, wgs.lng)
+        placePickMarker(wgs.lat, wgs.lng)
+      })
+      mapLoading.value = false
+      setTimeout(loadCustomerMarkers, 300)
+    } else {
+      // ===== Leaflet（无 Key 时兜底） =====
+      map = L.map(mapContainer.value, {
+        center: [30.5, 114.3],
+        zoom: 6,
+        zoomControl: true,
+        attributionControl: true
+      })
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap',
+        maxZoom: 18
+      }).addTo(map)
+      markerCluster = L.markerClusterGroup({
+        chunkedLoading: true, maxClusterRadius: 50,
+        spiderfyOnMaxZoom: true, showCoverageOnHover: false, zoomToBoundsOnClick: true
+      })
+      map.addLayer(markerCluster)
+      map.on('click', (e) => { if (selectedMode.value === 'pick') mapClickOnPick(e) })
+      // 搜索框不触发地图拖拽
+      setTimeout(() => {
+        const wrap = mapContainer.value?.querySelector('.map-search-wrap')
+        if (wrap) {
+          L.DomEvent.disableClickPropagation(wrap)
+          L.DomEvent.disableScrollPropagation(wrap)
+          const input = wrap.querySelector('.map-search-input')
+          if (input) L.DomEvent.disableClickPropagation(input)
+        }
+      }, 500)
+      mapLoading.value = false
+      setTimeout(loadCustomerMarkers, 300)
+    }
   } catch (e) {
     console.error('地图初始化失败:', e)
     mapLoading.value = false
@@ -482,48 +522,67 @@ function initMap() {
   }
 }
 
-// ====== 加载客户标记 ======
+// ====== 加载客户标记（支持高德 JS API / Leaflet） ======
 function loadCustomerMarkers() {
-  if (!markerCluster) return
-  markerCluster.clearLayers()
   customerMarkers = {}
+  const hasCoords = customers.value.filter(c => c.latitude && c.longitude)
+  if (!hasCoords.length) return
 
-  for (const c of customers.value) {
-    if (!c.latitude || !c.longitude) continue
-    const icon = L.divIcon({
-      className: 'custom-marker',
-      html: `<div class="marker-pin ${c.address_count > 0 ? 'has-addr' : ''}">${c.name.slice(0, 3)}</div>`,
-      iconSize: [60, 28],
-      iconAnchor: [30, 28],
-      popupAnchor: [0, -30]
-    })
-
-    const marker = L.marker(ll(c.latitude, c.longitude), { icon })
-    marker.bindPopup(`
-      <div class="popup-content">
-        <div class="popup-name"><strong>${c.name}</strong></div>
-        <div class="popup-addr">${c.address || '未填写地址'}</div>
-        <div class="popup-phone">${c.phone || ''}</div>
-        <div class="popup-meta">🧑‍💼 ${c.purchaser_count || 0}采购 · 📮 ${c.address_count || 0}地址</div>
-        <button class="popup-btn" data-id="${c.id}">查看详情</button>
-      </div>
-    `)
-    marker.on('popupopen', () => {
-      setTimeout(() => {
-        const btn = document.querySelector('.popup-btn[data-id="' + c.id + '"]')
-        if (btn) btn.onclick = () => selectCustomer(c)
-      }, 100)
-    })
-
-    markerCluster.addLayer(marker)
-    customerMarkers[c.id] = marker
-  }
-
-  // 自动缩放到所有标记
-  if (Object.keys(customerMarkers).length) {
+  if (useAmapJs) {
+    // 高德 JS API：原生标记 + 聚合
+    const amapMarkers = []
+    for (const c of hasCoords) {
+      const gcj = wgs84ToGcj02(c.latitude, c.longitude)
+      const marker = addAmapLabelMarker(map, gcj.lat, gcj.lng, c.name, () => selectCustomer(c))
+      bindAmapPopup(marker, `
+        <div style="min-width:150px;font-family:sans-serif">
+          <div style="font-size:14px;font-weight:600;margin-bottom:4px">${c.name}</div>
+          <div style="font-size:11px;color:#888">${c.address || ''}</div>
+          <div style="font-size:11px;color:#888">${c.phone || ''}</div>
+          <div style="font-size:10px;color:#aaa;margin-top:4px">🧑‍💼 ${c.purchaser_count || 0}采购 · 📮 ${c.address_count || 0}地址</div>
+          <button onclick="window._selectMapCustomer(${c.id})" style="background:#00695c;color:#fff;border:none;border-radius:4px;padding:4px 12px;font-size:11px;cursor:pointer;margin-top:4px">查看详情</button>
+        </div>
+      `)
+      amapMarkers.push(marker)
+      customerMarkers[c.id] = marker
+    }
+    window._selectMapCustomer = (id) => {
+      const c = customers.value.find(x => x.id === id)
+      if (c) selectCustomer(c)
+    }
+    addAmapCluster(map, amapMarkers)
+    // 缩放到所有标记
+    map.setFitView(amapMarkers, false, [50, 50, 50, 50])
+  } else {
+    // Leaflet
+    if (!markerCluster) return
+    markerCluster.clearLayers()
+    for (const c of hasCoords) {
+      const icon = L.divIcon({
+        className: 'custom-marker',
+        html: `<div class="marker-pin ${c.address_count > 0 ? 'has-addr' : ''}">${c.name.slice(0, 3)}</div>`,
+        iconSize: [60, 28], iconAnchor: [30, 28], popupAnchor: [0, -30]
+      })
+      const marker = L.marker(ll(c.latitude, c.longitude), { icon })
+      marker.bindPopup(`
+        <div class="popup-content">
+          <div class="popup-name"><strong>${c.name}</strong></div>
+          <div class="popup-addr">${c.address || ''}</div>
+          <div class="popup-phone">${c.phone || ''}</div>
+          <div class="popup-meta">🧑‍💼 ${c.purchaser_count || 0}采购 · 📮 ${c.address_count || 0}地址</div>
+          <button class="popup-btn" data-id="${c.id}">查看详情</button>
+        </div>
+      `)
+      marker.on('popupopen', () => {
+        setTimeout(() => {
+          const btn = document.querySelector('.popup-btn[data-id="' + c.id + '"]')
+          if (btn) btn.onclick = () => selectCustomer(c)
+        }, 100)
+      })
+      markerCluster.addLayer(marker)
+      customerMarkers[c.id] = marker
+    }
     map.fitBounds(markerCluster.getBounds(), { padding: [30, 30], maxZoom: 14 })
-  } else if (customers.value.length) {
-    // 有客户但没有坐标的，保持默认视图
   }
 }
 
@@ -561,7 +620,7 @@ async function selectCustomer(c) {
   selectedCustomer.value = c
   // 在地图上定位：有坐标直接跳转，无坐标但有地址则自动搜索
   if (c.latitude && c.longitude && map) {
-    map.setView(ll(c.latitude, c.longitude), 15)
+    mapSetView(c.latitude, c.longitude, 15)
   } else if (c.address && map) {
     try {
       const r = await myGeocode(c.address)
@@ -846,14 +905,13 @@ function doMapSearch() {
 
 function placeSearchMarker(result) {
   if (!map || !result.lat || !result.lng) return
-  map.setView(ll(result.lat, result.lng), 16)
-  if (mapSearchMarker) map.removeLayer(mapSearchMarker)
-  mapSearchMarker = L.marker(ll(result.lat, result.lng), {
-    icon: L.divIcon({ className: 'search-marker', html: '📍', iconSize: [24, 24], iconAnchor: [12, 24] })
-  }).addTo(map)
-  const name = result.name || ''
-  const addr = result.address || ''
-  mapSearchMarker.bindPopup(`<div style="font-size:13px;font-weight:600">${name}</div><div style="font-size:11px;color:#888">${addr}</div>`).openPopup()
+  mapSetView(result.lat, result.lng, 16)
+  mapRemoveMarker(mapSearchMarker)
+  mapSearchMarker = mapAddDivMarker(result.lat, result.lng, '📍')
+  mapOpenPopup(mapSearchMarker, `
+    <div style="font-size:13px;font-weight:600">${result.name || ''}</div>
+    <div style="font-size:11px;color:#888">${result.address || ''}</div>
+  `)
 }
 
 function pickSearchResult(r) {
@@ -934,16 +992,25 @@ function centerMapForPick() {
 }
 function placePickMarker(lat, lng) {
   if (!map) return
-  if (window._pickMarker) map.removeLayer(window._pickMarker)
-  window._pickMarker = L.marker(ll(lat, lng), {
-    draggable: true,
-    icon: L.divIcon({ className: 'pick-marker', html: '📍', iconSize: [24, 24], iconAnchor: [12, 24] })
-  }).addTo(map)
-  window._pickMarker.on('dragend', () => {
-    const pos = window._pickMarker.getLatLng() // GCJ02
-    const wgs = gcj02ToWgs84(pos.lat, pos.lng)
-    setFormCoords(wgs.lat, wgs.lng)
-  })
+  mapRemoveMarker(window._pickMarker)
+  if (useAmapJs) {
+    window._pickMarker = addAmapMarker(map, lat, lng, { draggable: true })
+    window._pickMarker.on('dragend', (e) => {
+      const p = e.target.getPosition()
+      const wgs = gcj02ToWgs84(p.lat, p.lng)
+      setFormCoords(wgs.lat, wgs.lng)
+    })
+  } else {
+    window._pickMarker = L.marker(ll(lat, lng), {
+      draggable: true,
+      icon: L.divIcon({ className: 'pick-marker', html: '📍', iconSize: [24, 24], iconAnchor: [12, 24] })
+    }).addTo(map)
+    window._pickMarker.on('dragend', () => {
+      const pos = window._pickMarker.getLatLng()
+      const wgs = gcj02ToWgs84(pos.lat, pos.lng)
+      setFormCoords(wgs.lat, wgs.lng)
+    })
+  }
 }
 function mapClickOnPick(e) {
   if (selectedMode.value !== 'pick') return
@@ -1035,11 +1102,9 @@ function showMapSearch() {
 // ====== 地图操作 ======
 function locateOnMap(c) {
   if (c.latitude && c.longitude && map) {
-    map.setView(ll(c.latitude, c.longitude), 16)
-    // 闪烁标记
+    mapSetView(c.latitude, c.longitude, 16)
     if (customerMarkers[c.id]) {
-      const m = customerMarkers[c.id]
-      m.openPopup()
+      try { customerMarkers[c.id].openPopup() } catch {}
     }
   } else {
     showToast('该客户尚未定位')
@@ -1051,36 +1116,34 @@ function navigateToCustomer(c) {
     showToast('该客户尚未定位，请先设置坐标')
     return
   }
-  // 如果已有导航路线，清除
-  if (currentRoute && map) {
-    map.removeControl(currentRoute)
-    currentRoute = null
+  // 清除旧导航
+  if (useAmapJs) {
+    if (currentRoute) { map.remove(currentRoute); currentRoute = null }
+  } else {
+    if (currentRoute && map) { map.removeControl(currentRoute); currentRoute = null }
   }
-  // 使用浏览器定位作为起点
-  map.locate({ setView: false, enableHighAccuracy: true })
-  map.once('locationfound', (e) => {
-    const start = e.latlng
-    try {
-      currentRoute = L.Routing.control({
-        waypoints: [
-          (() => { const c = wgs84ToGcj02(start.lat, start.lng); return L.latLng(c.lat, c.lng) })(),
-          (() => { const c = wgs84ToGcj02(c.latitude, c.longitude); return L.latLng(c.lat, c.lng) })()
-        ],
-        language: 'zh-CN',
-        routeWhileDragging: false,
-        showAlternatives: false,
-        lineOptions: { styles: [{ color: '#00695c', weight: 4, opacity: 0.8 }] }
-      }).addTo(map)
-    } catch (e) {
-      // 降级：打开外部地图
-      window.open(`https://www.google.com/maps/dir/?api=1&destination=${c.latitude},${c.longitude}`, '_blank')
-    }
-  })
-  map.once('locationerror', () => {
-    // 定位失败：直接用外部地图
-    window.open(`https://www.google.com/maps/dir/?api=1&destination=${c.latitude},${c.longitude}`, '_blank')
-  })
-  setTimeout(() => map.stopLocate(), 10000)
+  // 定位起点并导航
+  mapLocate(
+    (start) => {
+      if (useAmapJs) {
+        addAmapRoute(map, start.lat, start.lng, c.latitude, c.longitude).then(r => {
+          if (r) showToast(`距离 ${r.distance} · 预计 ${r.time}`)
+        })
+      } else {
+        try {
+          currentRoute = L.Routing.control({
+            waypoints: [
+              (() => { const c = wgs84ToGcj02(start.lat, start.lng); return L.latLng(c.lat, c.lng) })(),
+              (() => { const c = wgs84ToGcj02(c.latitude, c.longitude); return L.latLng(c.lat, c.lng) })()
+            ],
+            language: 'zh-CN', routeWhileDragging: false, showAlternatives: false,
+            lineOptions: { styles: [{ color: '#00695c', weight: 4, opacity: 0.8 }] }
+          }).addTo(map)
+        } catch { window.open(`https://www.google.com/maps/dir/?api=1&destination=${c.latitude},${c.longitude}`, '_blank') }
+      }
+    },
+    () => { window.open(`https://www.google.com/maps/dir/?api=1&destination=${c.latitude},${c.longitude}`, '_blank') }
+  )
 }
 
 function openAddToTrip(c) {
@@ -1151,7 +1214,8 @@ onMounted(async () => {
 onUnmounted(() => {
   document.removeEventListener('mousedown', onMapClickCloseSearch)
   if (map) {
-    map.remove()
+    if (useAmapJs) destroyAmapMap(map)
+    else map.remove()
     map = null
   }
   markerCluster = null
