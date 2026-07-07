@@ -1087,7 +1087,7 @@ function editCustomer(c) {
   showCustomerForm.value = true;
   // 有地址但无坐标时自动静默定位
   if (c.address && c.address.length >= 3 && !c.latitude && !c.longitude) {
-    nextTick(() => autoGeocode(c.address, "customer"));
+    nextTick(() => autoGeocode(c.address, "customer", c.name));
   }
 }
 
@@ -1768,7 +1768,7 @@ function cancelCoordPick() {
 
 // ====== 地址自动搜索定位（表单输入时） ======
 let geoAutoTimer = null;
-async function autoGeocode(val, target) {
+async function autoGeocode(val, target, nameHint) {
   geocodeTarget = target;
   // 地址清空时才清坐标；输入过程中不打断已有坐标
   if (!val) {
@@ -1788,7 +1788,9 @@ async function autoGeocode(val, target) {
   clearTimeout(geoAutoTimer);
   geoAutoTimer = setTimeout(async () => {
     try {
-      const r = await myGeocode(val);
+      // 带公司名一起查，比纯地址更准
+      const query = nameHint ? nameHint + " " + val : val;
+      const r = await myGeocode(query);
       const results = r.data || [];
       if (results.length) {
         const best = results[0];
@@ -1815,7 +1817,7 @@ async function autoGeocode(val, target) {
 }
 
 function onAddressInput(val) {
-  autoGeocode(val, "customer");
+  autoGeocode(val, "customer", customerForm.name);
 }
 function onAddrInput(val) {
   autoGeocode(val, "address");
