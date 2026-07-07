@@ -194,7 +194,7 @@ router.put("/purchasers/:id", (req, res) => {
       b.name ?? existing.name,
       b.phone ?? existing.phone,
       b.title ?? existing.title,
-      b.address ?? existing.address || "",
+      b.address ?? existing.address ?? "",
       b.notes ?? existing.notes,
       b.default_site_id !== undefined ? b.default_site_id : (existing.default_site_id || 0),
       Number(req.params.id),
