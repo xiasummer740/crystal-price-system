@@ -1503,6 +1503,7 @@ async function doPoiSearchFromInput() {
       searchPage.value = 1;
       showSearchResults.value = true;
       if (list.length) placeSearchMarker(list[0]);
+      showPickResultMarkers(list);
     } else {
       // 服务器搜索无结果 → 降级浏览器端 PlaceSearch（不需要 Web服务API 权限）
       let browserResults = [];
@@ -1522,6 +1523,7 @@ async function doPoiSearchFromInput() {
         searchTotal.value = browserResults.length;
         showSearchResults.value = true;
         placeSearchMarker(browserResults[0]);
+        showPickResultMarkers(browserResults);
       } else {
         // 还不行 → 地理编码兜底
         const gr = await myGeocode(kw);
@@ -1535,6 +1537,7 @@ async function doPoiSearchFromInput() {
           searchTotal.value = geoList.length;
           showSearchResults.value = true;
           placeSearchMarker(geoList[0]);
+          showPickResultMarkers(geoList);
         }
       }
     }
@@ -1544,6 +1547,32 @@ async function doPoiSearchFromInput() {
     searchDone.value = true;
   } finally {
     searchLoading.value = false;
+  }
+}
+
+// 选点模式下把搜索结果标到地图上（编号圆点，点击即选）
+function showPickResultMarkers(results) {
+  clearPickResultMarkers();
+  if (!map || !results.length || selectedMode.value !== 'pick') return;
+  window._pickResultMarkers = [];
+  const maxShow = Math.min(results.length, 5);
+  for (let i = 0; i < maxShow; i++) {
+    const r = results[i];
+    if (!r.lat || !r.lng) continue;
+    const el = document.createElement('div');
+    el.className = 'pick-result-dot';
+    el.textContent = (i + 1).toString();
+    const pos = new AMap.LngLat(r.lng, r.lat);
+    const marker = new AMap.Marker({ position: pos, content: el, offset: new AMap.Pixel(-11, -11), zIndex: 200 });
+    marker.on('click', () => pickSearchResult(r));
+    map.add(marker);
+    window._pickResultMarkers.push(marker);
+  }
+}
+function clearPickResultMarkers() {
+  if (window._pickResultMarkers) {
+    window._pickResultMarkers.forEach(m => map?.remove(m));
+    window._pickResultMarkers = [];
   }
 }
 
@@ -1752,12 +1781,11 @@ function setFormCoords(lat, lng) {
 // 确认选点 → 回填坐标 + 重新打开表单
 function confirmCoordPick() {
   selectedMode.value = "";
-  // 移除临时标记
+  clearPickResultMarkers();
   if (window._pickMarker && map) {
     map.remove(window._pickMarker);
     window._pickMarker = null;
   }
-  // 重新打开对应表单
   if (pickOriginForm === "customer") {
     showCustomerForm.value = true;
   } else if (pickOriginForm === "site") {
@@ -1769,6 +1797,7 @@ function confirmCoordPick() {
 }
 function cancelCoordPick() {
   selectedMode.value = "";
+  clearPickResultMarkers();
   if (window._pickMarker && map) {
     map.remove(window._pickMarker);
     window._pickMarker = null;
@@ -2607,6 +2636,29 @@ onUnmounted(() => {
 .marker-pin.has-addr {
   background: #004d40;
 }
+/* 搜索结果编号圆点（选点模式下显示在地图上，点击即选） */
+.pick-result-dot {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #00695c;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid #fff;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+  cursor: pointer;
+  transition: transform 0.12s;
+  user-select: none;
+}
+.pick-result-dot:hover {
+  transform: scale(1.2);
+  background: #004d40;
+}
+
 /* 大号选点可拖拽标记 */
 .pick-marker-dom {
   background: none !important;
