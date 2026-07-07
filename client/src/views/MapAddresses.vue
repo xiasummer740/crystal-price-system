@@ -405,10 +405,13 @@
           </div>
           <div v-if="customerContacts.length === 0" class="inline-empty">暂无联系人</div>
           <div v-for="(p, pi) in customerContacts" :key="pi" class="inline-contact-row">
-            <div class="ic-fields">
-              <input v-model="p.name" class="ic-input ic-input-sm" placeholder="姓名" />
-              <input v-model="p.phone" class="ic-input ic-input-sm" placeholder="电话" />
-              <input v-model="p.address" class="ic-input" placeholder="收件地址" />
+            <div class="ic-main">
+              <div class="ic-fields">
+                <input v-model="p.name" class="ic-input ic-input-sm" placeholder="姓名" />
+                <input v-model="p.phone" class="ic-input ic-input-sm" placeholder="电话" />
+                <input v-model="p.address" class="ic-input" placeholder="收件地址" />
+              </div>
+              <input v-model="p.notes" class="ic-notes" placeholder="备注（职位、说明等）" />
             </div>
             <div class="ic-actions">
               <button class="ic-copy" @click="copyInlineContact(p)" title="复制收件信息">📋</button>
@@ -728,7 +731,7 @@ const customerForm = reactive({
   longitude: null,
   notes: "",
 });
-const customerContacts = ref([]); // { id, name, phone, title, address, _new }
+const customerContacts = ref([]); // { id, name, phone, title, address, notes, _new }
 const purchaserForm = reactive({ name: "", phone: "", title: "", notes: "", default_site_id: 0 });
 const addressForm = reactive({
   label: "",
@@ -1076,6 +1079,7 @@ async function openCustomerDetail(c) {
       phone: p.phone || "",
       title: p.title || "",
       address: p.address || "",
+      notes: p.notes || "",
       _new: false,
     }));
   } catch {}
@@ -1087,7 +1091,7 @@ function onDetailClosed() {
 
 // ====== 客户增删改 ======
 function addContact() {
-  customerContacts.value.push({ id: 0, name: "", phone: "", title: "", address: "", _new: true });
+  customerContacts.value.push({ id: 0, name: "", phone: "", title: "", address: "", notes: "", _new: true });
 }
 function copyInlineContact(p) {
   const text = [p.name || "", p.phone || "", p.address || ""].filter(Boolean).join("  ");
@@ -1146,7 +1150,7 @@ async function saveCustomer() {
         const data = {
           customer_id: cid, name: p.name,
           phone: p.phone || "", title: p.title || "",
-          address: p.address || "", notes: "",
+          address: p.address || "", notes: p.notes || "",
         };
         if (p._new) {
           await createPurchaser(data);
@@ -3414,8 +3418,26 @@ onUnmounted(() => {
   background: #e0f7fa;
   color: #00695c;
 }
-.ic-fields {
+.ic-main {
   flex: 1;
+  min-width: 0;
+}
+.ic-notes {
+  display: block;
+  width: 100%;
+  margin-top: 3px;
+  padding: 3px 8px;
+  border: none;
+  font-size: 11px;
+  color: #999;
+  font-family: inherit;
+  outline: none;
+  background: transparent;
+}
+.ic-notes:focus {
+  color: #333;
+}
+.ic-fields {
   display: flex;
   gap: 6px;
   flex-wrap: wrap;
