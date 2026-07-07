@@ -92,25 +92,17 @@
               class="customer-card"
               :class="{ active: selectedCustomer?.id === c.id }"
             >
-              <div class="cc-main" @click="locateCustomer(c)">
-                <div class="cc-name">{{ c.name }}</div>
-                <div class="cc-addr" v-if="c.address">
-                  <span class="cc-icon">📍</span>{{ truncate(c.address, 30) }}
+              <div class="cc-left" @click="locateCustomer(c)">
+                <div class="cc-row1">
+                  <div class="cc-name">{{ c.name }}</div>
+                  <span v-if="c.latitude && c.longitude" class="cc-badge">已定位</span>
+                  <span v-else class="cc-badge muted">未定位</span>
                 </div>
-                <div class="cc-phone" v-if="c.phone">
-                  <span class="cc-icon">📞</span>{{ c.phone }}
-                </div>
-                <div class="cc-meta">
-                  <span v-if="c.purchaser_count > 0"
-                    >🧑‍💼 {{ c.purchaser_count }}联系人</span
-                  >
-                  <span v-if="c.site_count > 0"
-                    >📍 {{ c.site_count }}收货点</span
-                  >
-                  <span v-if="c.latitude && c.longitude" class="cc-pin"
-                    >🟢 已定位</span
-                  >
-                  <span v-else class="cc-pin muted">⚪ 未定位</span>
+                <div class="cc-addr" v-if="c.address">📍 {{ truncate(c.address, 35) }}</div>
+                <div class="cc-row2">
+                  <span v-if="c.purchaser_count > 0">🧑‍💼 {{ c.purchaser_count }}联系人</span>
+                  <span v-if="c.site_count > 0">📍 {{ c.site_count }}收货点</span>
+                  <span v-if="c.phone" class="cc-tel">📞 {{ c.phone }}</span>
                 </div>
               </div>
               <button class="cc-edit-btn" @click.stop="openCustomerDetail(c)" title="查看详情/编辑">✏️</button>
@@ -966,7 +958,7 @@ function loadCustomerMarkers() {
   const amapMarkers = [];
   for (const c of hasCoords) {
     const gcj = wgs84ToGcj02(c.latitude, c.longitude);
-    const marker = addAmapLabelMarker(map, gcj.lat, gcj.lng, "", () =>
+    const marker = addAmapLabelMarker(map, gcj.lat, gcj.lng, c.name, () =>
       locateCustomer(c),
     );
     customerInfoWindows[c.id] = bindAmapPopup(
@@ -2153,82 +2145,101 @@ onUnmounted(() => {
   margin-bottom: 2px;
 }
 .group-header {
-  padding: 6px 16px 4px;
-  font-size: 11px;
-  font-weight: 600;
-  color: #999;
-  background: #fafafa;
+  padding: 8px 16px 5px;
+  font-size: 10px;
+  font-weight: 700;
+  color: #aaa;
+  background: #f7f8fa;
+  letter-spacing: 0.5px;
   position: sticky;
   top: 0;
   z-index: 1;
+  border-bottom: 1px solid #eee;
 }
 .customer-card {
   display: flex;
-  align-items: stretch;
-  border-bottom: 1px solid #f5f5f5;
-  transition: background 0.15s;
+  border-bottom: 1px solid #f0f0f0;
+  transition: background 0.12s;
 }
 .customer-card:hover {
-  background: #f0f7fa;
+  background: #f5fafb;
 }
 .customer-card.active {
   background: #e0f7fa;
   border-left: 3px solid #00695c;
 }
-.cc-main {
+.cc-left {
   flex: 1;
-  padding: 10px 12px 10px 16px;
+  padding: 10px 8px 10px 16px;
   cursor: pointer;
   min-width: 0;
 }
+.cc-row1 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 3px;
+}
+.cc-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #222;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cc-badge {
+  flex-shrink: 0;
+  font-size: 9px;
+  padding: 1px 8px;
+  border-radius: 8px;
+  background: #e8f5e9;
+  color: #2e7d32;
+  font-weight: 500;
+  line-height: 1.6;
+}
+.cc-badge.muted {
+  background: #f0f0f0;
+  color: #bbb;
+}
+.cc-addr {
+  font-size: 11px;
+  color: #888;
+  margin-bottom: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cc-row2 {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 14px;
+  font-size: 10px;
+  color: #999;
+  min-height: 16px;
+}
+.cc-tel {
+  color: #bbb;
+}
 .cc-edit-btn {
   flex-shrink: 0;
-  width: 36px;
+  width: 32px;
   background: transparent;
   border: none;
   border-left: 1px solid #f0f0f0;
   cursor: pointer;
-  font-size: 14px;
-  color: #999;
+  font-size: 13px;
+  color: #ddd;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
-  transition: all 0.15s;
+  padding-top: 12px;
+  transition: color 0.15s, background 0.15s;
 }
 .cc-edit-btn:hover {
   background: #e0f7fa;
   color: #00695c;
-}
-.cc-name {
-  font-size: 14px;
-  font-weight: 600;
-  color: #333;
-  margin-bottom: 2px;
-}
-.cc-addr,
-.cc-phone {
-  font-size: 11px;
-  color: #888;
-  margin-bottom: 1px;
-  display: flex;
-  align-items: center;
-  gap: 3px;
-}
-.cc-icon {
-  flex-shrink: 0;
-}
-.cc-meta {
-  display: flex;
-  gap: 8px;
-  font-size: 10px;
-  color: #aaa;
-  margin-top: 4px;
-}
-.cc-pin {
-  color: #52c41a;
-}
-.cc-pin.muted {
-  color: #ccc;
 }
 .panel-empty {
   flex: 1;
@@ -2523,19 +2534,22 @@ onUnmounted(() => {
 .marker-pin {
   background: #00695c;
   color: #fff;
-  padding: 2px 8px;
-  border-radius: 12px;
-  font-size: 10px;
-  font-weight: 600;
-  text-align: center;
-  white-space: nowrap;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  font-size: 11px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
   border: 2px solid #fff;
   cursor: pointer;
   transition: transform 0.15s;
+  line-height: 1;
 }
 .marker-pin:hover {
-  transform: scale(1.1);
+  transform: scale(1.15);
 }
 .marker-pin.has-addr {
   background: #004d40;
