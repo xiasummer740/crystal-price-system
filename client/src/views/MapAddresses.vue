@@ -412,22 +412,12 @@
           <div v-if="customerContacts.length === 0" class="inline-empty">暂无联系人</div>
           <div v-for="(p, pi) in customerContacts" :key="pi" class="inline-contact-row">
             <div class="ic-fields">
-              <input v-model="p.name" class="ic-input" placeholder="姓名" />
-              <input v-model="p.phone" class="ic-input" placeholder="电话" />
-              <input v-model="p.title" class="ic-input ic-input-sm" placeholder="职位" />
+              <input v-model="p.name" class="ic-input ic-input-sm" placeholder="姓名" />
+              <input v-model="p.phone" class="ic-input ic-input-sm" placeholder="电话" />
+              <input v-model="p.address" class="ic-input" placeholder="收件地址" />
             </div>
             <button class="ic-del" @click="customerContacts.splice(pi, 1)">×</button>
           </div>
-        </div>
-
-        <!-- 收件信息 -->
-        <div class="inline-section">
-          <div class="inline-section-hd">
-            <span class="inline-section-title">📦 收件信息</span>
-          </div>
-          <van-field v-model="customerForm.delivery_name" label="收件人" placeholder="收件人姓名" />
-          <van-field v-model="customerForm.delivery_phone" label="电话" placeholder="收件人电话" type="tel" />
-          <van-field v-model="customerForm.delivery_addr" label="地址" placeholder="收件地址" />
         </div>
 
         <div class="form-btns">
@@ -740,12 +730,8 @@ const customerForm = reactive({
   latitude: null,
   longitude: null,
   notes: "",
-  // 收件信息
-  delivery_name: "",
-  delivery_phone: "",
-  delivery_addr: "",
 });
-const customerContacts = ref([]); // { id, name, phone, title, _new }
+const customerContacts = ref([]); // { id, name, phone, title, address, _new }
 const purchaserForm = reactive({ name: "", phone: "", title: "", notes: "", default_site_id: 0 });
 const addressForm = reactive({
   label: "",
@@ -1092,16 +1078,9 @@ async function openCustomerDetail(c) {
       name: p.name,
       phone: p.phone || "",
       title: p.title || "",
+      address: p.address || "",
       _new: false,
     }));
-    // 加载第一个收货点地址作为收件地址
-    const sites = r.data?.sites || [];
-    if (sites.length) {
-      const s = sites[0];
-      customerForm.delivery_addr = s.address || "";
-      customerForm.delivery_name = s.contact_name || "";
-      customerForm.delivery_phone = s.contact_phone || "";
-    }
   } catch {}
 }
 
@@ -1111,7 +1090,7 @@ function onDetailClosed() {
 
 // ====== 客户增删改 ======
 function addContact() {
-  customerContacts.value.push({ id: 0, name: "", phone: "", title: "", _new: true });
+  customerContacts.value.push({ id: 0, name: "", phone: "", title: "", address: "", _new: true });
 }
 
 function openAddCustomer() {
@@ -1122,9 +1101,6 @@ function openAddCustomer() {
   customerForm.latitude = null;
   customerForm.longitude = null;
   customerForm.notes = "";
-  customerForm.delivery_name = "";
-  customerForm.delivery_phone = "";
-  customerForm.delivery_addr = "";
   customerContacts.value = [];
   showCustomerForm.value = true;
 }
@@ -1137,9 +1113,6 @@ function editCustomer(c) {
   customerForm.latitude = c.latitude;
   customerForm.longitude = c.longitude;
   customerForm.notes = c.notes || "";
-  customerForm.delivery_name = "";
-  customerForm.delivery_phone = "";
-  customerForm.delivery_addr = "";
   customerContacts.value = [];
   showCustomerForm.value = true;
   // 有地址但无坐标时自动静默定位
@@ -1164,34 +1137,18 @@ async function saveCustomer() {
     }
     // 保存联系人
     if (cid) {
-      // 新增或更新联系人
+      // 新增或更新联系人（姓名、电话、职位、收件地址）
       for (const p of customerContacts.value) {
-        const data = { customer_id: cid, name: p.name, phone: p.phone || "", title: p.title || "", notes: "" };
+        const data = {
+          customer_id: cid, name: p.name,
+          phone: p.phone || "", title: p.title || "",
+          address: p.address || "", notes: "",
+        };
         if (p._new) {
           await createPurchaser(data);
         } else {
           await updatePurchaser(p.id, data);
         }
-      }
-      // 保存收件信息（作为第一个站点）
-      if (customerForm.delivery_addr) {
-        const addrData = {
-          customer_id: cid,
-          name: "收件地址",
-          site_type: "收件",
-          address: customerForm.delivery_addr,
-          contact_name: customerForm.delivery_name,
-          contact_phone: customerForm.delivery_phone,
-          is_default: true,
-          notes: "",
-        };
-        try {
-          const sr = await fetchSites(cid);
-          const sites = sr.data || [];
-          const es = sites.find(s => s.name === "收件地址" || s.site_type === "收件");
-          if (es) await updateSite(es.id, addrData);
-          else await createSite(addrData);
-        } catch { await createSite(addrData); }
       }
     }
     showCustomerForm.value = false;
@@ -1507,14 +1464,7 @@ function getLinkedContacts(s) {
 
 // 复制收件信息到剪贴板：收件人 电话 地址
 function copyContactInfo(p) {
-  const site = getContactSite(p);
-  // 收件人 = 联系人姓名
-  const finalName = p.name || "";
-  // 电话 = 联系人电话
-  const finalPhone = p.phone || "";
-  // 地址 = 仅站点地址，不要名称/类型
-  const addr = site?.address || "";
-  const text = [finalName, finalPhone, addr].filter(Boolean).join("  ");
+  const text = [p.name || "", p.phone || "", p.address || ""].filter(Boolean).join("  ");
   if (!text) return showToast("没有可复制的收件信息");
   navigator.clipboard.writeText(text).then(() => {
     showToast("✅ 已复制：" + text.slice(0, 35) + (text.length > 35 ? "…" : ""));

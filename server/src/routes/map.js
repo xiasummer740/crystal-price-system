@@ -176,8 +176,8 @@ router.post("/purchasers", (req, res) => {
   if (!b.customer_id || !b.name)
     return res.status(400).json({ code: 1, msg: "参数不完整" });
   const r = execute(
-    "INSERT INTO map_purchasers (customer_id, name, phone, title, notes, default_site_id) VALUES (?, ?, ?, ?, ?, ?)",
-    [b.customer_id, b.name, b.phone || "", b.title || "", b.notes || "", b.default_site_id || 0],
+    "INSERT INTO map_purchasers (customer_id, name, phone, title, address, notes, default_site_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
+    [b.customer_id, b.name, b.phone || "", b.title || "", b.address || "", b.notes || "", b.default_site_id || 0],
   );
   res.json({ code: 0, data: { id: r.lastInsertRowid } });
 });
@@ -189,11 +189,12 @@ router.put("/purchasers/:id", (req, res) => {
   if (!existing) return res.status(404).json({ code: 1, msg: "采购不存在" });
   const b = req.body;
   execute(
-    "UPDATE map_purchasers SET name=?, phone=?, title=?, notes=?, default_site_id=? WHERE id=?",
+    "UPDATE map_purchasers SET name=?, phone=?, title=?, address=?, notes=?, default_site_id=? WHERE id=?",
     [
       b.name ?? existing.name,
       b.phone ?? existing.phone,
       b.title ?? existing.title,
+      b.address ?? existing.address || "",
       b.notes ?? existing.notes,
       b.default_site_id !== undefined ? b.default_site_id : (existing.default_site_id || 0),
       Number(req.params.id),

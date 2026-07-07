@@ -209,10 +209,12 @@ export async function initDb() {
       name        TEXT NOT NULL,
       phone       TEXT DEFAULT '',
       title       TEXT DEFAULT '',
+      address     TEXT DEFAULT '',
       notes       TEXT DEFAULT '',
       created_at  DATETIME DEFAULT (datetime('now','localtime'))
     )
   `)
+  try { db.run('ALTER TABLE map_purchasers ADD COLUMN address TEXT DEFAULT ""') } catch {}  // 兼容旧表
   try { db.run('CREATE INDEX IF NOT EXISTS idx_map_purchasers_cid ON map_purchasers(customer_id)') } catch {}
 
   // 收件地址
