@@ -259,6 +259,7 @@
           <div class="dt-h-actions">
             <button class="dt-ha" @click="editCustomer(detailData.customer)">✏️ 编辑</button>
             <button class="dt-ha" @click="locateOnMap(detailData.customer)">📍 定位</button>
+            <button class="dt-ha" v-if="detailData.customer.latitude" @click="clearCustomerPosition(detailData.customer)">🚫 清除定位</button>
             <button class="dt-ha" @click="openAddToTrip(detailData.customer)">📌 行程</button>
             <button class="dt-ha" @click="navigateToCustomer(detailData.customer)">🚗 导航</button>
             <button class="dt-ha danger" @click="handleDeleteCustomer(detailData.customer)">🗑️ 删除</button>
@@ -338,8 +339,9 @@
               </div>
               <div v-if="s.latitude && s.longitude" class="sc-row sc-coord">
                 <span class="sc-row-ico">🎯</span>
-                <span>{{ s.latitude.toFixed(6) }}, {{ s.longitude.toFixed(6) }}</span>
-                <button class="sc-locate" @click="locateSite(s)">定位</button>
+                <span class="sc-coord-text">已定位</span>
+                <button class="sc-locate" @click="locateSite(s)">查看</button>
+                <button class="sc-locate danger" @click="clearSitePosition(s)">清除</button>
               </div>
               <div v-if="getLinkedContacts(s).length" class="sc-row">
                 <span class="sc-row-ico">👤</span>
@@ -1344,6 +1346,18 @@ function locateSite(s) {
   setTimeout(() => { showDetail.value = true }, 100);
 }
 
+async function clearSitePosition(s) {
+  try {
+    await updateSite(s.id, { latitude: null, longitude: null });
+    showToast("收货点定位已清除");
+    const r = await getMapCustomer(detailData.value.customer.id);
+    detailData.value = r.data;
+    await loadData();
+  } catch (e) {
+    showToast("清除失败");
+  }
+}
+
 let pickSiteForm = false;
 function startSiteCoordPick() {
   pickSiteForm = true;
@@ -1822,6 +1836,20 @@ function locateOnMap(c) {
     }
   } else {
     showToast("该客户尚未定位");
+  }
+}
+
+async function clearCustomerPosition(c) {
+  try {
+    await updateMapCustomer(c.id, { latitude: null, longitude: null });
+    // 移除地图标记
+    const m = customerMarkers[c.id];
+    if (m) { map.remove(m); delete customerMarkers[c.id]; }
+    showToast("定位已清除");
+    showDetail.value = false;
+    await loadData();
+  } catch (e) {
+    showToast("清除失败");
   }
 }
 
@@ -2975,6 +3003,10 @@ onUnmounted(() => {
   font-family: monospace;
   font-size: 11px;
 }
+.sc-coord-text {
+  color: #888;
+  font-size: 11px;
+}
 .sc-locate {
   margin-left: 6px;
   padding: 1px 8px;
@@ -2988,6 +3020,13 @@ onUnmounted(() => {
 }
 .sc-locate:hover {
   background: #e0f7fa;
+}
+.sc-locate.danger {
+  border-color: #ffcdd2;
+  color: #e53935;
+}
+.sc-locate.danger:hover {
+  background: #ffebee;
 }
 .sc-notes {
   color: #aaa;
