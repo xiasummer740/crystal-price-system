@@ -830,7 +830,7 @@ function goBack() {
   if (isStandalone.value) {
     window.close();
   } else {
-    router.push("/");
+    router.back();
   }
 }
 

@@ -3,7 +3,7 @@
     <!-- 头部 -->
     <header class="trip-header">
       <div class="header-left">
-        <router-link to="/map-addresses" class="back-link">‹ 返回地图</router-link>
+        <a href="#" class="back-link" @click.prevent="goBack">‹ 返回</a>
         <h3>📅 行程规划</h3>
       </div>
       <div class="header-right">
@@ -196,6 +196,10 @@ L.Icon.Default.mergeOptions({
 
 const route = useRoute()
 const router = useRouter()
+
+function goBack() {
+  router.back()
+}
 
 // ====== 状态 ======
 const filterDate = ref(new Date().toISOString().slice(0, 10))
