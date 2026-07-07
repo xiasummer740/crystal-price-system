@@ -2616,22 +2616,20 @@ onUnmounted(() => {
 .marker-pin {
   background: #00695c;
   color: #fff;
-  width: 26px;
-  height: 26px;
-  border-radius: 50%;
-  font-size: 11px;
-  font-weight: 700;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  padding: 4px 10px;
+  border-radius: 14px;
+  font-size: 10px;
+  font-weight: 600;
+  text-align: center;
+  white-space: nowrap;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
   border: 2px solid #fff;
   cursor: pointer;
   transition: transform 0.15s;
   line-height: 1;
 }
 .marker-pin:hover {
-  transform: scale(1.15);
+  transform: scale(1.1);
 }
 .marker-pin.has-addr {
   background: #004d40;

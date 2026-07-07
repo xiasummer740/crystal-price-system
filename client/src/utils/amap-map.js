@@ -59,24 +59,17 @@ export function addAmapMarker(map, lat, lng, opts = {}) {
   return marker;
 }
 
-// 添加已定位客户标记
+// 添加已定位客户标记（显示⭐）
 export function addAmapLabelMarker(map, lat, lng, label = "", onClick) {
   // 用 DOM 元素而非字符串，方便后续通过 getContent() 拿到元素操作样式
   const el = document.createElement("div");
   el.className = "marker-pin";
-  if (label) {
-    el.textContent = label.charAt(0);
-    el.title = label;
-  } else {
-    el.textContent = "";
-    el.style.width = "10px";
-    el.style.height = "10px";
-    el.style.padding = "0";
-  }
+  el.textContent = "⭐";
+  if (label) el.title = label;
   const marker = new AMap.Marker({
     position: [lng, lat],
     content: el, // DOM 元素
-    offset: new AMap.Pixel(-15, -15),
+    offset: new AMap.Pixel(-20, -20),
     zIndex: 10,
   });
   map.add(marker);
