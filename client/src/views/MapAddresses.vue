@@ -410,7 +410,10 @@
               <input v-model="p.phone" class="ic-input ic-input-sm" placeholder="电话" />
               <input v-model="p.address" class="ic-input" placeholder="收件地址" />
             </div>
-            <button class="ic-del" @click="customerContacts.splice(pi, 1)">×</button>
+            <div class="ic-actions">
+              <button class="ic-copy" @click="copyInlineContact(p)" title="复制收件信息">📋</button>
+              <button class="ic-del" @click="customerContacts.splice(pi, 1)">×</button>
+            </div>
           </div>
         </div>
 
@@ -1085,6 +1088,13 @@ function onDetailClosed() {
 // ====== 客户增删改 ======
 function addContact() {
   customerContacts.value.push({ id: 0, name: "", phone: "", title: "", address: "", _new: true });
+}
+function copyInlineContact(p) {
+  const text = [p.name || "", p.phone || "", p.address || ""].filter(Boolean).join("  ");
+  if (!text) return showToast("没有可复制的收件信息");
+  navigator.clipboard.writeText(text).then(() => {
+    showToast("✅ 已复制：" + text.slice(0, 35) + (text.length > 35 ? "…" : ""));
+  }).catch(() => showToast("复制失败"));
 }
 
 function openAddCustomer() {
@@ -3379,6 +3389,30 @@ onUnmounted(() => {
 }
 .inline-contact-row:last-child {
   border-bottom: none;
+}
+.ic-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+.ic-copy {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+  color: #bbb;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.12s;
+}
+.ic-copy:hover {
+  background: #e0f7fa;
+  color: #00695c;
 }
 .ic-fields {
   flex: 1;
