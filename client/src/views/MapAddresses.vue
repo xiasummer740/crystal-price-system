@@ -1370,13 +1370,15 @@ function startSiteCoordPick() {
   pickSiteForm = true;
   pickOriginForm = "site";
   selectedMode.value = "pick";
+  // 清除之前遗留的自动定位标记
+  if (window._geoMarker && map) { map.remove(window._geoMarker); window._geoMarker = null; }
   showSiteForm.value = false;
   setTimeout(() => {
     const addr = siteForm.address;
     if (siteForm.latitude && siteForm.longitude) {
       placePickMarker(siteForm.latitude, siteForm.longitude);
       mapSetView(siteForm.latitude, siteForm.longitude, 16);
-      showToast("已显示坐标位置，可拖拽微调");
+      showToast("拖拽标记调整位置，或搜索精确定位");
     } else if (addr && addr.length >= 3) {
       doPickGeocode(addr);
     } else {
@@ -1663,6 +1665,8 @@ let pickOriginForm = ""; // 'customer' | 'address'
 function startCoordPick() {
   pickOriginForm = showCustomerForm.value ? "customer" : "address";
   selectedMode.value = "pick";
+  // 清除之前遗留的自动定位标记
+  if (window._geoMarker && map) { map.remove(window._geoMarker); window._geoMarker = null; }
   // 关闭表单弹窗，让地图全屏可见
   showCustomerForm.value = false;
   showAddressForm.value = false;
@@ -1675,7 +1679,7 @@ function startCoordPick() {
     if (formLat && formLng) {
       placePickMarker(formLat, formLng);
       mapSetView(formLat, formLng, 16);
-      showToast("已显示坐标位置，可拖拽微调");
+      showToast("拖拽标记调整位置，或搜索精确定位");
     } else if (addr && addr.length >= 3) {
       doPickGeocode(addr);
     } else {
@@ -1714,7 +1718,19 @@ function centerMapForPick() {
 function placePickMarker(lat, lng) {
   if (!map) return;
   mapRemoveMarker(window._pickMarker);
-  window._pickMarker = addAmapMarker(map, lat, lng, { draggable: true });
+  // 自定义大号可拖拽标记（一眼可见，不用精准点击）
+  const gcj = wgs84ToGcj02(lat, lng);
+  const el = document.createElement("div");
+  el.className = "pick-marker-dom";
+  el.innerHTML = '<div class="pm-pin">📍</div><div class="pm-shadow"></div>';
+  window._pickMarker = new AMap.Marker({
+    position: [gcj.lng, gcj.lat],
+    content: el,
+    draggable: true,
+    offset: new AMap.Pixel(-18, -48),
+    zIndex: 999,
+  });
+  map.add(window._pickMarker);
   window._pickMarker.on("dragend", (e) => {
     const p = e.target.getPosition();
     const wgs = gcj02ToWgs84(p.lat, p.lng);
@@ -2591,8 +2607,28 @@ onUnmounted(() => {
 .marker-pin.has-addr {
   background: #004d40;
 }
-.pick-marker {
-  font-size: 24px;
+/* 大号选点可拖拽标记 */
+.pick-marker-dom {
+  background: none !important;
+  border: none !important;
+}
+.pick-marker-dom .pm-pin {
+  font-size: 30px;
+  line-height: 1;
+  text-align: center;
+  filter: drop-shadow(0 2px 6px rgba(0,0,0,0.4));
+  cursor: grab;
+  user-select: none;
+}
+.pick-marker-dom .pm-pin:active {
+  cursor: grabbing;
+}
+.pick-marker-dom .pm-shadow {
+  width: 12px;
+  height: 4px;
+  background: rgba(0,0,0,0.2);
+  border-radius: 50%;
+  margin: -4px auto 0;
 }
 .popup-content {
   min-width: 160px;
