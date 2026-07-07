@@ -698,7 +698,7 @@ let currentRoute = null;
 
 // ====== 状态 ======
 const mapError = ref("");
-const isStandalone = ref(route_.query.standalone === "1");
+const isStandalone = route_.query.standalone === "1";
 const customers = ref([]);
 const loading = ref(false);
 const mapLoading = ref(true);
@@ -827,7 +827,7 @@ function truncate(s, len) {
 }
 
 function goBack() {
-  if (isStandalone.value) {
+  if (isStandalone) {
     window.close();
   } else {
     router.back();
