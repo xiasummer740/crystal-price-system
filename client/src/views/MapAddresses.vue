@@ -132,16 +132,9 @@
           <span class="map-error-icon">⚠️</span>
           <span>{{ mapError }}</span>
         </div>
-        <!-- 地图控件提示 + 确认按钮 -->
-        <div class="map-tip" v-if="selectedMode === 'pick'">
-          📍 点击地图设置位置，可拖拽标记微调
-          <button class="tip-confirm" @click="confirmCoordPick">✅ 确认</button>
-          <button class="tip-close" @click="selectedMode = ''">✕</button>
-        </div>
-        <!-- 地图搜索框（带结果下拉，不拖地图） -->
+        <!-- 地图搜索框（选点模式下也保留） -->
         <div
           class="map-search-wrap"
-          v-if="!selectedMode"
           ref="searchWrapRef"
           @mousedown.stop
         >
@@ -226,6 +219,12 @@
             ><span class="legend-dot" style="background: #999"></span
             >未定位客户</span
           >
+        </div>
+        <!-- 选点模式底部确认条 -->
+        <div class="map-pick-bar" v-if="selectedMode === 'pick'">
+          <span class="pick-bar-text">📍 点击地图或搜索结果设置位置，可拖拽标记微调</span>
+          <button class="pick-bar-confirm" @click="confirmCoordPick">✅ 确认定位</button>
+          <button class="pick-bar-cancel" @click="cancelCoordPick">✕ 取消</button>
         </div>
       </div>
     </div>
@@ -397,28 +396,8 @@
           placeholder="详细地址"
           @input="onAddressInput"
         />
-        <div class="coord-pick">
-          <div class="coord-row">
-            <span class="coord-label">坐标</span>
-            <input
-              v-model.number="customerForm.latitude"
-              class="coord-input"
-              placeholder="纬度"
-              type="number"
-              step="0.000001"
-            />
-            <input
-              v-model.number="customerForm.longitude"
-              class="coord-input"
-              placeholder="经度"
-              type="number"
-              step="0.000001"
-            />
-            <button class="coord-btn" @click="startCoordPick">📍 选点</button>
-          </div>
-          <div class="coord-hint">
-            点击「选点」在地图上标记位置，或直接输入坐标
-          </div>
+        <div class="coord-pick-simple">
+          <button class="coord-btn" @click="startCoordPick">📍 在地图选点定位</button>
         </div>
         <van-field
           v-model="customerForm.notes"
@@ -538,26 +517,8 @@
           placeholder="详细地址"
           @input="onSiteAddrInput"
         />
-        <div class="coord-pick">
-          <div class="coord-row">
-            <span class="coord-label">坐标</span>
-            <input
-              v-model.number="siteForm.latitude"
-              class="coord-input"
-              placeholder="纬度"
-              type="number"
-              step="0.000001"
-            />
-            <input
-              v-model.number="siteForm.longitude"
-              class="coord-input"
-              placeholder="经度"
-              type="number"
-              step="0.000001"
-            />
-            <button class="coord-btn" @click="startSiteCoordPick">📍 选点</button>
-          </div>
-          <div class="coord-hint">点击「选点」在地图上标记位置，或直接输入坐标</div>
+        <div class="coord-pick-simple">
+          <button class="coord-btn" @click="startSiteCoordPick">📍 在地图选点定位</button>
         </div>
         <van-field
           v-model="siteForm.notes"
@@ -624,26 +585,8 @@
           placeholder="收件人电话"
           type="tel"
         />
-        <div class="coord-pick">
-          <div class="coord-row">
-            <span class="coord-label">坐标</span>
-            <input
-              v-model.number="addressForm.latitude"
-              class="coord-input"
-              placeholder="纬度"
-              type="number"
-              step="0.000001"
-            />
-            <input
-              v-model.number="addressForm.longitude"
-              class="coord-input"
-              placeholder="经度"
-              type="number"
-              step="0.000001"
-            />
-            <button class="coord-btn" @click="startCoordPick">📍 选点</button>
-          </div>
-          <div class="coord-hint">点击「选点」在地图上标记位置</div>
+        <div class="coord-pick-simple">
+          <button class="coord-btn" @click="startCoordPick">📍 在地图选点定位</button>
         </div>
         <van-field
           v-model="addressForm.notes"
@@ -1140,6 +1083,10 @@ function editCustomer(c) {
   customerForm.longitude = c.longitude;
   customerForm.notes = c.notes || "";
   showCustomerForm.value = true;
+  // 有地址但无坐标时自动静默定位
+  if (c.address && c.address.length >= 3 && !c.latitude && !c.longitude) {
+    nextTick(() => autoGeocode(c.address, "customer"));
+  }
 }
 
 async function saveCustomer() {
@@ -1267,6 +1214,9 @@ function editAddress(a) {
   addressForm.longitude = a.longitude;
   addressForm.notes = a.notes || "";
   showAddressForm.value = true;
+  if (a.address && a.address.length >= 3 && !a.latitude && !a.longitude) {
+    nextTick(() => autoGeocode(a.address, "address"));
+  }
 }
 
 async function saveAddress() {
@@ -1341,6 +1291,9 @@ function editSite(s) {
   siteForm.is_default = !!s.is_default;
   siteForm.notes = s.notes || "";
   showSiteForm.value = true;
+  if (s.address && s.address.length >= 3 && !s.latitude && !s.longitude) {
+    nextTick(() => autoGeocode(s.address, "site"));
+  }
 }
 
 async function saveSite() {
@@ -1406,7 +1359,11 @@ function startSiteCoordPick() {
   showSiteForm.value = false;
   setTimeout(() => {
     const addr = siteForm.address;
-    if (addr && addr.length >= 3) {
+    if (siteForm.latitude && siteForm.longitude) {
+      placePickMarker(siteForm.latitude, siteForm.longitude);
+      mapSetView(siteForm.latitude, siteForm.longitude, 16);
+      showToast("已显示坐标位置，可拖拽微调");
+    } else if (addr && addr.length >= 3) {
       doPickGeocode(addr);
     } else {
       centerMapForPick();
@@ -1690,11 +1647,15 @@ function startCoordPick() {
   showAddressForm.value = false;
   // 加个延时等弹窗关闭动画完成
   setTimeout(() => {
-    const addr =
-      pickOriginForm === "customer"
-        ? customerForm.address
-        : addressForm.address;
-    if (addr && addr.length >= 3) {
+    const formLat = pickOriginForm === "customer" ? customerForm.latitude : addressForm.latitude;
+    const formLng = pickOriginForm === "customer" ? customerForm.longitude : addressForm.longitude;
+    const addr = pickOriginForm === "customer" ? customerForm.address : addressForm.address;
+    // 已有坐标 → 直接在地图显示，跳过 API 请求
+    if (formLat && formLng) {
+      placePickMarker(formLat, formLng);
+      mapSetView(formLat, formLng, 16);
+      showToast("已显示坐标位置，可拖拽微调");
+    } else if (addr && addr.length >= 3) {
       doPickGeocode(addr);
     } else {
       centerMapForPick();
@@ -1769,13 +1730,27 @@ function confirmCoordPick() {
   }
   showToast("坐标已定位 ✓");
 }
-// 确认选点（在模板中通过 confirmCoordPick 调用）
+function cancelCoordPick() {
+  selectedMode.value = "";
+  if (window._pickMarker && map) {
+    map.remove(window._pickMarker);
+    window._pickMarker = null;
+  }
+  if (pickOriginForm === "customer") {
+    showCustomerForm.value = true;
+  } else if (pickOriginForm === "site") {
+    showSiteForm.value = true;
+  } else {
+    showAddressForm.value = true;
+  }
+}
 
 // ====== 地址自动搜索定位（表单输入时） ======
 let geoAutoTimer = null;
 async function autoGeocode(val, target) {
   geocodeTarget = target;
-  if (!val || val.length < 3) {
+  // 地址清空时才清坐标；输入过程中不打断已有坐标
+  if (!val) {
     if (target === "customer") {
       customerForm.latitude = null;
       customerForm.longitude = null;
@@ -1788,6 +1763,7 @@ async function autoGeocode(val, target) {
     }
     return;
   }
+  if (val.length < 3) return; // 太短不查，但保留已有坐标
   clearTimeout(geoAutoTimer);
   geoAutoTimer = setTimeout(async () => {
     try {
@@ -1809,16 +1785,12 @@ async function autoGeocode(val, target) {
           addressForm.latitude = saveLat;
           addressForm.longitude = saveLng;
         }
-        // 在地图上显示标记（用 GCJ02 坐标）
-        if (map) {
-          if (window._geoMarker) map.remove(window._geoMarker);
-          const gj2 = wgs84ToGcj02(saveLat, saveLng);
-          window._geoMarker = addAmapMarker(map, gj2.lat, gj2.lng);
-          map.setView([gj2.lng, gj2.lat], 15);
-        }
+        // 表单开着时地图被遮住，只提示不操作地图
+        const label = (best.label || best.address || "").slice(0, 25);
+        showToast("✓ 已定位：" + label);
       }
     } catch {}
-  }, 600);
+  }, 800); // 800ms 防抖减少频繁请求
 }
 
 function onAddressInput(val) {
@@ -2255,43 +2227,58 @@ onUnmounted(() => {
   color: #999;
   font-size: 13px;
 }
-.map-tip {
+/* 选点模式底部确认条 */
+.map-pick-bar {
   position: absolute;
-  top: 12px;
+  bottom: 40px;
   left: 50%;
   transform: translateX(-50%);
-  background: rgba(0, 105, 92, 0.9);
+  background: rgba(0, 0, 0, 0.78);
   color: #fff;
-  padding: 6px 16px;
-  border-radius: 20px;
-  font-size: 12px;
+  padding: 10px 20px;
+  border-radius: 28px;
+  font-size: 13px;
   z-index: 1000;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 14px;
   white-space: nowrap;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+  backdrop-filter: blur(6px);
 }
-.tip-confirm {
+.pick-bar-text {
+  font-size: 12px;
+  color: rgba(255,255,255,0.85);
+}
+.pick-bar-confirm {
   background: #52c41a;
   border: none;
   color: #fff;
   cursor: pointer;
-  font-size: 12px;
-  padding: 4px 14px;
-  border-radius: 14px;
+  font-size: 13px;
+  padding: 6px 18px;
+  border-radius: 20px;
   font-weight: 600;
   font-family: inherit;
+  transition: background 0.15s;
 }
-.tip-confirm:hover {
+.pick-bar-confirm:hover {
   background: #389e0d;
 }
-.tip-close {
+.pick-bar-cancel {
   background: transparent;
-  border: none;
-  color: #fff;
+  border: 1px solid rgba(255,255,255,0.3);
+  color: rgba(255,255,255,0.7);
   cursor: pointer;
-  font-size: 14px;
-  padding: 0;
+  font-size: 12px;
+  padding: 4px 12px;
+  border-radius: 16px;
+  font-family: inherit;
+  transition: all 0.15s;
+}
+.pick-bar-cancel:hover {
+  background: rgba(255,255,255,0.1);
+  color: #fff;
 }
 
 /* 地图搜索框 */
@@ -3140,52 +3127,24 @@ onUnmounted(() => {
   flex: 1;
 }
 
-/* 坐标选择 */
-.coord-pick {
-  padding: 8px 16px;
-}
-.coord-row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.coord-label {
-  font-size: 12px;
-  color: #666;
-  white-space: nowrap;
-  min-width: 36px;
-}
-.coord-input {
-  flex: 1;
-  padding: 6px 8px;
-  border: 1px solid #e0e0e0;
-  border-radius: 6px;
-  font-size: 12px;
-  font-family: inherit;
-  outline: none;
-  max-width: 100px;
-}
-.coord-input:focus {
-  border-color: #00695c;
+/* 坐标选点（只显示按钮，不显示数值输入框） */
+.coord-pick-simple {
+  padding: 6px 16px 10px;
 }
 .coord-btn {
-  padding: 5px 10px;
+  padding: 6px 14px;
   border-radius: 6px;
-  font-size: 11px;
+  font-size: 12px;
   cursor: pointer;
   border: 1px solid #00695c;
   background: #fff;
   color: #00695c;
   font-family: inherit;
   white-space: nowrap;
+  transition: all 0.15s;
 }
 .coord-btn:hover {
   background: #e0f7fa;
-}
-.coord-hint {
-  font-size: 10px;
-  color: #bbb;
-  margin-top: 4px;
 }
 
 /* 表单选择器和checkbox */
