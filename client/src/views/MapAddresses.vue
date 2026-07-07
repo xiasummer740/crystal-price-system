@@ -381,12 +381,6 @@
           :rules="[{ required: true }]"
         />
         <van-field
-          v-model="customerForm.phone"
-          label="电话"
-          placeholder="联系电话"
-          type="tel"
-        />
-        <van-field
           v-model="customerForm.address"
           label="地址"
           placeholder="详细地址"
