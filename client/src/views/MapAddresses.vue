@@ -402,6 +402,34 @@
           type="textarea"
           rows="3"
         />
+
+        <!-- 联系人列表（内嵌在编辑表单中） -->
+        <div class="inline-section">
+          <div class="inline-section-hd">
+            <span class="inline-section-title">👥 联系人</span>
+            <button class="inline-add-btn" @click="addContact">＋ 添加</button>
+          </div>
+          <div v-if="customerContacts.length === 0" class="inline-empty">暂无联系人</div>
+          <div v-for="(p, pi) in customerContacts" :key="pi" class="inline-contact-row">
+            <div class="ic-fields">
+              <input v-model="p.name" class="ic-input" placeholder="姓名" />
+              <input v-model="p.phone" class="ic-input" placeholder="电话" />
+              <input v-model="p.title" class="ic-input ic-input-sm" placeholder="职位" />
+            </div>
+            <button class="ic-del" @click="customerContacts.splice(pi, 1)">×</button>
+          </div>
+        </div>
+
+        <!-- 收件信息 -->
+        <div class="inline-section">
+          <div class="inline-section-hd">
+            <span class="inline-section-title">📦 收件信息</span>
+          </div>
+          <van-field v-model="customerForm.delivery_name" label="收件人" placeholder="收件人姓名" />
+          <van-field v-model="customerForm.delivery_phone" label="电话" placeholder="收件人电话" type="tel" />
+          <van-field v-model="customerForm.delivery_addr" label="地址" placeholder="收件地址" />
+        </div>
+
         <div class="form-btns">
           <van-button
             round
@@ -712,7 +740,12 @@ const customerForm = reactive({
   latitude: null,
   longitude: null,
   notes: "",
+  // 收件信息
+  delivery_name: "",
+  delivery_phone: "",
+  delivery_addr: "",
 });
+const customerContacts = ref([]); // { id, name, phone, title, _new }
 const purchaserForm = reactive({ name: "", phone: "", title: "", notes: "", default_site_id: 0 });
 const addressForm = reactive({
   label: "",
@@ -1050,14 +1083,26 @@ function locateCustomer(c) {
 }
 
 async function openCustomerDetail(c) {
+  // 直接打开编辑表单，带联系人
+  editCustomer(c);
   try {
     const r = await getMapCustomer(c.id);
-    detailData.value = r.data;
-    showDetail.value = true;
-    expandedPurchaser.value = null;
-  } catch (e) {
-    showToast("加载详情失败");
-  }
+    customerContacts.value = (r.data?.purchasers || []).map(p => ({
+      id: p.id,
+      name: p.name,
+      phone: p.phone || "",
+      title: p.title || "",
+      _new: false,
+    }));
+    // 加载第一个收货点地址作为收件地址
+    const sites = r.data?.sites || [];
+    if (sites.length) {
+      const s = sites[0];
+      customerForm.delivery_addr = s.address || "";
+      customerForm.delivery_name = s.contact_name || "";
+      customerForm.delivery_phone = s.contact_phone || "";
+    }
+  } catch {}
 }
 
 function onDetailClosed() {
@@ -1065,6 +1110,10 @@ function onDetailClosed() {
 }
 
 // ====== 客户增删改 ======
+function addContact() {
+  customerContacts.value.push({ id: 0, name: "", phone: "", title: "", _new: true });
+}
+
 function openAddCustomer() {
   editingCustomer.value = null;
   customerForm.name = "";
@@ -1073,6 +1122,10 @@ function openAddCustomer() {
   customerForm.latitude = null;
   customerForm.longitude = null;
   customerForm.notes = "";
+  customerForm.delivery_name = "";
+  customerForm.delivery_phone = "";
+  customerForm.delivery_addr = "";
+  customerContacts.value = [];
   showCustomerForm.value = true;
 }
 
@@ -1084,6 +1137,10 @@ function editCustomer(c) {
   customerForm.latitude = c.latitude;
   customerForm.longitude = c.longitude;
   customerForm.notes = c.notes || "";
+  customerForm.delivery_name = "";
+  customerForm.delivery_phone = "";
+  customerForm.delivery_addr = "";
+  customerContacts.value = [];
   showCustomerForm.value = true;
   // 有地址但无坐标时自动静默定位
   if (c.address && c.address.length >= 3 && !c.latitude && !c.longitude) {
@@ -1095,12 +1152,47 @@ async function saveCustomer() {
   if (!customerForm.name) return showToast("客户名不能为空");
   saving.value = true;
   try {
+    let cid;
     if (editingCustomer.value) {
       await updateMapCustomer(editingCustomer.value.id, { ...customerForm });
+      cid = editingCustomer.value.id;
       showToast("已更新");
     } else {
-      await createMapCustomer({ ...customerForm });
+      const r = await createMapCustomer({ ...customerForm });
+      cid = r.data?.id;
       showToast("已创建");
+    }
+    // 保存联系人
+    if (cid) {
+      // 新增或更新联系人
+      for (const p of customerContacts.value) {
+        const data = { customer_id: cid, name: p.name, phone: p.phone || "", title: p.title || "", notes: "" };
+        if (p._new) {
+          await createPurchaser(data);
+        } else {
+          await updatePurchaser(p.id, data);
+        }
+      }
+      // 保存收件信息（作为第一个站点）
+      if (customerForm.delivery_addr) {
+        const addrData = {
+          customer_id: cid,
+          name: "收件地址",
+          site_type: "收件",
+          address: customerForm.delivery_addr,
+          contact_name: customerForm.delivery_name,
+          contact_phone: customerForm.delivery_phone,
+          is_default: true,
+          notes: "",
+        };
+        try {
+          const sr = await fetchSites(cid);
+          const sites = sr.data || [];
+          const es = sites.find(s => s.name === "收件地址" || s.site_type === "收件");
+          if (es) await updateSite(es.id, addrData);
+          else await createSite(addrData);
+        } catch { await createSite(addrData); }
+      }
     }
     showCustomerForm.value = false;
     await loadData();
@@ -3298,6 +3390,95 @@ onUnmounted(() => {
   font-weight: 600;
   margin: 0 0 12px;
 }
+/* 表单内嵌区块（联系人、收件信息） */
+.inline-section {
+  padding: 4px 16px 8px;
+  border-top: 1px solid #f0f0f0;
+  margin-top: 4px;
+}
+.inline-section-hd {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 0 4px;
+}
+.inline-section-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #444;
+}
+.inline-add-btn {
+  padding: 3px 12px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  border: 1px solid #00695c;
+  background: #fff;
+  color: #00695c;
+  cursor: pointer;
+  font-family: inherit;
+}
+.inline-add-btn:hover {
+  background: #e0f7fa;
+}
+.inline-empty {
+  font-size: 11px;
+  color: #bbb;
+  padding: 6px 0;
+}
+.inline-contact-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 0;
+  border-bottom: 1px solid #f5f5f5;
+}
+.inline-contact-row:last-child {
+  border-bottom: none;
+}
+.ic-fields {
+  flex: 1;
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.ic-input {
+  flex: 1;
+  min-width: 80px;
+  padding: 6px 8px;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  font-size: 12px;
+  font-family: inherit;
+  outline: none;
+  background: #fafafa;
+}
+.ic-input:focus {
+  border-color: #00695c;
+  background: #fff;
+}
+.ic-input-sm {
+  max-width: 90px;
+}
+.ic-del {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+  color: #ccc;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.ic-del:hover {
+  background: #ffebee;
+  color: #e53935;
+}
+
 .form-btns {
   display: flex;
   gap: 12px;
