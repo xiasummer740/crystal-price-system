@@ -971,7 +971,10 @@ function loadCustomerMarkers() {
         <div style="font-size:11px;color:#888">${c.address || ""}</div>
         <div style="font-size:11px;color:#888">${c.phone || ""}</div>
         <div style="font-size:10px;color:#aaa;margin-top:4px">🧑‍💼 ${c.purchaser_count || 0}采购 · 📮 ${c.address_count || 0}地址</div>
-        <button onclick="window._selectMapCustomer(${c.id})" style="background:#00695c;color:#fff;border:none;border-radius:4px;padding:4px 12px;font-size:11px;cursor:pointer;margin-top:4px">查看详情</button>
+        <div style="display:flex;gap:6px;margin-top:6px">
+          <button onclick="window._selectMapCustomer(${c.id})" style="flex:1;background:#00695c;color:#fff;border:none;border-radius:4px;padding:4px 12px;font-size:11px;cursor:pointer">查看详情</button>
+          <button onclick="window._clearMapMarker(${c.id})" style="background:transparent;color:#e53935;border:1px solid #ffcdd2;border-radius:4px;padding:4px 10px;font-size:11px;cursor:pointer">🗑️清除定位</button>
+        </div>
       </div>
     `,
     );
@@ -981,6 +984,10 @@ function loadCustomerMarkers() {
   window._selectMapCustomer = (id) => {
     const c = customers.value.find((x) => x.id === id);
     if (c) openCustomerDetail(c);
+  };
+  window._clearMapMarker = (id) => {
+    const c = customers.value.find((x) => x.id === id);
+    if (c) clearCustomerPosition(c);
   };
   addAmapCluster(map, amapMarkers);
   map.setFitView(amapMarkers, false, [50, 50, 50, 50]);
