@@ -1582,7 +1582,14 @@ function placeSearchMarker(result) {
 function pickSearchResult(r) {
   showSearchResults.value = false;
   mapSearchKw.value = r.name || "";
-  placeSearchMarker(r);
+  // 选点模式下：搜索结果直接替换选点标记 + 更新表单坐标
+  if (selectedMode.value === 'pick' && r.lat && r.lng) {
+    setFormCoords(r.lat, r.lng);
+    placePickMarker(r.lat, r.lng);
+    mapSetView(r.lat, r.lng, 16);
+  } else {
+    placeSearchMarker(r);
+  }
 }
 
 function onSearchKeydown(e) {
