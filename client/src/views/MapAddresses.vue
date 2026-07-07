@@ -91,27 +91,29 @@
               :key="c.id"
               class="customer-card"
               :class="{ active: selectedCustomer?.id === c.id }"
-              @click="selectCustomer(c)"
             >
-              <div class="cc-name">{{ c.name }}</div>
-              <div class="cc-addr" v-if="c.address">
-                <span class="cc-icon">📍</span>{{ truncate(c.address, 30) }}
+              <div class="cc-main" @click="locateCustomer(c)">
+                <div class="cc-name">{{ c.name }}</div>
+                <div class="cc-addr" v-if="c.address">
+                  <span class="cc-icon">📍</span>{{ truncate(c.address, 30) }}
+                </div>
+                <div class="cc-phone" v-if="c.phone">
+                  <span class="cc-icon">📞</span>{{ c.phone }}
+                </div>
+                <div class="cc-meta">
+                  <span v-if="c.purchaser_count > 0"
+                    >🧑‍💼 {{ c.purchaser_count }}联系人</span
+                  >
+                  <span v-if="c.site_count > 0"
+                    >📍 {{ c.site_count }}收货点</span
+                  >
+                  <span v-if="c.latitude && c.longitude" class="cc-pin"
+                    >🟢 已定位</span
+                  >
+                  <span v-else class="cc-pin muted">⚪ 未定位</span>
+                </div>
               </div>
-              <div class="cc-phone" v-if="c.phone">
-                <span class="cc-icon">📞</span>{{ c.phone }}
-              </div>
-              <div class="cc-meta">
-                <span v-if="c.purchaser_count > 0"
-                  >🧑‍💼 {{ c.purchaser_count }}联系人</span
-                >
-                <span v-if="c.site_count > 0"
-                  >📍 {{ c.site_count }}收货点</span
-                >
-                <span v-if="c.latitude && c.longitude" class="cc-pin"
-                  >🟢 已定位</span
-                >
-                <span v-else class="cc-pin muted">⚪ 未定位</span>
-              </div>
+              <button class="cc-edit-btn" @click.stop="openCustomerDetail(c)" title="查看详情/编辑">✏️</button>
             </div>
           </div>
         </div>
@@ -965,7 +967,7 @@ function loadCustomerMarkers() {
   for (const c of hasCoords) {
     const gcj = wgs84ToGcj02(c.latitude, c.longitude);
     const marker = addAmapLabelMarker(map, gcj.lat, gcj.lng, "", () =>
-      selectCustomer(c),
+      locateCustomer(c),
     );
     customerInfoWindows[c.id] = bindAmapPopup(
       marker,
@@ -984,7 +986,7 @@ function loadCustomerMarkers() {
   }
   window._selectMapCustomer = (id) => {
     const c = customers.value.find((x) => x.id === id);
-    if (c) selectCustomer(c);
+    if (c) openCustomerDetail(c);
   };
   addAmapCluster(map, amapMarkers);
   map.setFitView(amapMarkers, false, [50, 50, 50, 50]);
@@ -1022,31 +1024,31 @@ function toggleRegion(region) {
 }
 
 // ====== 客户选择 ======
-async function selectCustomer(c) {
+function locateCustomer(c) {
   selectedCustomer.value = c;
   // 在地图上定位：有坐标直接跳转，无坐标但有地址则自动搜索
   if (c.latitude && c.longitude && map) {
     // 转 GCJ02 再定位，避免 WGS84 偏移
     const gcj = wgs84ToGcj02(c.latitude, c.longitude);
     mapSetView(gcj.lat, gcj.lng, 16);
-    // 打开信息窗
-    const iw = customerInfoWindows[c.id];
-    if (iw) iw.open(map, new AMap.LngLat(gcj.lng, gcj.lat));
   } else if (c.address && map) {
-    try {
-      const r = await myGeocode(c.address);
-      const results = r.data || [];
-      if (results.length) {
-        const best = results[0];
-        // 在地图上放临时标记（不保存，仅预览）
-        if (window._viewMarker) map.remove(window._viewMarker);
-        const gj = wgs84ToGcj02(best.lat, best.lng);
-        window._viewMarker = addAmapMarker(map, gj.lat, gj.lng);
-        map.setView([gj.lng, gj.lat], 15);
-      }
-    } catch {}
+    (async () => {
+      try {
+        const r = await myGeocode(c.address);
+        const results = r.data || [];
+        if (results.length) {
+          const best = results[0];
+          if (window._viewMarker) map.remove(window._viewMarker);
+          const gj = wgs84ToGcj02(best.lat, best.lng);
+          window._viewMarker = addAmapMarker(map, gj.lat, gj.lng);
+          map.setView([gj.lng, gj.lat], 15);
+        }
+      } catch {}
+    })();
   }
-  // 加载详情
+}
+
+async function openCustomerDetail(c) {
   try {
     const r = await getMapCustomer(c.id);
     detailData.value = r.data;
@@ -1058,7 +1060,6 @@ async function selectCustomer(c) {
 }
 
 function onDetailClosed() {
-  selectedCustomer.value = null;
   expandedPurchaser.value = null;
 }
 
@@ -2162,8 +2163,8 @@ onUnmounted(() => {
   z-index: 1;
 }
 .customer-card {
-  padding: 10px 16px;
-  cursor: pointer;
+  display: flex;
+  align-items: stretch;
   border-bottom: 1px solid #f5f5f5;
   transition: background 0.15s;
 }
@@ -2173,6 +2174,30 @@ onUnmounted(() => {
 .customer-card.active {
   background: #e0f7fa;
   border-left: 3px solid #00695c;
+}
+.cc-main {
+  flex: 1;
+  padding: 10px 12px 10px 16px;
+  cursor: pointer;
+  min-width: 0;
+}
+.cc-edit-btn {
+  flex-shrink: 0;
+  width: 36px;
+  background: transparent;
+  border: none;
+  border-left: 1px solid #f0f0f0;
+  cursor: pointer;
+  font-size: 14px;
+  color: #999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+}
+.cc-edit-btn:hover {
+  background: #e0f7fa;
+  color: #00695c;
 }
 .cc-name {
   font-size: 14px;
