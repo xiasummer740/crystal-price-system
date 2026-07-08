@@ -31,14 +31,18 @@ export function loadAmapScript(key) {
   return _amapLoading;
 }
 
-// 创建地图
+// 创建地图（性能优化版：关掉耗资源的3D建筑和倾斜旋转）
 export function createAmapMap(container, center = [114.3, 30.5], zoom = 6) {
   if (!AMap) throw new Error("高德 API 未加载");
   const map = new AMap.Map(container, {
     center: [center[1], center[0]], // Amap 用 [lng, lat]
     zoom,
     mapStyle: "amap://styles/light", // 浅色标准地图
-    features: ["bg", "road", "building", "point"], // 背景+道路+建筑+POI点
+    features: ["bg", "road", "point"], // 去掉"building"（3D建筑GPU杀手）
+    viewMode: '2D',              // 纯2D渲染，最流畅
+    pitchEnable: false,           // 禁止倾斜
+    rotateEnable: false,          // 禁止旋转
+    animateEnable: false,         // 关闭动画减少重绘
   });
   return map;
 }

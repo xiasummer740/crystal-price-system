@@ -1057,7 +1057,10 @@ function loadCustomerMarkers() {
     if (c) clearCustomerPosition(c);
   };
   addAmapCluster(map, amapMarkers);
-  map.setFitView(amapMarkers, false, [50, 50, 50, 50]);
+  // 有保存的视图位置时不强制缩放（KeepAlive返回或恢复视图），首次初始化才 fitView
+  if (!sessionStorage.getItem('map_last_view')) {
+    map.setFitView(amapMarkers, false, [50, 50, 50, 50]);
+  }
 }
 
 // ====== 搜索 / 筛选 ======
@@ -1485,7 +1488,7 @@ function startSiteCoordPick() {
       mapSetView(siteForm.latitude, siteForm.longitude, 16);
       showToast("拖拽标记调整位置，或搜索精确定位");
     } else if (addr && addr.length >= 3) {
-      doPickGeocode(addr);
+      doSimpleGeocode(addr);
     } else {
       centerMapForPick();
     }
@@ -1577,9 +1580,9 @@ function onMapSearchInput() {
         searchDone.value = false;
       }
     });
-  }, 200);
-  // 同时准备完整搜索（稍后触发）
-  mapSearchTimer = setTimeout(doPoiSearchFromInput, 600);
+  }, 150);
+  // 同时准备完整搜索（缩短延迟，减少等待感）
+  mapSearchTimer = setTimeout(doPoiSearchFromInput, 300);
 }
 
 // 输入触发的完整搜索（回车时走这个）
@@ -1801,33 +1804,86 @@ function onMapClickCloseSearch(e) {
 }
 
 // ====== 坐标选点（关闭表单 → 全屏地图选点 → 确认后回填） ======
-let pickOriginForm = ""; // 'customer' | 'address'
+let pickOriginForm = ""; // 'customer' | 'address' | 'site'
 function startCoordPick() {
   pickOriginForm = showCustomerForm.value ? "customer" : "address";
+  if (!pickOriginForm || pickOriginForm === "") pickOriginForm = showSiteForm.value ? "site" : "customer";
   selectedMode.value = "pick";
   // 清除之前遗留的自动定位标记
   if (window._geoMarker && map) { map.remove(window._geoMarker); window._geoMarker = null; }
   // 关闭表单弹窗，让地图全屏可见
   showCustomerForm.value = false;
   showAddressForm.value = false;
+  showSiteForm.value = false;
   // 加个延时等弹窗关闭动画完成
-  setTimeout(() => {
-    const formLat = pickOriginForm === "customer" ? customerForm.latitude : addressForm.latitude;
-    const formLng = pickOriginForm === "customer" ? customerForm.longitude : addressForm.longitude;
-    const addr = pickOriginForm === "customer" ? customerForm.address : addressForm.address;
-    // 已有坐标 → 直接在地图显示，跳过 API 请求
+  setTimeout(async () => {
+    const isCust = pickOriginForm === "customer";
+    const formLat = isCust ? customerForm.latitude : addressForm.latitude;
+    const formLng = isCust ? customerForm.longitude : addressForm.longitude;
+    const name = isCust ? (customerForm.name || "").trim() : "";
+    const addr = isCust ? customerForm.address : addressForm.address;
+    // 已有坐标 → 直接在地图显示
     if (formLat && formLng) {
       placePickMarker(formLat, formLng);
       mapSetView(formLat, formLng, 16);
       showToast("拖拽标记调整位置，或搜索精确定位");
-    } else if (addr && addr.length >= 3) {
-      doPickGeocode(addr);
+      return;
+    }
+    // 有公司名 → 先搜公司名（比搜地址更准）
+    const query = [name, addr].filter(Boolean).join(" ");
+    if (query.length >= 3) {
+      await doSmartGeocode(name, addr, isCust);
     } else {
       centerMapForPick();
     }
   }, 350);
 }
-async function doPickGeocode(addr) {
+// 智能定位：公司名优先 → 地址降级 → 用户自选
+async function doSmartGeocode(name, addr, isCustomer) {
+  // 1. 用公司名+地址组合查询（最高准确率）
+  const query = [name, addr].filter(Boolean).join(" ");
+  const r = await myGeocode(query);
+  const results = r.data || [];
+  if (results.length && map) {
+    const best = results[0];
+    const isAmap = r.provider === "amap";
+    const slat = isAmap ? fromAmap(best.lat, best.lng).lat : best.lat;
+    const slng = isAmap ? fromAmap(best.lat, best.lng).lng : best.lng;
+    setFormCoords(slat, slng);
+    placePickMarker(slat, slng);
+    map.setView(ll(slat, slng), 16);
+    showToast("已定位到：" + (best.label || query).slice(0, 30));
+    return;
+  }
+  // 2. 公司名没搜到 → 只用地址再试试
+  if (name && addr && addr.length >= 3) {
+    const r2 = await myGeocode(addr);
+    const results2 = r2.data || [];
+    if (results2.length && map) {
+      const best = results2[0];
+      const isAmap = r2.provider === "amap";
+      const slat = isAmap ? fromAmap(best.lat, best.lng).lat : best.lat;
+      const slng = isAmap ? fromAmap(best.lat, best.lng).lng : best.lng;
+      setFormCoords(slat, slng);
+      placePickMarker(slat, slng);
+      map.setView(ll(slat, slng), 16);
+      showToast("已定位到地址：" + (best.label || addr).slice(0, 30));
+      return;
+    }
+  }
+  // 3. 还搜不到 → 弹出搜索框让用户手动选
+  if (map) {
+    centerMapForPick();
+    showToast("未自动定位到，请在搜索框搜索或点击地图选点");
+    // 自动把公司名填入搜索框，方便用户直接回车搜索
+    if (name) {
+      mapSearchKw.value = name;
+      setTimeout(() => doPoiSearchFromInput(), 300);
+    }
+  }
+}
+// 简单地址定位（给站点/收货点使用，只有一个地址字段）
+async function doSimpleGeocode(addr) {
   try {
     const r = await myGeocode(addr);
     const results = r.data || [];
