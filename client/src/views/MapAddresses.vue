@@ -691,6 +691,7 @@ import {
   setAmapView,
   addAmapMarker,
   addAmapLabelMarker,
+  addAmapCustomerMarker,
   bindAmapPopup,
   addAmapCluster,
   clearAmapExtraMarkers,
@@ -1026,7 +1027,7 @@ function loadCustomerMarkers() {
   const amapMarkers = [];
   for (const c of hasCoords) {
     const gcj = wgs84ToGcj02(c.latitude, c.longitude);
-    const marker = addAmapLabelMarker(map, gcj.lat, gcj.lng, c.name, () =>
+    const marker = addAmapCustomerMarker(map, gcj.lat, gcj.lng, c.name, () =>
       locateCustomer(c),
     );
     customerInfoWindows[c.id] = bindAmapPopup(
@@ -2736,20 +2737,47 @@ onUnmounted(() => {
   background: transparent !important;
   border: none !important;
 }
-.marker-pin {
+/* 纯图标标记（📍等） */
+.marker-pin.is-icon {
   font-size: 20px;
   line-height: 1;
   text-align: center;
   cursor: pointer;
   filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.4));
-  transition: transform 0.15s;
   pointer-events: auto;
 }
-.marker-pin:hover {
+.marker-pin.is-icon:hover {
   transform: scale(1.3);
 }
-.marker-pin.has-addr {
-  background: #004d40;
+/* 客户星标 ⭐ + 公司名 */
+.marker-pin.is-customer {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  background: rgba(255,255,255,0.92);
+  border-radius: 20px;
+  padding: 2px 8px 2px 3px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.18);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: transform 0.15s;
+  pointer-events: auto;
+  backdrop-filter: blur(2px);
+}
+.marker-pin.is-customer:hover {
+  transform: scale(1.08);
+}
+.marker-pin.is-customer .mi {
+  font-size: 16px;
+  line-height: 1;
+}
+.marker-pin.is-customer .mn {
+  font-size: 12px;
+  font-weight: 500;
+  color: #333;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 /* 搜索结果编号圆点（选点模式下显示在地图上，点击即选） */
 .pick-result-dot {

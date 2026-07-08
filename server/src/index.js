@@ -14,7 +14,7 @@ import reportsRouter from './routes/reports.js'
 import logsRouter from './routes/logs.js'
 import mapRouter from './routes/map.js'
 import { exportToExcel, importFromExcel, generateTemplate, generateSampleTemplate, generateNoteTemplate } from './utils/export.js'
-import { initDb, saveNow } from './db.js'
+import { initDb, saveNow, queryAll, execute } from './db.js'
 import { triggerBackup, flushPending } from './utils/excelBackup.js'
 import * as logger from './utils/logger.js'
 
@@ -186,6 +186,21 @@ app.get('/api/open-data-folder', (_req, res) => {
   res.json({ code: 0 })
 })
 
+// 读取设置（Key-Value 持久化，跨升级保留）
+app.get('/api/settings', (_req, res) => {
+  const rows = queryAll('SELECT key, value FROM app_settings')
+  const data = {}
+  for (const r of rows) data[r.key] = r.value
+  res.json({ code: 0, data })
+})
+// 保存设置
+app.post('/api/settings', (req, res) => {
+  const entries = req.body || {}
+  for (const [key, value] of Object.entries(entries)) {
+    execute("INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, ?)", [key, String(value)])
+  }
+  res.json({ code: 0 })
+})
 
 // 全局错误捕获中间件（必须在所有路由之后）
 app.use((err, req, res, _next) => {

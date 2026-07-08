@@ -312,6 +312,9 @@ export async function initDb() {
   `)
   try { db.run('CREATE INDEX IF NOT EXISTS idx_map_trip_points_pid ON map_trip_points(plan_id)') } catch {}
 
+  // 应用设置表（Key-Value 持久化，跨升级保留）
+  db.run(`CREATE TABLE IF NOT EXISTS app_settings (key TEXT PRIMARY KEY, value TEXT DEFAULT '')`)
+
   return db
 }
 

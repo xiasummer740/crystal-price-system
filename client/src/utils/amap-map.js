@@ -64,17 +64,36 @@ export function addAmapMarker(map, lat, lng, opts = {}) {
   return marker;
 }
 
-// 添加标记（客户显示⭐，搜索等其他用途传自定义文字）
+// 添加带文字标签的标记（如 📍 搜索标记）
 export function addAmapLabelMarker(map, lat, lng, label = "", onClick) {
-  // 用 DOM 元素而非字符串，方便后续通过 getContent() 拿到元素操作样式
   const el = document.createElement("div");
-  el.className = "marker-pin";
-  // 有 label 时优先显示 label（如 📍），无 label 默认显示 ⭐（客户标记）
+  el.className = "marker-pin is-icon";
   el.textContent = label || "⭐";
   const marker = new AMap.Marker({
     position: [lng, lat],
-    content: el, // DOM 元素
-    offset: new AMap.Pixel(-20, -20),
+    content: el,
+    offset: new AMap.Pixel(-10, -10),
+    zIndex: 10,
+  });
+  map.add(marker);
+  if (onClick) marker.on("click", onClick);
+  return marker;
+}
+
+// 添加客户星标（显示 ⭐ + 公司名）
+export function addAmapCustomerMarker(map, lat, lng, name = "", onClick) {
+  const el = document.createElement("div");
+  el.className = "marker-pin is-customer";
+  if (name) {
+    el.innerHTML = `<span class="mi">⭐</span><span class="mn">${name}</span>`;
+    el.title = name;
+  } else {
+    el.textContent = "⭐";
+  }
+  const marker = new AMap.Marker({
+    position: [lng, lat],
+    content: el,
+    offset: new AMap.Pixel(-10, -16),
     zIndex: 10,
   });
   map.add(marker);
@@ -289,6 +308,7 @@ export default {
   setAmapView,
   addAmapMarker,
   addAmapLabelMarker,
+  addAmapCustomerMarker,
   bindAmapPopup,
   addAmapCluster,
   clearAmapExtraMarkers,

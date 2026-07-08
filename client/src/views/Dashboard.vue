@@ -422,7 +422,7 @@
 import { ref, reactive, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { usePriceStore } from '../stores/price.js'
-import { importExcel, http } from '../utils/api.js'
+import { importExcel, http, saveSettings as saveSettingsApi, fetchSettings } from '../utils/api.js'
 import { showToast, showConfirmDialog } from 'vant'
 import SaveStatusBadge from '../components/SaveStatusBadge.vue'
 import PriceTable from '../components/PriceTable.vue'
@@ -665,7 +665,14 @@ const settingsTaxRate = ref(Number(localStorage.getItem('crystal_taxRate')) || 1
 const settingsFxRate = ref(Number(localStorage.getItem('crystal_rate')) || 7)
 const settingsAmapKey = ref(localStorage.getItem('crystal_amap_key') || '')
 const settingsAmapJscode = ref(localStorage.getItem('crystal_amap_jscode') || '')
-function saveSettings() { localStorage.setItem('crystal_taxRate', settingsTaxRate.value); localStorage.setItem('crystal_rate', settingsFxRate.value); localStorage.setItem('crystal_amap_key', settingsAmapKey.value); localStorage.setItem('crystal_amap_jscode', settingsAmapJscode.value) }
+function saveSettings() {
+  localStorage.setItem('crystal_taxRate', settingsTaxRate.value)
+  localStorage.setItem('crystal_rate', settingsFxRate.value)
+  localStorage.setItem('crystal_amap_key', settingsAmapKey.value)
+  localStorage.setItem('crystal_amap_jscode', settingsAmapJscode.value)
+  // 同步到服务器，跨升级保留
+  saveSettingsApi({ crystal_amap_key: settingsAmapKey.value, crystal_amap_jscode: settingsAmapJscode.value }).catch(() => {})
+}
 let saveTimer = null
 function saveSettingsDebounced() {
   clearTimeout(saveTimer)
@@ -820,6 +827,13 @@ onMounted(async () => {
   localIp.value = window.electronAPI ? window.electronAPI.getLanIp() : (window.location.hostname || '127.0.0.1')
   // 启动后自动检查更新（小红点提示）
   setTimeout(() => { if (['idle'].includes(updateStatus.value)) onCheckUpdate() }, 8000)
+  // 从服务器同步设置到 localStorage（跨升级保留）
+  try {
+    const r = await fetchSettings()
+    const s = r.data || {}
+    if (s.crystal_amap_key && !localStorage.getItem('crystal_amap_key')) localStorage.setItem('crystal_amap_key', s.crystal_amap_key)
+    if (s.crystal_amap_jscode && !localStorage.getItem('crystal_amap_jscode')) localStorage.setItem('crystal_amap_jscode', s.crystal_amap_jscode)
+  } catch {}
 })
 // 实时时钟（每秒刷新）
 const clockTime = ref('')

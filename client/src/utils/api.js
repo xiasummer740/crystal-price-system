@@ -179,6 +179,14 @@ export function deleteCategory(id) {
   return http.delete(`/notes/categories/${id}`)
 }
 
+// ====== 应用设置（Key-Value 持久化，跨升级保留） ======
+export function fetchSettings() {
+  return http.get('/settings')
+}
+export function saveSettings(data) {
+  return http.post('/settings', data)
+}
+
 // ====== 地图地址 ======
 export function fetchMapCustomers(params) {
   return http.get('/map/customers', { params })
