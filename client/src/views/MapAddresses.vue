@@ -655,6 +655,7 @@ import {
   computed,
   onMounted,
   onUnmounted,
+  onActivated,
   nextTick,
   watch,
 } from "vue";
@@ -2118,6 +2119,14 @@ onMounted(async () => {
   document.addEventListener("mousedown", onMapClickCloseSearch);
 });
 
+// 从 KeepAlive 缓存恢复时刷新数据（地图实例保留，无需重载）
+onActivated(async () => {
+  if (!map) return; // 若地图尚未初始化，首次加载走 onMounted
+  await loadData();
+  // AMap 从隐藏恢复后刷新一次视图（解决 WebGL 上下文恢复后的偏移）
+  nextTick(() => { try { map?.setStatus({ showIndoorMap: false }); } catch {} });
+});
+
 onUnmounted(() => {
   document.removeEventListener("mousedown", onMapClickCloseSearch);
   if (map) {
@@ -2727,22 +2736,16 @@ onUnmounted(() => {
   border: none !important;
 }
 .marker-pin {
-  background: #00695c;
-  color: #fff;
-  padding: 4px 10px;
-  border-radius: 14px;
-  font-size: 10px;
-  font-weight: 600;
-  text-align: center;
-  white-space: nowrap;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
-  border: 2px solid #fff;
-  cursor: pointer;
-  transition: transform 0.15s;
+  font-size: 20px;
   line-height: 1;
+  text-align: center;
+  cursor: pointer;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.4));
+  transition: transform 0.15s;
+  pointer-events: auto;
 }
 .marker-pin:hover {
-  transform: scale(1.1);
+  transform: scale(1.3);
 }
 .marker-pin.has-addr {
   background: #004d40;
