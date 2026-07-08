@@ -373,13 +373,31 @@
     >
       <div class="form-wrap">
         <h3>{{ editingCustomer ? "编辑客户" : "新建客户" }}</h3>
-        <van-field
-          v-model="customerForm.name"
-          label="客户名"
-          placeholder="输入客户名"
-          required
-          :rules="[{ required: true }]"
-        />
+        <div class="customer-name-field">
+          <van-field
+            v-model="customerForm.name"
+            label="客户名"
+            placeholder="输入客户名，支持关键字搜索已有客户"
+            required
+            :rules="[{ required: true }]"
+            @update:model-value="onCustNameInput"
+            @focus="onCustNameFocus"
+            @blur="onCustNameBlur"
+          />
+          <div
+            class="customer-suggest"
+            v-if="showCustNameSuggest && filteredCustNames.length"
+          >
+            <div
+              v-for="cn in filteredCustNames"
+              :key="cn"
+              class="cs-item"
+              @mousedown.prevent="selectCustName(cn)"
+            >
+              {{ cn }}
+            </div>
+          </div>
+        </div>
         <van-field
           v-model="customerForm.address"
           label="地址"
@@ -731,6 +749,21 @@ const customerForm = reactive({
   longitude: null,
   notes: "",
 });
+// 客户名自动完成（同记事模式）
+const showCustNameSuggest = ref(false);
+const filteredCustNames = computed(() => {
+  const kw = (customerForm.name || '').trim().toLowerCase();
+  const names = customers.value.map(c => c.name).filter(Boolean);
+  if (!kw) return names.slice(0, 10);
+  return names.filter(n => n.toLowerCase().includes(kw)).slice(0, 10);
+});
+function onCustNameInput() { showCustNameSuggest.value = true; }
+function onCustNameFocus() { showCustNameSuggest.value = true; }
+function onCustNameBlur() { setTimeout(() => { showCustNameSuggest.value = false; }, 200); }
+function selectCustName(name) {
+  customerForm.name = name;
+  showCustNameSuggest.value = false;
+}
 const customerContacts = ref([]); // { id, name, phone, title, address, notes, _new }
 const purchaserForm = reactive({ name: "", phone: "", title: "", notes: "", default_site_id: 0 });
 const addressForm = reactive({
@@ -951,12 +984,24 @@ async function initMap() {
 
   try {
     await loadAmapScript(amapKey);
-    map = createAmapMap(mapContainer.value, [114.3, 30.5], 6);
+    // 从 sessionStorage 恢复上次视图位置，避免每次从全国缩放
+    const saved = sessionStorage.getItem('map_last_view');
+    const center = saved ? JSON.parse(saved) : { lat: 30.5, lng: 114.3, zoom: 6 };
+    map = createAmapMap(mapContainer.value, [center.lat, center.lng], center.zoom);
     map.on("click", (e) => {
-      if (selectedMode.value !== "pick") return;
-      const wgs = gcj02ToWgs84(e.latlng.lat, e.latlng.lng);
-      setFormCoords(wgs.lat, wgs.lng);
-      placePickMarker(wgs.lat, wgs.lng);
+      if (selectedMode.value === "pick") {
+        const wgs = gcj02ToWgs84(e.latlng.lat, e.latlng.lng);
+        setFormCoords(wgs.lat, wgs.lng);
+        placePickMarker(wgs.lat, wgs.lng);
+      } else {
+        // 非选点模式点击地图 → 清除搜索结果标记
+        clearSearchMarker();
+      }
+    });
+    // 记住地图移动后的位置
+    map.on('moveend', () => {
+      const c = map.getCenter();
+      sessionStorage.setItem('map_last_view', JSON.stringify({ lat: c.lat, lng: c.lng, zoom: map.getZoom() }));
     });
     mapLoading.value = false;
     setTimeout(loadCustomerMarkers, 300);
@@ -1552,7 +1597,7 @@ async function doPoiSearchFromInput() {
       searchTotal.value = r.total || list.length;
       searchPage.value = 1;
       showSearchResults.value = true;
-      if (list.length) placeSearchMarker(list[0]);
+      // 不自动生成标记，用户从下拉列表选择时才定位
       showPickResultMarkers(list);
     } else {
       // 服务器搜索无结果 → 降级浏览器端 PlaceSearch（不需要 Web服务API 权限）
@@ -1572,7 +1617,6 @@ async function doPoiSearchFromInput() {
         }));
         searchTotal.value = browserResults.length;
         showSearchResults.value = true;
-        placeSearchMarker(browserResults[0]);
         showPickResultMarkers(browserResults);
       } else {
         // 还不行 → 地理编码兜底
@@ -1586,7 +1630,6 @@ async function doPoiSearchFromInput() {
           searchResults.value = geoList;
           searchTotal.value = geoList.length;
           showSearchResults.value = true;
-          placeSearchMarker(geoList[0]);
           showPickResultMarkers(geoList);
         }
       }
@@ -1663,16 +1706,31 @@ async function loadMoreResults() {
 function placeSearchMarker(result) {
   if (!map || !result.lat || !result.lng) return;
   mapSetView(result.lat, result.lng, 16);
-  mapRemoveMarker(mapSearchMarker);
+  clearSearchMarker();
   mapSearchMarker = mapAddDivMarker(result.lat, result.lng, "📍");
-  mapOpenPopup(
+  const info = mapOpenPopup(
     mapSearchMarker,
     `
     <div style="font-size:13px;font-weight:600">${result.name || ""}</div>
     <div style="font-size:11px;color:#888">${result.address || ""}</div>
+    <div style="margin-top:4px;font-size:11px">
+      <a href="javascript:void(0)" onclick="window._clearSearchMarker()" style="color:#999">✕ 清除标记</a>
+    </div>
   `,
   );
+  window._searchInfo = info; // 保存以关闭
 }
+function clearSearchMarker() {
+  // 先关 InfoWindow（必须在删标记前，避免关联丢失）
+  if (window._searchInfo && window.AMap) {
+    try { window._searchInfo.close(); } catch {}
+    window._searchInfo = null;
+  }
+  mapRemoveMarker(mapSearchMarker);
+  mapSearchMarker = null;
+}
+// 挂载全局清除函数，供弹窗按钮调用
+window._clearSearchMarker = clearSearchMarker;
 
 function pickSearchResult(r) {
   showSearchResults.value = false;
@@ -2040,13 +2098,18 @@ async function loadData() {
   } finally {
     loading.value = false;
   }
-  // 更新地图标记
-  loadCustomerMarkers();
+  // 仅在地图已初始化时重载标记（首次加载由 initMap 负责）
+  if (map) loadCustomerMarkers();
 }
 
 // ====== 生命周期 ======
 onMounted(async () => {
+  // 预加载高德 JS API（与数据加载并行，省 1-3 秒）
+  const key = getAmapKey();
+  if (key) loadAmapScript(key).catch(() => {});
+
   await loadData();
+
   // 地图在 nextTick 后初始化（DOM 已渲染）
   nextTick(() => {
     setTimeout(initMap, 100);
@@ -3487,6 +3550,32 @@ onUnmounted(() => {
 .form-btns .van-button {
   flex: 1;
 }
+
+/* 客户名联想下拉（同记事模式） */
+.customer-name-field {
+  position: relative;
+}
+.customer-suggest {
+  position: absolute;
+  top: 100%;
+  left: 100px;
+  right: 16px;
+  z-index: 100;
+  background: #fff;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+  max-height: 200px;
+  overflow-y: auto;
+}
+.cs-item {
+  padding: 8px 12px;
+  font-size: 13px;
+  cursor: pointer;
+  border-bottom: 1px solid #f5f5f5;
+}
+.cs-item:last-child { border-bottom: none; }
+.cs-item:hover { background: #f0fdf4; color: #00695c; }
 
 /* 坐标选点（只显示按钮，不显示数值输入框） */
 .coord-pick-simple {

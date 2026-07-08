@@ -4,26 +4,31 @@
  */
 
 let AMap = null; // 高德 JS API 全局对象
+let _amapLoading = null; // 缓存加载 Promise，避免重复创建 script 标签
 
-// 动态加载高德脚本
+// 动态加载高德脚本（返回缓存的 Promise，重复调用不重复加载）
 export function loadAmapScript(key) {
-  return new Promise((resolve, reject) => {
-    if (window.AMap) {
-      AMap = window.AMap;
-      resolve();
-      return;
-    }
+  if (_amapLoading) return _amapLoading;
+  if (window.AMap) {
+    AMap = window.AMap;
+    return Promise.resolve();
+  }
+  _amapLoading = new Promise((resolve, reject) => {
     const script = document.createElement("script");
     script.src = `https://webapi.amap.com/maps?v=2.0&key=${encodeURIComponent(key)}&plugin=AMap.MarkerClusterer,AMap.PlaceSearch,AMap.AutoComplete,AMap.Geolocation`;
     script.async = true;
     script.onload = () => {
       AMap = window.AMap;
+      _amapLoading = null;
       resolve();
     };
-    script.onerror = () =>
+    script.onerror = () => {
+      _amapLoading = null;
       reject(new Error("高德地图 JS API 加载失败，请检查网络"));
+    };
     document.head.appendChild(script);
   });
+  return _amapLoading;
 }
 
 // 创建地图
@@ -59,13 +64,13 @@ export function addAmapMarker(map, lat, lng, opts = {}) {
   return marker;
 }
 
-// 添加已定位客户标记（显示⭐）
+// 添加标记（客户显示⭐，搜索等其他用途传自定义文字）
 export function addAmapLabelMarker(map, lat, lng, label = "", onClick) {
   // 用 DOM 元素而非字符串，方便后续通过 getContent() 拿到元素操作样式
   const el = document.createElement("div");
   el.className = "marker-pin";
-  el.textContent = "⭐";
-  if (label) el.title = label;
+  // 有 label 时优先显示 label（如 📍），无 label 默认显示 ⭐（客户标记）
+  el.textContent = label || "⭐";
   const marker = new AMap.Marker({
     position: [lng, lat],
     content: el, // DOM 元素
