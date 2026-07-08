@@ -33,7 +33,7 @@ function freePort(port) {
   }
 }
 
-// 复制目录（递归，跳过已存在的文件）
+// 复制目录（递归，目标已存在的文件跳过不覆盖）
 function copyDirRecursive(src, dst) {
   if (!fs.existsSync(dst)) fs.mkdirSync(dst, { recursive: true })
   for (const entry of fs.readdirSync(src)) {
@@ -43,6 +43,20 @@ function copyDirRecursive(src, dst) {
     if (stat.isDirectory()) {
       copyDirRecursive(sp, dp)
     } else if (!fs.existsSync(dp)) {
+      fs.copyFileSync(sp, dp)
+    }
+  }
+}
+// 覆盖模式复制（用于从便携版迁移数据，保证数据不丢失）
+function copyDirRecursiveOverwrite(src, dst) {
+  if (!fs.existsSync(dst)) fs.mkdirSync(dst, { recursive: true })
+  for (const entry of fs.readdirSync(src)) {
+    const sp = path.join(src, entry)
+    const dp = path.join(dst, entry)
+    const stat = fs.statSync(sp)
+    if (stat.isDirectory()) {
+      copyDirRecursiveOverwrite(sp, dp)
+    } else {
       fs.copyFileSync(sp, dp)
     }
   }
@@ -158,22 +172,24 @@ async function resolveDataDir() {
     return fromInstaller
   }
 
-  // 2. 探测 legacy 路径
+  // 2. 探测 legacy 路径（升级后丢失数据时扩大搜索范围）
   const exeDir = process.env.PORTABLE_EXECUTABLE_DIR || path.dirname(app.getPath('exe'))
   const legacyDirs = [
-    path.join(exeDir, '晶振报价管理系统'),
-    path.join(app.getPath('documents'), '晶振报价管理系统'),
+    path.join(exeDir, '晶振报价管理系统'),                    // 便携版 exe 同目录
+    path.join(app.getPath('documents'), '晶振报价管理系统'),   // 我的文档
+    path.join(app.getPath('desktop'), '晶振报价管理系统'),     // 桌面（便携版常见位置）
+    path.join(app.getPath('home'), 'Downloads', '晶振报价管理系统'), // 下载文件夹
     path.join(app.getPath('userData'), 'data'),
     path.join(process.env.LOCALAPPDATA || '', 'crystal-price-system', 'data')
   ]
-  const found = legacyDirs.find(d => fs.existsSync(d) && hasDb(d))
+  let found = legacyDirs.find(d => fs.existsSync(d) && hasDb(d))
 
   if (found) {
     const target = path.join(app.getPath('documents'), '晶振报价管理系统')
     if (found !== target) {
       log(`resolveDataDir: 迁移 ${found} → ${target}`)
       try {
-        copyDirRecursive(found, target)
+        copyDirRecursiveOverwrite(found, target) // 覆盖模式，保证数据不丢失
         // 在旧位置写迁移标记
         fs.writeFileSync(
           path.join(found, 'MIGRATED.txt'),
@@ -605,7 +621,11 @@ ipcMain.handle('open-external', (_, url) => { shell.openExternal(url) })
 // === 自动更新 IPC（与 xnowpost 一致） ===
 ipcMain.handle('update:check', () => { checkForUpdates(); return true })
 ipcMain.handle('update:download', () => { downloadUpdate() })
-ipcMain.handle('update:install', () => { quitAndInstall() })
+ipcMain.handle('update:install', () => {
+  // 升级前保存当前数据目录路径，确保新版本能找到旧数据
+  if (process.env.DATA_DIR) saveUserConfig(process.env.DATA_DIR)
+  quitAndInstall()
+})
 ipcMain.handle('update:diagnose', () => {
   try {
     const pkg = require('electron-updater/package.json')
