@@ -990,6 +990,7 @@ async function initMap() {
     const center = saved ? JSON.parse(saved) : { lat: 30.5, lng: 114.3, zoom: 6 };
     map = createAmapMap(mapContainer.value, [center.lat, center.lng], center.zoom);
     map.on("click", (e) => {
+      if (!e.latlng) return; // 点击的是 InfoWindow/覆盖物，非地图本身
       if (selectedMode.value === "pick") {
         const wgs = gcj02ToWgs84(e.latlng.lat, e.latlng.lng);
         setFormCoords(wgs.lat, wgs.lng);
