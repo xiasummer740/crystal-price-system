@@ -2,18 +2,38 @@
   <div class="app-wrap">
     <header class="topbar">
       <div class="topbar-left"><span class="logo-dot"></span><span class="logo-text">晶振报价系统</span><span class="version-badge">v{{ appVersion }}</span><span v-if="isDev" class="dev-badge">开发版</span></div>
+      <!-- PC端导航按钮 -->
       <div class="topbar-right">
         <span class="clock-display" :title="clockDate">
           <span class="clock-dot"></span>{{ clockTime }}
         </span>
-        <button class="nav-btn" style="margin-right:6px;background:#fff7e6;color:#d48806;border-color:#ffe58f;cursor:pointer" @click="openNotesWin">📝 记事</button>
-        <button class="nav-btn" style="margin-right:6px;background:#e0f7fa;color:#00695c;border-color:#b2dfdb;cursor:pointer" @click="openMapWin">🗺️ 地图地址</button>
-        <router-link to="/translator" class="nav-btn" style="margin-right:6px;background:#f0f6ff;color:#1565c0;border-color:#bbdefb">规格书翻译</router-link>
-        <router-link to="/samples" class="nav-btn" style="margin-right:6px">样品登记</router-link>
-        <router-link to="/trash" class="nav-btn" style="margin-right:6px;color:#e53935;border-color:#ffcdd2">回收站</router-link>
-        <router-link to="/reports" class="nav-btn" style="background:#f9f0ff;color:#722ed1;border-color:#d3adf7">📊 汇报</router-link>
-        <router-link to="/mobile" class="nav-btn">手机版</router-link>
-        <button class="nav-btn" style="margin-left:6px;background:#f6ffed;color:#52c41a;border-color:#b7eb8f" @click="openDataFolder">📁 数据目录</button>
+        <button class="nav-btn hide-mobile" style="margin-right:6px;background:#fff7e6;color:#d48806;border-color:#ffe58f;cursor:pointer" @click="openNotesWin">📝 记事</button>
+        <button class="nav-btn hide-mobile" style="margin-right:6px;background:#e0f7fa;color:#00695c;border-color:#b2dfdb;cursor:pointer" @click="openMapWin">🗺️ 地图地址</button>
+        <router-link to="/translator" class="nav-btn hide-mobile" style="margin-right:6px;background:#f0f6ff;color:#1565c0;border-color:#bbdefb">规格书翻译</router-link>
+        <router-link to="/samples" class="nav-btn hide-mobile" style="margin-right:6px">样品登记</router-link>
+        <router-link to="/trash" class="nav-btn hide-mobile" style="margin-right:6px;color:#e53935;border-color:#ffcdd2">回收站</router-link>
+        <router-link to="/reports" class="nav-btn hide-mobile" style="background:#f9f0ff;color:#722ed1;border-color:#d3adf7">📊 汇报</router-link>
+        <router-link to="/mobile" class="nav-btn hide-mobile">手机版</router-link>
+        <button class="nav-btn hide-mobile" style="margin-left:6px;background:#f6ffed;color:#52c41a;border-color:#b7eb8f" @click="openDataFolder">📁 数据目录</button>
+        <!-- 移动端汉堡菜单 -->
+        <button class="mobile-menu-btn" @click="showMobileMenu = !showMobileMenu">
+          <span class="menu-bar"></span>
+          <span class="menu-bar"></span>
+          <span class="menu-bar"></span>
+        </button>
+      </div>
+      <!-- 移动端下拉菜单 -->
+      <div class="mobile-dropdown" v-if="showMobileMenu">
+        <div class="mobile-dropdown-backdrop" @click="showMobileMenu = false"></div>
+        <div class="mobile-dropdown-panel">
+          <button class="nav-btn mobile-nav-item" @click="showMobileMenu = false;openNotesWin()">📝 记事</button>
+          <button class="nav-btn mobile-nav-item" @click="showMobileMenu = false;openMapWin()">🗺️ 地图地址</button>
+          <router-link to="/translator" class="nav-btn mobile-nav-item" @click="showMobileMenu = false">规格书翻译</router-link>
+          <router-link to="/samples" class="nav-btn mobile-nav-item" @click="showMobileMenu = false">样品登记</router-link>
+          <router-link to="/trash" class="nav-btn mobile-nav-item" @click="showMobileMenu = false">回收站</router-link>
+          <router-link to="/reports" class="nav-btn mobile-nav-item" @click="showMobileMenu = false">📊 汇报</router-link>
+          <button class="nav-btn mobile-nav-item" @click="showMobileMenu = false;openDataFolder()">📁 数据目录</button>
+        </div>
       </div>
     </header>
 
@@ -458,6 +478,7 @@ function openMapWin() {
     if (!isElectron) router.push('/map-addresses')
   }
 }
+const showMobileMenu = ref(false)
 const showPopup = ref(false)
 const md = ref(null)
 const checkedIds = ref([])
@@ -920,6 +941,15 @@ onUnmounted(() => { if (clockTimer) clearInterval(clockTimer); if (colFilterTime
 .dev-badge{display:inline-block;padding:1px 6px;border-radius:3px;font-size:10px;font-weight:600;background:#ff6b35;color:#fff;margin-left:6px;line-height:1.4;vertical-align:middle}
 .version-badge{display:inline-block;padding:1px 5px;border-radius:3px;font-size:10px;font-weight:500;background:#e8e8e8;color:#888;margin-left:6px;line-height:1.4;vertical-align:middle;user-select:none}
 .nav-btn:hover{color:var(--color-primary);border-color:var(--color-primary)}
+/* 汉堡菜单 */
+.mobile-menu-btn{display:none;flex-direction:column;gap:3px;background:transparent;border:1px solid rgba(0,0,0,.1);border-radius:4px;padding:6px 7px;cursor:pointer;margin-left:4px;flex-shrink:0}
+.menu-bar{display:block;width:16px;height:2px;background:#555;border-radius:1px}
+.mobile-dropdown{display:none;position:absolute;top:100%;right:0;left:0;z-index:1000}
+.mobile-dropdown-backdrop{position:fixed;inset:0;background:transparent;z-index:1}
+.mobile-dropdown-panel{position:relative;z-index:2;margin:4px 8px;background:#fff;border:1px solid #e0e0e0;border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.12);padding:6px}
+.mobile-nav-item{display:block!important;width:100%;text-align:left;padding:10px 14px!important;margin:0!important;border:none!important;background:transparent!important;font-size:13px!important;color:#333!important;border-radius:6px}
+.mobile-nav-item:hover{background:#f5f6f8!important;color:var(--color-primary)!important}
+@media(max-width:768px){.mobile-menu-btn{display:flex}.mobile-dropdown{display:block}}
 .pop-inner{padding:16px;overflow-y:auto;height:100%}
 .pop-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
 .pop-head h3{font-size:16px;margin:0}.pbadge{font-size:12px;color:#999;font-weight:400}
@@ -1112,13 +1142,14 @@ onUnmounted(() => { if (clockTimer) clearInterval(clockTimer); if (colFilterTime
 /* ===== 移动端适配 ===== */
 @media (max-width: 768px) {
   .app-wrap{overflow-x:hidden}
-  .topbar{flex-wrap:wrap;padding:0 10px;height:auto;min-height:44px;gap:4px}
-  .topbar-right{flex-wrap:wrap;gap:4px}
+  .topbar{flex-wrap:wrap;padding:0 10px;height:auto;min-height:44px;gap:4px;position:relative}
+  .topbar-right{flex-wrap:nowrap;gap:4px}
   .topbar-right .clock-display{display:none}
+  .topbar-right .hide-mobile{display:none!important}
   .topbar-right .nav-btn{font-size:10px;padding:3px 6px;margin:0!important}
-  .topbar-right .nav-btn[href="/mobile"]{display:none}
   .version-badge{font-size:8px;padding:0 4px}
   .dev-badge{font-size:8px;padding:0 4px}
+  .topbar-left .logo-text{font-size:14px}
   .main-area{padding:10px 8px;overflow-x:hidden}
 
   /* 工具条 */
