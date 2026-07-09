@@ -991,14 +991,14 @@ async function initMap() {
     const center = saved ? JSON.parse(saved) : { lat: 30.5, lng: 114.3, zoom: 6 };
     map = createAmapMap(mapContainer.value, [center.lat, center.lng], center.zoom);
     map.on("click", (e) => {
-      if (!e.latlng) return; // 点击的是 InfoWindow/覆盖物，非地图本身
-      if (selectedMode.value === "pick") {
-        const wgs = gcj02ToWgs84(e.latlng.lat, e.latlng.lng);
+      // 关闭所有客户信息窗
+      Object.values(customerInfoWindows).forEach(iw => { try { iw.close(); } catch {} });
+      // 清除搜索结果标记
+      clearSearchMarker();
+      if (selectedMode.value === "pick" && e.lnglat) {
+        const wgs = gcj02ToWgs84(e.lnglat.lat, e.lnglat.lng);
         setFormCoords(wgs.lat, wgs.lng);
         placePickMarker(wgs.lat, wgs.lng);
-      } else {
-        // 非选点模式点击地图 → 清除搜索结果标记
-        clearSearchMarker();
       }
     });
     // 记住地图移动后的位置
@@ -1030,21 +1030,26 @@ function loadCustomerMarkers() {
     const marker = addAmapCustomerMarker(map, gcj.lat, gcj.lng, c.name, () =>
       locateCustomer(c),
     );
-    customerInfoWindows[c.id] = bindAmapPopup(
-      marker,
-      `
-      <div style="min-width:150px;font-family:sans-serif">
-        <div style="font-size:14px;font-weight:600;margin-bottom:4px">${c.name}</div>
-        <div style="font-size:11px;color:#888">${c.address || ""}</div>
-        <div style="font-size:11px;color:#888">${c.phone || ""}</div>
-        <div style="font-size:10px;color:#aaa;margin-top:4px">🧑‍💼 ${c.purchaser_count || 0}采购 · 📮 ${c.address_count || 0}地址</div>
-        <div style="display:flex;gap:6px;margin-top:6px">
-          <button onclick="window._selectMapCustomer(${c.id})" style="flex:1;background:#00695c;color:#fff;border:none;border-radius:4px;padding:4px 12px;font-size:11px;cursor:pointer">查看详情</button>
-          <button onclick="window._clearMapMarker(${c.id})" style="background:transparent;color:#e53935;border:1px solid #ffcdd2;border-radius:4px;padding:4px 10px;font-size:11px;cursor:pointer">🗑️清除定位</button>
+    // 创建信息窗
+    const info = bindAmapPopup(marker, '');
+    customerInfoWindows[c.id] = info;
+    // 自定义点击：先关所有窗，再开当前窗
+    marker.on('click', () => {
+      Object.values(customerInfoWindows).forEach(iw => { try { iw.close(); } catch {} });
+      info.setContent(`
+      <div class="popup-content">
+        <div class="popup-name">${c.name}</div>
+        <div class="popup-addr">${c.address || ''}</div>
+        <div class="popup-phone">${c.phone || ''}</div>
+        <div class="popup-meta">🧑‍💼 ${c.purchaser_count || 0}采购 · 📮 ${c.site_count || 0}收货点</div>
+        <div style="display:flex;gap:6px">
+          <button onclick="window._selectMapCustomer(${c.id})" class="popup-btn" style="flex:1">查看详情</button>
+          <button onclick="window._clearMapMarker(${c.id})" class="popup-btn" style="flex:none;background:#fff;color:#e53935;border:1px solid #ffcdd2">🗑️清除定位</button>
         </div>
       </div>
-    `,
-    );
+      `);
+      info.open(map, marker.getPosition());
+    });
     amapMarkers.push(marker);
     customerMarkers[c.id] = marker;
   }

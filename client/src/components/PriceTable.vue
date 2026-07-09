@@ -156,4 +156,23 @@ function openColFilter(col, label) { emit('openColFilter', col, label) }
 .pg-info{font-size:12px;color:#888;padding:0 4px}
 .ps-select{padding:3px 6px;border-radius:4px;border:1px solid #d9d9d9;font-size:11px;color:#888;background:#fff;cursor:pointer;font-family:inherit;outline:none}
 .ps-select:focus{border-color:var(--color-primary)}
+
+/* ===== 移动端适配 ===== */
+@media (max-width: 768px) {
+  .table-shell{overflow-x:auto!important;-webkit-overflow-scrolling:touch}
+  .table-shell::after{content:'← 左右滑动查看全部列 →';display:block;text-align:center;font-size:10px;color:#bbb;padding:4px 0;background:#fafafa;border-top:1px solid #f0f0f0;position:sticky;left:0}
+  .dt{font-size:11px}
+  .dt th,.dt td{padding:4px 3px;font-size:10px;white-space:nowrap}
+  .dt th{font-size:10px}
+  .act-col{gap:2px}
+  .row-btn{font-size:9px;padding:1px 4px}
+  .group-badge{font-size:9px;padding:1px 4px}
+  .col-filter{font-size:9px}
+  .pager-bar{flex-wrap:wrap;gap:8px;padding:8px 0}
+  .pg-btn{font-size:10px;padding:3px 8px}
+  .pg-info{font-size:11px}
+  .ps-select{font-size:10px;padding:2px 4px}
+  .ctag{font-size:9px;padding:0 3px}
+  .resize-handle{display:none}
+}
 </style>
