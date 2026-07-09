@@ -48,6 +48,7 @@ SQLite `server/data.db`，核心表 `material_prices`（14字段，软删除）�
 
 ## 项目特有规则
 
+- **🔥 改完代码必须发版** — 任何代码改动（修bug/加功能/改UI）完成后，必须：bump版本号 → `npm run package` → git commit+tag+push → GitHub Release。不发版祥哥没法点"检查更新"测试
 - **发版必须打包 exe 验证**：不能只靠 `npm start` 开发版测试，必须 `npm run package` → 安装 exe → 确认功能正常
 - **Electron 主进程文件改后自动重启**：`taskkill /f /im electron.exe` → 确认端口释放 → 重新启动
 - **仅改前端 CSS/模板**：只需 `npm run build`，无需重启主进程
