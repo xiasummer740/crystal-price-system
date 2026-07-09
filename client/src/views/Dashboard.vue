@@ -399,7 +399,10 @@
             <td><span class="ctag" :class="q.currency==='USD'?'u':'c'">{{ q.currency }}</span></td>
             <td>{{ q.standard_lead_time||'-' }}</td><td class="muted">{{ q.min_package ? q.min_package+'pcs' : '-' }}</td><td>{{ q.quoter||'-' }}</td>
             <td class="ellip" :title="q.first_inquiry_customer">{{ q.first_inquiry_customer||'-' }}</td><td class="ellip" :title="q.remarks">{{ q.remarks||'-' }}</td>
-            <td @click.stop><router-link :to="'/edit/'+q.id" class="row-btn edit" style="font-size:9px">改</router-link></td>
+            <td @click.stop style="display:flex;gap:2px;flex-wrap:wrap">
+              <router-link :to="'/edit/'+q.id" class="row-btn edit" style="font-size:9px">改</router-link>
+              <button class="row-btn del" style="font-size:9px" @click.stop="deletePopupRecord(q)">删</button>
+            </td>
           </tr></tbody></table></div>
         </div>
         <div v-if="md.logs && md.logs.length" class="log-section">
@@ -533,6 +536,27 @@ async function handleExport(){exporting.value=true;try{const p=new URLSearchPara
 function handleImport(){fileInput.value?.click()}
 async function onFileChange(e){const f=e.target.files[0];if(!f)return;const d=new FormData();d.append('file',f);try{const r=await importExcel(d);showToast(r.msg||'导入成功');reload()}catch(e){showToast('导入失败:'+e.message)};fileInput.value.value=''}
 async function handleDelete(item){try{await showConfirmDialog({title:'确认删除',message:`删除物料「${item.material_code||item.material_name}」的报价？`});await store.remove(item.id);showToast('已删除');reload()}catch(e){if(e==='cancel'||e?.message?.includes('cancel')) return; showToast('删除失败:'+(e.response?.data?.msg||e.message))}}
+async function deletePopupRecord(q) {
+  try {
+    await showConfirmDialog({title:'确认删除',message:`确定删除 ${(q.created_at||'').slice(0,10)} 的报价记录？\n含税价: ${fmtPrice(q.price_with_tax,q.currency)}`})
+    await store.remove(q.id)
+    showToast('已删除')
+    // 从弹出数据中移除已删除的记录
+    if (md.value) {
+      for (const f of Object.keys(md.value.factories)) {
+        const idx = md.value.factories[f].findIndex(r => r.id === q.id)
+        if (idx >= 0) {
+          md.value.factories[f].splice(idx, 1)
+          md.value.total--
+          break
+        }
+      }
+    }
+  } catch(e) {
+    if(e==='cancel'||e?.message?.includes('cancel')) return
+    showToast('删除失败:'+(e.response?.data?.msg||e.message))
+  }
+}
 // 报价计算器
 const showCalc = ref(false)
 const calcTaxMode = ref('ex')
