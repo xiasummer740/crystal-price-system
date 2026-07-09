@@ -2785,6 +2785,131 @@ onUnmounted(() => {
   border-radius: 50%;
   display: inline-block;
 }
+
+/* ===== 移动端适配 ===== */
+@media (max-width: 768px) {
+  .map-page{overflow-x:hidden}
+  .map-header{flex-wrap:wrap;height:auto;padding:6px 10px;gap:4px}
+  .header-left h3{font-size:14px}
+  .header-right{flex-wrap:wrap;gap:4px;width:100%}
+  .header-right .search-wrap{width:100%;order:-1;margin-bottom:2px}
+  .header-right .hdr-btn{font-size:10px;padding:4px 8px}
+  .map-body{flex-direction:column}
+
+  /* 左侧面板 — 手机端固定到底部 */
+  .side-panel{width:100%!important;min-width:0!important;max-height:40%;border-right:none;border-top:1px solid #e0e0e0;order:1;flex-shrink:0}
+  .side-panel.collapsed{width:100%!important;height:40px!important;min-height:40px;overflow:hidden}
+  .side-panel.collapsed .customer-list,
+  .side-panel.collapsed .region-filter{display:none}
+  .side-panel.collapsed .panel-toolbar{margin-bottom:0}
+  .side-panel:not(.collapsed){height:auto;min-height:120px}
+  .panel-toggle{display:block}
+  .panel-title{font-size:13px}
+  .customer-list{max-height:200px}
+  .customer-card{padding:0}
+  .cc-left{padding:8px 8px 8px 12px}
+  .cc-name{font-size:12px}
+  .cc-addr{font-size:10px}
+  .cc-row2{font-size:9px;gap:4px 8px}
+  .cc-edit-btn{width:28px;padding-top:8px;font-size:12px}
+  .region-chip{font-size:9px;padding:2px 6px}
+  .group-header{font-size:9px;padding:5px 12px 3px}
+  .panel-empty{font-size:11px;padding:12px}
+
+  /* 地图容器 */
+  .map-container{flex:1;min-height:300px;order:0}
+  .map-legend{font-size:8px;padding:4px 6px;bottom:8px;right:6px;gap:2px}
+  .legend-dot{width:6px;height:6px}
+
+  /* 地图搜索框 */
+  .map-search-wrap{width:94%;top:6px}
+  .map-search-bar{padding:4px 6px}
+  .map-search-input{font-size:12px}
+  .map-search-btn{font-size:11px;padding:4px 8px}
+  .search-dropdown{max-height:200px}
+  .search-result-item{padding:6px 10px}
+  .sr-name{font-size:12px}
+  .sr-addr{font-size:10px}
+  .sr-meta{font-size:9px}
+  .sr-type{font-size:8px;max-width:60px}
+  .sr-load-more{font-size:10px;padding:6px}
+
+  /* 选点底部确认条 */
+  .map-pick-bar{bottom:12px;padding:8px 14px;gap:8px;flex-wrap:wrap;justify-content:center;white-space:normal}
+  .pick-bar-text{font-size:10px;width:100%;text-align:center}
+  .pick-bar-confirm{font-size:12px;padding:5px 14px}
+  .pick-bar-cancel{font-size:11px;padding:3px 10px}
+
+  /* 地图错误/加载 */
+  .map-loading{font-size:12px}
+  .map-error{font-size:12px}
+
+  /* 表单弹出层 */
+  .form-wrap{padding:12px}
+  .form-wrap h3{font-size:16px}
+  .form-wrap :deep(.van-field){padding:8px 0}
+  .coord-btn{font-size:12px;padding:8px 12px;width:100%}
+  .inline-contact-row{flex-direction:column;gap:6px;padding:8px}
+  .inline-contact-row :deep(.van-field){padding:4px 0}
+  .contact-del{position:absolute;top:4px;right:4px;width:28px;height:28px;font-size:14px}
+  .customer-suggest{max-height:150px}
+  .cs-item{font-size:12px;padding:8px 10px}
+
+  /* 客户详情弹出层 */
+  .detail-wrap{padding:12px}
+  .dt-h-name{font-size:16px}
+  .dt-h-actions{flex-wrap:wrap;gap:4px}
+  .dt-ha{font-size:11px;padding:4px 8px}
+  .dt-tabs{gap:0}
+  .dt-tab{font-size:12px;padding:8px 4px;gap:3px}
+  .dt-tab-icon{font-size:14px}
+  .dt-tab-badge{font-size:9px;padding:0 4px;min-width:16px}
+  .dt-body{padding:8px 0}
+  .dt-body-head{font-size:12px;flex-wrap:wrap;gap:4px}
+  .dt-add-btn{font-size:11px;padding:4px 10px}
+  .dt-empty{font-size:12px;padding:16px}
+  .contact-card{padding:8px}
+  .cc-main{gap:8px}
+  .cc-avatar{width:28px;height:28px;font-size:11px}
+  .cc-body .cc-name{font-size:12px}
+  .cc-body .cc-meta{font-size:10px}
+  .cc-copy-row{padding:4px 8px;font-size:10px}
+  .site-card{padding:8px}
+  .sc-head{flex-wrap:wrap;gap:4px}
+  .sc-name{font-size:12px}
+  .sc-type-tag{font-size:9px;padding:1px 4px}
+  .sc-actions{gap:2px}
+  .sc-edit,.sc-del{width:24px;height:24px;font-size:11px}
+  .sc-body{font-size:11px}
+  .sc-locate{font-size:10px;padding:2px 6px}
+  .sc-row-ico{font-size:12px}
+  .sc-linked-contacts{font-size:10px}
+  .sc-coord-text{font-size:10px}
+
+  /* 联系人表单 */
+  .purchaser-form{padding:12px}
+  .purchaser-form h3{font-size:16px}
+  .pf-actions{flex-direction:column;gap:8px}
+  .pf-actions button{width:100%;padding:10px}
+  .pf-del-btn{text-align:center}
+
+  /* 收货点表单 */
+  .site-form-wrap{padding:12px}
+  .site-form-wrap h3{font-size:16px}
+
+  /* 导入对话框 */
+  .import-confirm-wrap{padding:12px}
+  .import-confirm-wrap h3{font-size:16px}
+  .import-cust-item{padding:8px 10px;font-size:12px}
+  .import-actions{gap:6px}
+  .import-actions button{font-size:12px;padding:8px 12px}
+
+  /* 添加到行程弹出层 */
+  .trip-pick-wrap{padding:12px}
+  .trip-pick-wrap h3{font-size:16px}
+  .trip-pick-list{max-height:200px}
+  .trip-pick-item{padding:8px 10px;font-size:12px}
+}
 </style>
 
 <style>

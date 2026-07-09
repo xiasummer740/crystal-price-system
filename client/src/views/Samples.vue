@@ -367,4 +367,47 @@ onMounted(()=>{loadOptions();reload()})
 .adv-reset{flex:1;padding:8px;border-radius:6px;border:1px solid #d9d9d9;background:#fff;color:#666;font-size:13px;cursor:pointer;font-family:inherit}
 .adv-apply{flex:1;padding:8px;border-radius:6px;border:none;background:var(--color-primary);color:#fff;font-size:13px;cursor:pointer;font-family:inherit}
 .adv-apply:hover{background:#1676d9}
+
+/* ===== 移动端适配 ===== */
+@media (max-width: 768px) {
+  .app-wrap{overflow-x:hidden}
+  .topbar{height:auto;padding:0 10px;flex-wrap:wrap;gap:4px;min-height:44px}
+  .topbar-left{gap:4px}
+  .logo-text{font-size:13px}
+  .nav-btn{font-size:10px;padding:3px 6px}
+  .main-area{padding:0 6px 12px;overflow-x:hidden}
+  .toolbar{flex-wrap:wrap;gap:4px}
+  .search-box{max-width:100%;flex:1 1 100%;order:-1;height:38px}
+  .info-row{flex-direction:column;gap:4px;align-items:stretch;padding:6px 8px}
+  .filter-group{flex-wrap:wrap;gap:3px}
+  .filter-group :deep(.van-dropdown-menu){flex:1;min-width:0}
+  .filter-group :deep(.van-dropdown-menu__title){font-size:10px!important;padding:0 4px!important}
+  .stat-text{font-size:11px}
+  .table-shell{overflow-x:auto;-webkit-overflow-scrolling:touch}
+  .dt{font-size:11px;min-width:500px}
+  .dt th,.dt td{padding:4px;white-space:nowrap}
+  .col-filter-tags{gap:4px}
+  .cf-tag{font-size:10px;padding:2px 6px}
+  .act-col{gap:2px}
+  .row-btn{font-size:10px;padding:2px 6px}
+  .pager{flex-wrap:wrap;gap:4px}
+  .pg-btn{font-size:10px;padding:3px 8px}
+  .pg-info{font-size:11px}
+  .form-panel{padding:14px 12px}
+  .form-panel h3{font-size:16px}
+  .form-btns{flex-direction:column;gap:8px}
+  .form-btns .van-button{width:100%}
+  /* 高级筛选 */
+  .adv-title{font-size:15px}
+  .adv-row{flex-wrap:wrap}
+  .adv-sel{font-size:11px;padding:5px 6px;min-width:60px}
+  .adv-op{width:70px}
+  .adv-input{font-size:11px;padding:5px 6px}
+  .adv-reset,.adv-apply{font-size:12px;padding:8px}
+  .cf-pop-head{padding:10px 12px 0}
+  .cf-pop-head h4{font-size:15px}
+  .cf-pop-item{font-size:12px;padding:8px 10px}
+}
+
+/* ===== 通用设置弹出层 (unscoped) ===== */
 </style>

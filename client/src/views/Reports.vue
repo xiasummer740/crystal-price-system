@@ -310,4 +310,48 @@ async function copyReport() {
 .report-action-btn.close:hover{color:#ee0a24}
 .report-body{flex:1;overflow-y:auto;padding:16px;background:#fafafa}
 .report-text{margin:0;white-space:pre-wrap;word-wrap:break-word;font-size:13px;line-height:1.8;color:#323233;font-family:'Microsoft YaHei','PingFang SC',sans-serif}
+
+/* ===== 移动端适配 ===== */
+@media (max-width: 768px) {
+  .app-wrap{overflow-x:hidden}
+  .topbar{height:auto;padding:0 10px;flex-wrap:wrap;gap:4px;min-height:44px}
+  .topbar-left{gap:4px}
+  .logo-text{font-size:13px}
+  .logo-sub{font-size:10px}
+  .nav-btn{font-size:10px;padding:3px 6px}
+  .main-area{padding:8px 10px;overflow-x:hidden}
+  .tab-bar{gap:4px}
+  .tab-btn{font-size:11px;padding:5px 12px}
+  .tab-date{font-size:11px;flex-wrap:wrap}
+  .tab-date input{font-size:11px;padding:3px 6px;max-width:100px}
+  .tab-range{font-size:11px}
+  .ocr-hint{font-size:11px;padding:6px}
+  .stat-row{gap:6px}
+  .stat-card{padding:10px 4px;min-width:60px}
+  .stat-num{font-size:22px}
+  .highlights{gap:4px}
+  .hl-tag{font-size:10px;padding:3px 8px}
+  .customer-group{border-radius:8px}
+  .customer-header{padding:8px 10px;flex-wrap:wrap;gap:4px}
+  .customer-name{font-size:13px}
+  .customer-count{font-size:10px}
+  .customer-done,.customer-pending{font-size:10px}
+  .customer-summary-btn{font-size:10px;padding:2px 6px}
+  .report-item{padding:8px 10px;gap:8px}
+  .item-status{font-size:14px}
+  .item-title{font-size:12px}
+  .item-content{font-size:10px}
+  .item-ocr{font-size:10px;padding:3px 6px}
+  .empty-state{padding:40px 0}
+  .report-btn{font-size:11px;padding:6px 12px;min-width:60px}
+  .report-overlay{left:2%!important;right:2%!important;top:4vh!important;bottom:4vh!important;border-radius:8px}
+  .report-header{padding:8px 12px}
+  .report-header h3{font-size:14px}
+  .report-header-actions{gap:4px}
+  .report-action-btn{font-size:11px;padding:3px 8px}
+  .report-body{padding:12px}
+  .report-text{font-size:12px;line-height:1.6}
+}
+
+/* ===== 公司详情弹出层 (unscoped) ===== */
 </style>

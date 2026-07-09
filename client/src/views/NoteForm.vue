@@ -499,4 +499,13 @@ async function saveAndNew() {
 .reminder-btns { display: flex; gap: 10px; margin-top: 16px; }
 .reminder-cancel { flex: 1; padding: 10px; border-radius: 8px; border: 1px solid #d9d9d9; background: #fff; color: #666; font-size: 14px; cursor: pointer; font-family: inherit; }
 .reminder-ok { flex: 1; padding: 10px; border-radius: 8px; border: none; background: var(--color-primary); color: #fff; font-size: 14px; cursor: pointer; font-family: inherit; }
+
+/* ===== 移动端适配 ===== */
+@media (max-width: 768px) {
+  .clear-reminder{font-size:11px}
+  .reminder-picker{padding:14px}
+  .reminder-picker h4{font-size:15px}
+  .reminder-btns{gap:6px}
+  .reminder-cancel,.reminder-ok{font-size:13px;padding:8px}
+}
 </style>

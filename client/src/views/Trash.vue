@@ -95,4 +95,23 @@ onMounted(loadTrash)
 .row-btn.del{color:#ee0a24;border-color:#ee0a24}.row-btn.del:hover{background:#fff0f0}
 .tb-btn{padding:4px 12px;border-radius:4px;font-size:11px;cursor:pointer;border:1px solid #d9d9d9;background:#fff;color:#555;font-family:inherit}
 .tb-btn.danger{color:#ee0a24;border-color:#ee0a24}.tb-btn.danger:hover{background:#fff0f0}
+
+/* ===== 移动端适配 ===== */
+@media (max-width: 768px) {
+  .app-wrap{overflow-x:hidden}
+  .topbar{height:auto;padding:0 10px;flex-wrap:wrap;gap:4px;min-height:44px}
+  .topbar-left{gap:4px}
+  .logo-text{font-size:13px}
+  .topbar-right{gap:4px}
+  .nav-btn{font-size:10px;padding:3px 6px}
+  .main-area{padding:10px 8px;overflow-x:hidden}
+  .info-row{flex-direction:column;gap:6px;align-items:stretch;padding:8px}
+  .stat-text{font-size:11px}
+  .table-shell{overflow-x:auto;-webkit-overflow-scrolling:touch}
+  .dt{font-size:11px;min-width:500px}
+  .dt th,.dt td{padding:4px;white-space:nowrap}
+  .tb-btn{font-size:10px;padding:4px 8px}
+  .act-col{gap:2px}
+  .row-btn{font-size:9px;padding:1px 5px}
+}
 </style>

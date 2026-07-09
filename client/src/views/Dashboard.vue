@@ -1109,4 +1109,98 @@ onUnmounted(() => { if (clockTimer) clearInterval(clockTimer); if (colFilterTime
 @keyframes dlShine{0%{background-position:200% 0}100%{background-position:-200% 0}}
 .dl-pct{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:11px;color:#666;font-weight:500}
 
+/* ===== 移动端适配 ===== */
+@media (max-width: 768px) {
+  .app-wrap{overflow-x:hidden}
+  .topbar{flex-wrap:wrap;padding:0 10px;height:auto;min-height:44px;gap:4px}
+  .topbar-right{flex-wrap:wrap;gap:4px}
+  .topbar-right .clock-display{display:none}
+  .topbar-right .nav-btn{font-size:10px;padding:3px 6px;margin:0!important}
+  .topbar-right .nav-btn[href="/mobile"]{display:none}
+  .version-badge{font-size:8px;padding:0 4px}
+  .dev-badge{font-size:8px;padding:0 4px}
+  .main-area{padding:10px 8px;overflow-x:hidden}
+
+  /* 工具条 */
+  .toolbar{flex-wrap:wrap;gap:6px;margin-bottom:8px}
+  .search-box{max-width:100%;flex:1 1 100%;order:-1;margin-bottom:4px;height:40px}
+  .tb-btn{padding:8px 12px;font-size:12px;flex-shrink:0}
+
+  /* 筛选行 */
+  .info-row{flex-direction:column;align-items:stretch;gap:6px;padding:8px 10px}
+  .filter-group{flex-wrap:wrap;gap:4px}
+  .filter-group :deep(.van-dropdown-menu){flex:1;min-width:0}
+  .filter-group :deep(.van-dropdown-menu__title){font-size:11px!important;padding:0 6px!important}
+  .date-field{width:auto;flex:1;min-width:0}
+  .date-field input{font-size:12px!important}
+  .date-arrow{display:none}
+  .stat-group{font-size:11px;text-align:left;white-space:normal}
+  .reset-btn{padding:4px 10px;font-size:11px}
+  .fdiv{display:none}
+
+  /* 列筛选标签 */
+  .col-filter-tags{gap:4px}
+  .cf-tag{font-size:10px;padding:2px 6px}
+  .lan-tip{font-size:10px;padding:6px;word-break:break-all}
+
+  /* 弹出层 - 报价详情表格 */
+  .pop-inner{padding:12px}
+  .pop-head{flex-wrap:wrap;gap:4px}
+  .pop-head h3{font-size:14px}
+  .mtw{overflow-x:auto;-webkit-overflow-scrolling:touch}
+  .mt{font-size:9px;min-width:500px}
+  .mt th,.mt td{padding:3px 4px;white-space:nowrap}
+  .fg{margin-bottom:8px}
+  .fh{font-size:12px;padding:4px 8px;flex-wrap:wrap}
+  .pop-code{font-size:12px}
+  .row-btn{padding:3px 6px;font-size:10px!important}
+
+  /* 报价计算器 */
+  .calc-wrap{padding:16px}
+  .calc-title{font-size:16px}
+  .calc-profit-wrap{flex-direction:column;gap:8px}
+  .calc-profit-mid{min-width:0;flex:none}
+  .calc-profit-right{min-width:0;flex:none}
+  .calc-row{flex-wrap:wrap;gap:6px}
+  .calc-row label{min-width:50px;font-size:12px}
+  .calc-input{font-size:14px;padding:8px 10px}
+  .calc-input.short{max-width:none;flex:1}
+  .calc-toggle button{padding:6px 12px;font-size:12px}
+  .calc-profit-btns{gap:4px}
+  .calc-pbtn{padding:4px 8px;font-size:11px}
+  .cr-final-price{font-size:24px}
+  .cr-row{font-size:12px}
+
+  /* 系统设置 */
+  .set-wrap{padding:16px}
+  .set-wrap h3{font-size:16px}
+  .update-area{gap:6px}
+  .update-btn{padding:6px 12px;font-size:12px}
+
+  /* 高级筛选 */
+  .adv-title{font-size:16px}
+  .adv-row{flex-wrap:wrap;gap:4px}
+  .adv-sel{min-width:60px;font-size:11px}
+  .adv-input{min-width:60px;font-size:11px}
+
+  /* 规格批量编辑 */
+  .spec-edit-wrap{padding:12px}
+  .spec-edit-wrap h3{font-size:16px}
+
+  /* 日志查看器 */
+  .log-file-item{padding:8px 10px;font-size:12px}
+  .log-file-name{font-size:12px}
+  .log-content-header{flex-wrap:wrap;gap:6px}
+  .log-content{font-size:10px;padding:8px;max-height:200px}
+  .log-actions{gap:4px;padding:8px 12px}
+  .log-actions .tb-btn{font-size:11px;padding:6px 10px}
+
+  /* 更新区域 */
+  .set-divider{margin:12px 0}
+  .rn-body{font-size:10px;max-height:120px}
+
+  /* 价格变更日志 */
+  .log-item{flex-wrap:wrap;gap:4px;font-size:10px}
+  .log-time{min-width:70px}
+}
 </style>

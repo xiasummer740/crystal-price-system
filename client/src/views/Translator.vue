@@ -289,4 +289,29 @@ function resetAll() {
 }
 .tl-loading-state{text-align:center;padding:40px;color:#999;font-size:13px}
 .tl-placeholder{text-align:center;padding:40px;color:#bbb;font-size:13px}
+
+/* ===== 移动端适配 ===== */
+@media (max-width: 768px) {
+  .app-wrap{overflow-x:hidden}
+  .topbar{height:auto;padding:0 10px;flex-wrap:wrap;gap:4px;min-height:44px}
+  .topbar-left{gap:4px}
+  .logo-text{font-size:13px}
+  .nav-btn{font-size:10px;padding:3px 6px}
+  .tl-toolbar{padding:6px 10px;flex-wrap:wrap;gap:4px}
+  .tl-toolbar-actions{gap:4px;margin-left:0;width:100%}
+  .tl-file-info{font-size:12px;width:100%}
+  .tl-btn{font-size:11px;padding:5px 10px}
+  .tl-columns{flex-direction:column}
+  .tl-original-panel{border-right:none;border-bottom:2px solid #e8e8e8;max-height:50vh}
+  .tl-panel-title{font-size:12px;padding:6px 12px}
+  .tl-scroll{padding:10px}
+  .tl-upload-box{padding:30px 20px}
+  .tl-upload-icon{font-size:36px}
+  .tl-upload-text{font-size:14px}
+  .tl-upload-sub{font-size:11px}
+  .tl-page-label{font-size:10px;padding:3px 8px}
+  .tl-loading-state{font-size:12px;padding:20px}
+  .tl-placeholder{font-size:12px;padding:20px}
+  .tl-error-bar{font-size:11px;padding:6px 10px}
+}
 </style>

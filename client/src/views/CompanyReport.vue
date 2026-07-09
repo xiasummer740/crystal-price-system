@@ -275,4 +275,35 @@ function attachmentCount(item) {
 .reminder-tag{color:#e65100;background:#fff3e0}
 
 .empty-state{padding:60px 0}
+
+/* ===== 移动端适配 ===== */
+@media (max-width: 768px) {
+  .app-wrap{overflow-x:hidden}
+  .topbar{padding:0 10px;flex-wrap:wrap;height:auto;min-height:44px;gap:4px}
+  .topbar-left{gap:6px}
+  .logo-text{font-size:13px}
+  .logo-sub{font-size:10px;display:none}
+  .back-btn{font-size:11px;padding:3px 6px}
+  .date-label{font-size:10px;padding:3px 6px}
+  .main-area{padding:8px 10px;overflow-x:hidden}
+  .tab-bar{gap:4px;flex-wrap:wrap}
+  .tab-btn{font-size:11px;padding:5px 12px}
+  .loading-state{padding:40px 0}
+  .summary-stats{gap:6px}
+  .stat-item{padding:10px 4px;min-width:60px}
+  .stat-num{font-size:22px}
+  .cat-group{border-radius:8px;margin-bottom:8px}
+  .cat-header{padding:8px 10px}
+  .cat-name{font-size:13px}
+  .cat-count{font-size:10px}
+  .note-item{padding:10px 12px}
+  .note-title-row{gap:4px}
+  .note-title{font-size:13px}
+  .note-status{font-size:12px}
+  .note-date{font-size:10px}
+  .note-content{font-size:11px}
+  .note-meta{gap:4px}
+  .meta-tag{font-size:9px;padding:1px 5px}
+  .empty-state{padding:40px 0}
+}
 </style>

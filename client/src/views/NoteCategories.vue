@@ -89,4 +89,14 @@ async function onDelete(cat, i) {
 .cat-add { display: block; width: 100%; padding: 10px; border-radius: 8px; border: 1px dashed #d9d9d9; background: transparent; color: var(--color-primary); font-size: 14px; cursor: pointer; font-family: inherit; margin: 8px 0; transition: all .15s; }
 .cat-add:hover { border-color: var(--color-primary); background: rgba(var(--color-primary-rgb),.04); }
 .cat-hint { font-size: 11px; color: #bbb; text-align: center; margin: 4px 0 0; }
+
+/* ===== 移动端适配 ===== */
+@media (max-width: 768px) {
+  .cat-item{padding:10px 8px;font-size:12px}
+  .cat-name{font-size:12px}
+  .cat-count{font-size:10px}
+  .cat-del{width:24px;height:24px;font-size:12px}
+  .cat-add{font-size:13px;padding:8px}
+  .cat-hint{font-size:10px}
+}
 </style>

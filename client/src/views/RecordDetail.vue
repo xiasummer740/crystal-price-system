@@ -74,4 +74,11 @@ onMounted(async ()=>{ detail.value = await store.loadDetail(route.params.id) })
 .detail-btn.primary{background:var(--color-primary);color:#fff}
 .detail-btn.outline{background:transparent;color:var(--color-primary);border:1px solid var(--color-primary)}
 .detail-btn.danger{background:transparent;color:#ee0a24;border:1px solid #ee0a24}
+
+/* ===== 移动端适配 ===== */
+@media (max-width: 768px) {
+  .detail-btn{font-size:13px;padding:10px}
+  .price-text{font-size:15px}
+  .spec-link{font-size:12px}
+}
 </style>

@@ -645,4 +645,12 @@ onUnmounted(() => {
 .fab { position: fixed; bottom: 24px; right: 24px; width: 52px; height: 52px; border-radius: 50%; background: var(--color-primary); color: #fff; font-size: 24px; display: flex; align-items: center; justify-content: center; text-decoration: none; box-shadow: 0 4px 16px rgba(var(--color-primary-rgb),.3); z-index: 100; transition: all .2s; }
 .fab:hover { background: #1676d9; transform: scale(1.08); box-shadow: 0 6px 24px rgba(var(--color-primary-rgb),.4); }
 .fab:active { transform: scale(.95); }
+
+/* ===== 移动端适配 ===== */
+@media (max-width: 768px) {
+  .kanban-title{font-size:12px}
+  .kanban-meta{font-size:9px}
+  .kanban-cat{font-size:9px}
+  .fab{bottom:80px;right:16px;width:48px;height:48px;font-size:22px}
+}
 </style>

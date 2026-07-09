@@ -302,4 +302,11 @@ async function copyCurrentImage() {
 .viewer-nav:active { transform: translateY(-50%) scale(.95); }
 .viewer-prev { left: 20px; }
 .viewer-next { right: 20px; }
+
+/* ===== 移动端适配 ===== */
+@media (max-width: 768px) {
+  .viewer-nav{width:40px;height:40px;font-size:24px}
+  .viewer-prev{left:8px}
+  .viewer-next{right:8px}
+}
 </style>

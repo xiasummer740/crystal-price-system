@@ -83,7 +83,7 @@
       <van-tabbar-item icon="search" to="/mobile">查询</van-tabbar-item>
       <van-tabbar-item icon="add-o" to="/add">新增</van-tabbar-item>
       <van-tabbar-item icon="desktop-o" to="/">PC后台</van-tabbar-item>
-      <van-tabbar-item icon="map-marked" @click="showMapPicker = true">🗺️</van-tabbar-item>
+      <van-tabbar-item icon="map-marked" to="/map-addresses">🗺️ 地图</van-tabbar-item>
     </van-tabbar>
 
     <!-- 地图 APP 选择 -->

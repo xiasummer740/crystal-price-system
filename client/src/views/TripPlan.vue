@@ -774,6 +774,65 @@ onUnmounted(() => {
 .ps-addr { flex: 1; font-size: 11px; color: #888; }
 .ps-add { color: #00695c; font-weight: 700; font-size: 16px; }
 .point-search-empty { text-align: center; color: #999; font-size: 12px; padding: 12px; }
+
+/* ===== 移动端适配 ===== */
+@media (max-width: 768px) {
+  .trip-page{overflow-x:hidden}
+  .trip-header{height:auto;padding:6px 10px;flex-wrap:wrap;gap:4px}
+  .header-left h3{font-size:14px}
+  .header-right{gap:4px;flex-wrap:wrap}
+  .hdr-btn{font-size:10px;padding:4px 8px}
+  .back-link{font-size:13px}
+
+  .trip-body{flex-direction:column;overflow:auto}
+  .plan-list{width:100%;min-width:0;border-right:none;border-bottom:1px solid #e0e0e0;max-height:250px}
+  .date-nav{padding:8px 12px;flex-wrap:wrap}
+  .date-input{font-size:12px;padding:5px 8px;flex:1;min-width:0}
+  .date-badge{font-size:11px}
+  .plan-card{padding:10px}
+  .pc-date{font-size:13px}
+  .pc-title{font-size:12px}
+  .pc-meta{font-size:10px}
+  .plan-empty{font-size:12px;padding:16px}
+  .create-btn{font-size:12px;padding:8px 16px}
+  .ap-header{font-size:11px;padding:8px 12px}
+  .ap-item{font-size:11px;padding:6px 12px}
+  .ap-date{min-width:60px}
+  .ap-count{font-size:9px}
+
+  .plan-editor{padding:10px;overflow:visible}
+  .eh-info{flex-direction:column;gap:6px}
+  .edit-title{font-size:14px;padding:8px 10px;width:100%;box-sizing:border-box}
+  .edit-date{font-size:12px;width:100%;box-sizing:border-box}
+  .pl-header{font-size:13px}
+  .add-point-btn{font-size:10px;padding:4px 10px}
+  .point-item{padding:6px 8px;gap:6px}
+  .drag-handle{font-size:14px}
+  .pt-order{width:18px;height:18px;font-size:9px}
+  .pt-name{font-size:12px}
+  .pt-addr{font-size:10px}
+  .pt-contact{font-size:9px}
+  .pt-notes{font-size:9px}
+  .pt-btn{font-size:11px}
+  .pl-empty{font-size:11px;padding:12px}
+
+  .route-preview{height:180px;margin:8px 0}
+  .route-info{font-size:10px;padding:4px 8px;left:4px;top:4px;flex-wrap:wrap}
+  .ri-icon{font-size:12px}
+  .ri-nav{font-size:9px;padding:2px 6px}
+  .route-hint{font-size:10px;padding:3px 6px;left:4px;bottom:4px}
+  .route-loading{font-size:11px}
+
+  .form-wrap{padding:12px}
+  .form-wrap h3{font-size:16px}
+  .form-btns{flex-direction:column;gap:8px}
+  .form-btns .van-button{width:100%}
+  .ps-item{padding:8px 10px;gap:6px}
+  .ps-name{font-size:12px}
+  .ps-addr{font-size:10px}
+  .ps-add{font-size:14px}
+  .point-search-results{max-height:160px}
+}
 </style>
 
 <style>
