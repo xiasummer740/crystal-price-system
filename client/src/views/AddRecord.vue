@@ -4,19 +4,23 @@
     <div class="page-content">
       <van-form @submit="onSubmit">
         <van-cell-group inset title="物料信息">
-          <van-field v-model="form.material_code" label="物料编码" placeholder="输入编码自动匹配" @change="onCodeChange" />
-          <van-field v-model="form.material_name" label="物料名称" placeholder="物料名称" />
-          <van-field v-model="form.material_spec" label="物料规格" placeholder="如：SMD3225" />
+          <van-field v-model="form.material_code" label="物料编码" placeholder="输入编码自动匹配" @change="onCodeChange" :readonly="isEdit" />
+          <van-field v-model="form.material_name" label="物料名称" placeholder="物料名称" :readonly="isEdit" />
+          <van-field v-model="form.material_spec" label="物料规格" placeholder="如：SMD3225" :readonly="isEdit" />
           <!-- 品类：快捷选填 -->
           <div class="sug-wrapper">
-            <van-field v-model="form.category" label="物料品类" placeholder="如：贴片晶振" @focus="openSug('category')" @input="filterSug('category')" />
+            <van-field v-model="form.category" label="物料品类" placeholder="如：贴片晶振" @focus="openSug('category')" @input="filterSug('category')" :readonly="isEdit" />
             <div class="sug-drop" v-if="activeSug==='category' && sugFiltered.category.length">
               <div v-for="v in sugFiltered.category" :key="v" class="sug-item" @click="pickSug('category',v)">{{ v }}</div>
             </div>
           </div>
+          <!-- 编辑模式提示 -->
+          <div v-if="isEdit" style="padding:8px 16px 12px;font-size:12px;color:#e6a23c;background:#fffbe6;border-radius:0 0 6px 6px">
+            ⚠️ 修改产品参数请回到首页 → 点击物料编码 → 在弹窗中点击「✎ 产品参数」统一修改
+          </div>
         </van-cell-group>
 
-        <van-cell-group inset title="技术参数">
+        <van-cell-group v-if="!isEdit" inset title="技术参数">
           <!-- 品牌：快捷选填 -->
           <div class="sug-wrapper">
             <van-field v-model="form.brand" label="品牌" placeholder="如：TXC" @focus="openSug('brand')" @input="filterSug('brand')" />
