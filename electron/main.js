@@ -369,17 +369,6 @@ function createWindow(port) {
     }
   })
 
-  // 清除所有缓存和 Service Worker，确保加载最新版本
-  const ses = mainWindow.webContents.session
-  Promise.all([
-    ses.clearCache(),
-    ses.clearStorageData({ storages: ['serviceworkers', 'cachestorage', 'localstorage', 'indexdb', 'shadercache'] })
-  ]).then(() => {
-    log('Cache cleared')
-  }).catch(e => {
-    log('Cache clear error: ' + e.message)
-  })
-
   mainWindow.setMenuBarVisibility(false)
   mainWindow.once('ready-to-show', () => {
     log('Window ready to show')
