@@ -59,17 +59,20 @@
           </button>
         </div>
 
-        <!-- 区域分组筛选 -->
-        <div class="region-filter" v-if="regionGroups.length">
-          <span
-            v-for="rg in regionGroups"
-            :key="rg.region"
-            class="region-chip"
-            :class="{ active: activeRegion === rg.region }"
-            @click="toggleRegion(rg.region)"
-          >
-            {{ rg.region }} ({{ rg.count }})
-          </span>
+        <!-- 区域分组筛选（省→市层级） -->
+        <div class="region-filter" v-if="regionByProvince.length">
+          <template v-for="pg in regionByProvince" :key="pg.province">
+            <span class="region-province">{{ pg.province }}</span>
+            <span
+              v-for="rg in pg.cities"
+              :key="rg.region"
+              class="region-chip"
+              :class="{ active: activeRegion === rg.region }"
+              @click="toggleRegion(rg.region)"
+            >
+              {{ rg.region }} ({{ rg.count }})
+            </span>
+          </template>
           <span
             v-if="activeRegion"
             class="region-chip clear"
@@ -801,13 +804,38 @@ const regionGroups = computed(() => {
   const map = {};
   for (const c of customers.value) {
     if (!c.latitude || !c.longitude) continue;
-    const region = extractRegion(c.address) || "其他";
+    const region = extractCity(c.address) || "其他";
     if (!map[region]) map[region] = 0;
     map[region]++;
   }
   return Object.entries(map)
     .map(([region, count]) => ({ region, count }))
     .sort((a, b) => b.count - a.count);
+});
+
+// 按省分组城市
+const regionByProvince = computed(() => {
+  const provMap = {}; // { province: { city: count } }
+  for (const c of customers.value) {
+    if (!c.latitude || !c.longitude) continue;
+    const prov = extractProvince(c.address) || "其他";
+    const city = extractCity(c.address) || "其他";
+    if (!provMap[prov]) provMap[prov] = {};
+    if (!provMap[prov][city]) provMap[prov][city] = 0;
+    provMap[prov][city]++;
+  }
+  return Object.entries(provMap)
+    .map(([province, cities]) => ({
+      province,
+      cities: Object.entries(cities)
+        .map(([region, count]) => ({ region, count }))
+        .sort((a, b) => b.count - a.count),
+    }))
+    .sort((a, b) => {
+      if (a.province === "其他") return 1;
+      if (b.province === "其他") return -1;
+      return a.province.localeCompare(b.province, 'zh');
+    });
 });
 
 const filteredCustomers = computed(() => {
@@ -824,7 +852,7 @@ const filteredCustomers = computed(() => {
   if (activeRegion.value) {
     list = list.filter((c) => {
       if (!c.latitude || !c.longitude) return false;
-      return extractRegion(c.address) === activeRegion.value;
+      return extractCity(c.address) === activeRegion.value;
     });
   }
   return list;
@@ -835,7 +863,7 @@ const groupedByRegion = computed(() => {
   for (const c of filteredCustomers.value) {
     const region =
       c.latitude && c.longitude
-        ? extractRegion(c.address) || "未分组"
+        ? extractCity(c.address) || "未分组"
         : "未定位";
     if (!groups[region]) groups[region] = [];
     groups[region].push(c);
@@ -850,10 +878,24 @@ const groupedByRegion = computed(() => {
 });
 
 // ====== 工具函数 ======
-function extractRegion(addr) {
+// 提取地址中的省名
+function extractProvince(addr) {
   if (!addr) return "";
-  const match = addr.match(/([^^省]+省|)([^^市]+市)/);
-  return match ? match[0] : "";
+  const match = addr.match(/([^^省]+省)/);
+  return match ? match[1] : "";
+}
+// 提取地址中的城市名（仅市，不含省），避免"广东省深圳市"vs"深圳市"重复
+function extractCity(addr) {
+  if (!addr) return "";
+  // 优先取市名（去掉省前缀）
+  const cityMatch = addr.match(/([^^省]+省|)([^^市]+市)/);
+  if (cityMatch) return cityMatch[2] || cityMatch[0];
+  // 没有市则取区/县
+  const distMatch = addr.match(/([^^区]+区)/);
+  if (distMatch) return distMatch[1];
+  // 再没有则取省
+  const provMatch = addr.match(/([^^省]+省)/);
+  return provMatch ? provMatch[1] : "";
 }
 
 function truncate(s, len) {
@@ -2400,6 +2442,15 @@ onUnmounted(() => {
 .region-chip.clear {
   color: #e53935;
   border-color: #ffcdd2;
+}
+.region-province {
+  display: inline-block;
+  padding: 2px 4px 2px 8px;
+  font-size: 9px;
+  font-weight: 700;
+  color: #aaa;
+  letter-spacing: 0.5px;
+  vertical-align: middle;
 }
 
 /* 客户列表 */
