@@ -5,9 +5,9 @@
 
 ---
 
-## 当前工作：📱 全量移动端适配
+## 当前工作：产品参数编辑优化 & 参数/报价分离
 
-**状态：v1.0.138**
+**状态：v1.0.143**
 
 ### 已完成（本轮 v1.0.130-134）
 
@@ -65,6 +65,8 @@
 1. **🔴 ES Module 不能用 require()** — `electron/updater.js` 写 `require('electron')` 导致 ReferenceError，更新模块静默崩溃。见 memory `updater-esmodule-pitfall`
 2. **🔴 dev-app-update.yml 必须打入安装包** — `package.json` 的 `build.files` 是白名单模式，不在列表的文件不打包
 3. **🔴 发版不要 force-push 已有 tag** — 反复 force-push 导致标签混乱，直接升版本号更干净
+4. **🔴 electron-updater 需要 latest.yml 在 Release 中** — 只用 `gh release create` 上传 exe 不够，必须同时上传 `latest.yml`，否则检查更新报 404
+5. **🔴 API form-suggestions key 必须与前端字段名一致** — 之前用复数 key（categories/factories），前端用单数字段名（category/factory）访问不到，统一改成字段名做 key
 
 ### 已知问题 / 待优化
 
