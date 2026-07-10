@@ -27,12 +27,11 @@ export function initUpdater(window) {
     autoUpdater = mod.autoUpdater
     if (!autoUpdater) { LOG('autoUpdater not found'); return }
     LOG(`electron-updater loaded, isPackaged=${globalThis?.process?.versions?.electron ? 'yes' : 'no'}`)
-    const isDev = !require('electron').app.isPackaged
-    LOG(`isPackaged=${!isDev}, forceDevUpdateConfig=${isDev}`)
+    LOG(`forceDevUpdateConfig set to true`)
 
     autoUpdater.autoDownload = false
     autoUpdater.autoInstallOnAppQuit = true
-    autoUpdater.forceDevUpdateConfig = isDev
+    autoUpdater.forceDevUpdateConfig = true
 
     autoUpdater.on('update-available', (info) => {
       LOG(`EVENT: update-available v${info.version}`)
