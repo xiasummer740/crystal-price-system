@@ -383,13 +383,18 @@
             placeholder="输入客户名，支持关键字搜索已有客户"
             required
             :rules="[{ required: true }]"
+            ref="custNameFieldRef"
             @update:model-value="onCustNameInput"
             @focus="onCustNameFocus"
             @blur="onCustNameBlur"
           />
+        </div>
+        <!-- 客户名联想（fixed 定位，避免被弹窗裁剪） -->
+        <teleport to="body">
           <div
-            class="customer-suggest"
+            class="customer-suggest-fixed"
             v-if="showCustNameSuggest && filteredCustNames.length"
+            :style="custSuggestStyle"
           >
             <div
               v-for="cn in filteredCustNames"
@@ -400,7 +405,7 @@
               {{ cn }}
             </div>
           </div>
-        </div>
+        </teleport>
         <van-field
           v-model="customerForm.address"
           label="地址"
@@ -756,18 +761,47 @@ const customerForm = reactive({
 });
 // 客户名自动完成（同记事模式）
 const showCustNameSuggest = ref(false);
+const custNameFieldRef = ref(null);
+const custSuggestStyle = ref({});
 const filteredCustNames = computed(() => {
   const kw = (customerForm.name || '').trim().toLowerCase();
   const names = customers.value.map(c => c.name).filter(Boolean);
   if (!kw) return names.slice(0, 10);
   return names.filter(n => n.toLowerCase().includes(kw)).slice(0, 10);
 });
-function onCustNameInput() { showCustNameSuggest.value = true; }
-function onCustNameFocus() { showCustNameSuggest.value = true; }
+function onCustNameInput() {
+  showCustNameSuggest.value = true;
+  updateSuggestPosition();
+}
+function onCustNameFocus() {
+  showCustNameSuggest.value = true;
+  updateSuggestPosition();
+}
 function onCustNameBlur() { setTimeout(() => { showCustNameSuggest.value = false; }, 200); }
 function selectCustName(name) {
   customerForm.name = name;
   showCustNameSuggest.value = false;
+}
+function updateSuggestPosition() {
+  // 弹窗内 fixed 定位需要知道输入框的位置
+  setTimeout(() => {
+    if (!custNameFieldRef.value) return;
+    const el = custNameFieldRef.value.$el || custNameFieldRef.value;
+    const rect = el.getBoundingClientRect();
+    custSuggestStyle.value = {
+      position: 'fixed',
+      left: rect.left + 'px',
+      top: (rect.bottom) + 'px',
+      width: rect.width + 'px',
+      zIndex: 10001,
+      maxHeight: '200px',
+      overflowY: 'auto',
+      background: '#fff',
+      border: '1px solid #e0e0e0',
+      borderRadius: '0 0 8px 8px',
+      boxShadow: '0 4px 12px rgba(0,0,0,0.12)',
+    };
+  }, 50);
 }
 const customerContacts = ref([]); // { id, name, phone, title, address, notes, _new }
 const purchaserForm = reactive({ name: "", phone: "", title: "", notes: "", default_site_id: 0 });
@@ -2908,7 +2942,6 @@ onUnmounted(() => {
   .inline-contact-row{flex-direction:column;gap:6px;padding:8px}
   .inline-contact-row :deep(.van-field){padding:4px 0}
   .contact-del{position:absolute;top:4px;right:4px;width:28px;height:28px;font-size:14px}
-  .customer-suggest{max-height:150px}
   .cs-item{font-size:12px;padding:8px 10px}
 
   /* 客户详情弹出层 */
@@ -3824,24 +3857,17 @@ onUnmounted(() => {
 .customer-name-field {
   position: relative;
 }
-.customer-suggest {
-  position: absolute;
-  top: 100%;
-  left: 100px;
-  right: 16px;
-  z-index: 100;
-  background: #fff;
-  border: 1px solid #e0e0e0;
-  border-radius: 6px;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.12);
-  max-height: 200px;
-  overflow-y: auto;
+.customer-suggest-fixed {
+  font-family: -apple-system, BlinkMacSystemFont, 'Microsoft YaHei', sans-serif;
+  font-size: 13px;
+  color: #323233;
 }
 .cs-item {
   padding: 8px 12px;
   font-size: 13px;
   cursor: pointer;
   border-bottom: 1px solid #f5f5f5;
+  color: #333;
 }
 .cs-item:last-child { border-bottom: none; }
 .cs-item:hover { background: #f0fdf4; color: #00695c; }
