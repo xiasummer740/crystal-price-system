@@ -670,6 +670,7 @@ import {
 import { useRoute, useRouter } from "vue-router";
 import { showToast, showConfirmDialog, showDialog } from "vant";
 import {
+  http,
   fetchMapCustomers,
   getMapCustomer,
   createMapCustomer,
@@ -759,31 +760,61 @@ const customerForm = reactive({
   longitude: null,
   notes: "",
 });
-// 客户名自动完成（同记事模式）
+// 客户名自动完成（合并地图客户+记事客户）
 const showCustNameSuggest = ref(false);
 const custNameFieldRef = ref(null);
 const custSuggestStyle = ref({});
-const filteredCustNames = computed(() => {
+const filteredCustNames = ref([]);
+let custSuggestTimer = null;
+
+async function searchCustomerSuggest() {
   const kw = (customerForm.name || '').trim().toLowerCase();
-  const names = customers.value.map(c => c.name).filter(Boolean);
-  if (!kw) return names.slice(0, 10);
-  return names.filter(n => n.toLowerCase().includes(kw)).slice(0, 10);
-});
-function onCustNameInput() {
-  showCustNameSuggest.value = true;
+  // 从地图现有客户中匹配
+  const mapNames = customers.value.map(c => c.name).filter(Boolean);
+
+  // 同时从记事客户 API 搜索
+  let noteNames = [];
+  if (kw) {
+    try {
+      const r = await http.get('/notes/customers/search', { params: { keyword: kw } });
+      const notes = r.data?.data || [];
+      noteNames = notes
+        .filter(n => n.name)
+        .map(n => n.name);
+    } catch {}
+  }
+
+  // 合并去重
+  const seen = new Set();
+  const allNames = [];
+  for (const n of [...mapNames, ...noteNames]) {
+    const lower = n.toLowerCase();
+    if (!kw || lower.includes(kw)) {
+      if (!seen.has(lower)) {
+        seen.add(lower);
+        allNames.push(n);
+      }
+    }
+  }
+  filteredCustNames.value = allNames.slice(0, 15);
+  showCustNameSuggest.value = allNames.length > 0;
   updateSuggestPosition();
+}
+
+function onCustNameInput() {
+  clearTimeout(custSuggestTimer);
+  custSuggestTimer = setTimeout(searchCustomerSuggest, 150);
 }
 function onCustNameFocus() {
-  showCustNameSuggest.value = true;
+  if (!filteredCustNames.value.length) searchCustomerSuggest();
   updateSuggestPosition();
 }
-function onCustNameBlur() { setTimeout(() => { showCustNameSuggest.value = false; }, 200); }
+function onCustNameBlur() { setTimeout(() => { showCustNameSuggest.value = false; }, 300); }
 function selectCustName(name) {
   customerForm.name = name;
   showCustNameSuggest.value = false;
 }
 function updateSuggestPosition() {
-  // 弹窗内 fixed 定位需要知道输入框的位置
   setTimeout(() => {
     if (!custNameFieldRef.value) return;
     const el = custNameFieldRef.value.$el || custNameFieldRef.value;
