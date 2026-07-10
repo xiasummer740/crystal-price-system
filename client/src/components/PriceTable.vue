@@ -37,7 +37,7 @@
           <tr v-for="item in list" :key="item.id" :style="{ background: rowBg(item.material_code) }">
             <td style="text-align:center"><input type="checkbox" :checked="checkedIds.includes(item.id)" @change="toggleCheck(item.id)" style="cursor:pointer"></td>
             <td>{{ (item.created_at||'').slice(0,10) }}</td>
-            <td><a v-if="item.material_code" class="clink" @click.stop="$emit('showDetail', item)">{{ item.material_code }}</a><span v-else class="clink" @click.stop="$router.push('/detail/'+item.id)">—</span></td>
+            <td><a v-if="item.material_code" class="clink" @click.stop="$emit('showDetail', item)">{{ item.material_code }}</a><span v-else class="clink" @click.stop="$emit('showDetail', item)">—</span></td>
             <td class="copyable" @click="copyText(item.material_name)" :title="'点击复制: '+item.material_name">{{ item.material_name||'-' }}</td>
             <td class="muted copyable" @click="copyText(item.material_spec)" :title="item.material_spec?'点击复制: '+item.material_spec:''">{{ item.material_spec||'-' }}</td>
             <td>{{ item.category||'-' }}</td>
