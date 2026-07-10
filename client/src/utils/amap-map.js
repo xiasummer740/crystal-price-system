@@ -40,6 +40,7 @@ export function createAmapMap(container, center = [114.3, 30.5], zoom = 6) {
     mapStyle: "amap://styles/light", // 浅色标准地图
     features: ["bg", "road", "point"], // 去掉"building"（3D建筑GPU杀手）
     viewMode: '2D',              // 纯2D渲染，最流畅
+    scrollWheel: true,           // 启用鼠标滚轮缩放（显式设定，避免某些环境默认不生效）
     pitchEnable: false,           // 禁止倾斜
     rotateEnable: false,          // 禁止旋转
     animateEnable: false,         // 关闭动画减少重绘
