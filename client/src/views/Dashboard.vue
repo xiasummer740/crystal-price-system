@@ -385,15 +385,14 @@
         <van-field v-model="specEditForm.material_code" label="物料编码" placeholder="物料编码" />
         <van-field v-model="specEditForm.material_name" label="物料名称" placeholder="物料名称" />
         <van-field v-model="specEditForm.material_spec" label="规格" placeholder="规格" />
-        <van-field v-model="specEditForm.category" label="品类" placeholder="品类" />
-        <van-field v-model="specEditForm.brand" label="品牌" placeholder="品牌" />
-        <van-field v-model="specEditForm.dimension" label="尺寸" placeholder="尺寸" />
-        <van-field v-model="specEditForm.pin_count" label="PIN脚" placeholder="PIN脚" />
-        <van-field v-model="specEditForm.frequency" label="频点" placeholder="频点" />
-        <van-field v-model="specEditForm.load_cap" label="负载" placeholder="负载" />
-        <van-field v-model="specEditForm.voltage" label="电压" placeholder="电压" />
-        <van-field v-model="specEditForm.mode" label="模式" placeholder="模式" />
-        <van-field v-model="specEditForm.freq_tol" label="频偏" placeholder="频偏" />
+        <!-- 以下参数字段带输入联想，从已有数据中匹配 -->
+        <div class="sug-wrapper" v-for="f in specSugFields" :key="f.key">
+          <van-field v-model="specEditForm[f.key]" :label="f.label" :placeholder="f.label"
+            @focus="openSpecSug(f.key)" @input="filterSpecSug(f.key)" />
+          <div class="sug-drop" v-if="activeSpecSug===f.key && (specSugFiltered[f.key]||[]).length">
+            <div v-for="v in specSugFiltered[f.key]" :key="v" class="sug-item" @click="pickSpecSug(f.key,v)">{{ v }}</div>
+          </div>
+        </div>
         <van-field v-model="specEditForm.temperature" label="温度" readonly is-link placeholder="选择温度范围" @click="showSpecTempPicker=true" />
         <div style="margin:16px 0"><van-button block round type="primary" :loading="specSaving" @click="saveSpecs">保存参数（更新全部记录）</van-button></div>
       </div>
@@ -536,12 +535,44 @@ const showSpecEdit = ref(false); const showSpecTempPicker = ref(false); const sp
 const specEditForm = ref({material_code:'',material_name:'',material_spec:'',category:'',brand:'',dimension:'',pin_count:'',frequency:'',load_cap:'',voltage:'',mode:'',freq_tol:'',temperature:''})
 const specSource = ref({})
 const tempOptions = [{text:'-20/70℃',value:'-20/70℃'},{text:'-40~85℃',value:'-40~85℃'},{text:'-40/105℃',value:'-40/105℃'},{text:'-40/125℃',value:'-40/125℃'},{text:'-55/150℃',value:'-55/150℃'}]
+// 产品参数联想
+const specSuggestions = ref({})
+const specSugFiltered = ref({})
+const activeSpecSug = ref(null)
+const specSugFields = [
+  { key:'category', label:'品类' }, { key:'brand', label:'品牌' },
+  { key:'dimension', label:'尺寸' }, { key:'pin_count', label:'PIN脚' },
+  { key:'frequency', label:'频点' }, { key:'load_cap', label:'负载' },
+  { key:'voltage', label:'电压' }, { key:'mode', label:'模式' },
+  { key:'freq_tol', label:'频偏' },
+]
+function openSpecSug(field) {
+  activeSpecSug.value = field
+  const val = (specEditForm.value[field] || '').toLowerCase()
+  specSugFiltered.value[field] = (specSuggestions.value[field] || []).filter(v => v.toLowerCase().includes(val))
+}
+function filterSpecSug(field) {
+  if (activeSpecSug.value !== field) return
+  const val = (specEditForm.value[field] || '').toLowerCase()
+  specSugFiltered.value[field] = (specSuggestions.value[field] || []).filter(v => v.toLowerCase().includes(val))
+}
+function pickSpecSug(field, val) {
+  specEditForm.value[field] = val
+  activeSpecSug.value = null
+}
+function onSpecSugClickOutside(e) {
+  if (!e.target.closest('.sug-wrapper')) activeSpecSug.value = null
+}
 function editGroupSpecs() {
   const fk = Object.keys(md.value.factories)[0]; const q = md.value.factories[fk]?.[0]
   if (!q) return; specSource.value = q
   const techs = ['material_code','material_name','material_spec','category','brand','dimension','pin_count','frequency','load_cap','voltage','mode','freq_tol','temperature']
   techs.forEach(t => { specEditForm.value[t] = q[t] || '' })
   showSpecEdit.value = true
+  // 加载参数字段联想列表
+  http.get('/prices/form-suggestions').then(r => {
+    if (r?.data) { specSuggestions.value = r.data; specSugFiltered.value = { ...r.data } }
+  }).catch(() => {})
 }
 async function saveSpecs() {
   specSaving.value = true
@@ -891,8 +922,8 @@ function updateClock() {
   const weekDays = ['日', '一', '二', '三', '四', '五', '六']
   clockDate.value = `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} 星期${weekDays[d.getDay()]}`
 }
-onMounted(() => { updateClock(); clockTimer = setInterval(updateClock, 1000) })
-onUnmounted(() => { if (clockTimer) clearInterval(clockTimer); if (colFilterTimer) clearTimeout(colFilterTimer); if (searchTimer) clearTimeout(searchTimer) })
+onMounted(() => { updateClock(); clockTimer = setInterval(updateClock, 1000); document.addEventListener('click', onSpecSugClickOutside) })
+onUnmounted(() => { if (clockTimer) clearInterval(clockTimer); if (colFilterTimer) clearTimeout(colFilterTimer); if (searchTimer) clearTimeout(searchTimer); document.removeEventListener('click', onSpecSugClickOutside) })
 </script>
 
 <style scoped>
@@ -1089,6 +1120,12 @@ onUnmounted(() => { if (clockTimer) clearInterval(clockTimer); if (colFilterTime
 .spec-edit-wrap{padding:16px 20px 20px;overflow-y:auto;height:100%}
 .spec-edit-wrap h3{font-size:18px;font-weight:600;margin:0 0 4px}
 .spec-edit-hint{font-size:11px;color:#e6a23c;margin:0 0 12px}
+/* 产品参数联想下拉 */
+.sug-wrapper{position:relative}
+.sug-drop{position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid #e8e8e8;border-radius:6px;box-shadow:0 4px 16px rgba(0,0,0,.1);z-index:999;max-height:180px;overflow-y:auto}
+.sug-item{padding:8px 14px;font-size:13px;color:#323233;cursor:pointer;border-bottom:1px solid #f5f5f5}
+.sug-item:last-child{border-bottom:none}
+.sug-item:hover{background:rgba(var(--color-primary-rgb),.04);color:var(--color-primary)}
 .adv-wrap{padding:20px 20px 24px;display:flex;flex-direction:column;height:100%}
 .adv-title{font-size:18px;font-weight:600;margin:0 0 12px}
 .adv-rows{flex:1;overflow-y:auto}

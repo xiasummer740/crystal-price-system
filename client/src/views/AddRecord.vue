@@ -17,14 +17,62 @@
         </van-cell-group>
 
         <van-cell-group inset title="技术参数">
-          <van-field v-model="form.brand" label="品牌" placeholder="如：TXC" />
-          <van-field v-model="form.dimension" label="尺寸规格" placeholder="如：3.2×2.5mm" />
-          <van-field v-model="form.pin_count" label="PIN脚" placeholder="如：4PIN" />
-          <van-field v-model="form.frequency" label="频点" placeholder="如：32.768KHz" />
-          <van-field v-model="form.load_cap" label="负载" placeholder="如：12.5pF" />
-          <van-field v-model="form.voltage" label="电压" placeholder="如：3.3V" />
-          <van-field v-model="form.mode" label="模式" placeholder="如：基频" />
-          <van-field v-model="form.freq_tol" label="频偏" placeholder="如：±20ppm" />
+          <!-- 品牌：快捷选填 -->
+          <div class="sug-wrapper">
+            <van-field v-model="form.brand" label="品牌" placeholder="如：TXC" @focus="openSug('brand')" @input="filterSug('brand')" />
+            <div class="sug-drop" v-if="activeSug==='brand' && sugFiltered.brand.length">
+              <div v-for="v in sugFiltered.brand" :key="v" class="sug-item" @click="pickSug('brand',v)">{{ v }}</div>
+            </div>
+          </div>
+          <!-- 尺寸：快捷选填 -->
+          <div class="sug-wrapper">
+            <van-field v-model="form.dimension" label="尺寸规格" placeholder="如：3.2×2.5mm" @focus="openSug('dimension')" @input="filterSug('dimension')" />
+            <div class="sug-drop" v-if="activeSug==='dimension' && sugFiltered.dimension.length">
+              <div v-for="v in sugFiltered.dimension" :key="v" class="sug-item" @click="pickSug('dimension',v)">{{ v }}</div>
+            </div>
+          </div>
+          <!-- PIN脚：快捷选填 -->
+          <div class="sug-wrapper">
+            <van-field v-model="form.pin_count" label="PIN脚" placeholder="如：4PIN" @focus="openSug('pin_count')" @input="filterSug('pin_count')" />
+            <div class="sug-drop" v-if="activeSug==='pin_count' && sugFiltered.pin_count.length">
+              <div v-for="v in sugFiltered.pin_count" :key="v" class="sug-item" @click="pickSug('pin_count',v)">{{ v }}</div>
+            </div>
+          </div>
+          <!-- 频点：快捷选填 -->
+          <div class="sug-wrapper">
+            <van-field v-model="form.frequency" label="频点" placeholder="如：32.768KHz" @focus="openSug('frequency')" @input="filterSug('frequency')" />
+            <div class="sug-drop" v-if="activeSug==='frequency' && sugFiltered.frequency.length">
+              <div v-for="v in sugFiltered.frequency" :key="v" class="sug-item" @click="pickSug('frequency',v)">{{ v }}</div>
+            </div>
+          </div>
+          <!-- 负载：快捷选填 -->
+          <div class="sug-wrapper">
+            <van-field v-model="form.load_cap" label="负载" placeholder="如：12.5pF" @focus="openSug('load_cap')" @input="filterSug('load_cap')" />
+            <div class="sug-drop" v-if="activeSug==='load_cap' && sugFiltered.load_cap.length">
+              <div v-for="v in sugFiltered.load_cap" :key="v" class="sug-item" @click="pickSug('load_cap',v)">{{ v }}</div>
+            </div>
+          </div>
+          <!-- 电压：快捷选填 -->
+          <div class="sug-wrapper">
+            <van-field v-model="form.voltage" label="电压" placeholder="如：3.3V" @focus="openSug('voltage')" @input="filterSug('voltage')" />
+            <div class="sug-drop" v-if="activeSug==='voltage' && sugFiltered.voltage.length">
+              <div v-for="v in sugFiltered.voltage" :key="v" class="sug-item" @click="pickSug('voltage',v)">{{ v }}</div>
+            </div>
+          </div>
+          <!-- 模式：快捷选填 -->
+          <div class="sug-wrapper">
+            <van-field v-model="form.mode" label="模式" placeholder="如：基频" @focus="openSug('mode')" @input="filterSug('mode')" />
+            <div class="sug-drop" v-if="activeSug==='mode' && sugFiltered.mode.length">
+              <div v-for="v in sugFiltered.mode" :key="v" class="sug-item" @click="pickSug('mode',v)">{{ v }}</div>
+            </div>
+          </div>
+          <!-- 频偏：快捷选填 -->
+          <div class="sug-wrapper">
+            <van-field v-model="form.freq_tol" label="频偏" placeholder="如：±20ppm" @focus="openSug('freq_tol')" @input="filterSug('freq_tol')" />
+            <div class="sug-drop" v-if="activeSug==='freq_tol' && sugFiltered.freq_tol.length">
+              <div v-for="v in sugFiltered.freq_tol" :key="v" class="sug-item" @click="pickSug('freq_tol',v)">{{ v }}</div>
+            </div>
+          </div>
           <van-field v-model="form.temperature" label="温度" readonly is-link placeholder="选择温度范围" @click="showTempPicker=true" />
           <van-popup v-model:show="showTempPicker" position="bottom" round>
             <van-picker :columns="tempOptions" @confirm="onTempConfirm" @cancel="showTempPicker=false" />
@@ -136,8 +184,8 @@ function goBack() {
 }
 
 // ===== 快捷选填 =====
-const sugAll = ref({ category:[], factory:[], quoter:[], leadTime:[] })
-const sugFiltered = ref({ category:[], factory:[], quoter:[], leadTime:[] })
+const sugAll = ref({ category:[], factory:[], quoter:[], leadTime:[], brand:[], dimension:[], pin_count:[], frequency:[], load_cap:[], voltage:[], mode:[], freq_tol:[], temperature:[] })
+const sugFiltered = ref({ category:[], factory:[], quoter:[], leadTime:[], brand:[], dimension:[], pin_count:[], frequency:[], load_cap:[], voltage:[], mode:[], freq_tol:[], temperature:[] })
 const activeSug = ref(null)
 
 async function loadSuggestions() {

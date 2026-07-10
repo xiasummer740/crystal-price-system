@@ -124,11 +124,22 @@ router.get('/meta/options', (_req, res) => {
 
 // 表单快捷建议（必须在 /:id 之前）
 router.get('/form-suggestions', (_req, res) => {
-  const categories = queryAll("SELECT DISTINCT category FROM material_prices WHERE is_deleted = 0 AND category != '' ORDER BY category").map(r => r.category)
-  const factories = queryAll("SELECT DISTINCT factory_code FROM material_prices WHERE is_deleted = 0 AND factory_code != '' ORDER BY factory_code").map(r => r.factory_code)
-  const quoters = queryAll("SELECT DISTINCT quoter FROM material_prices WHERE is_deleted = 0 AND quoter != '' ORDER BY quoter").map(r => r.quoter)
-  const leadTimes = queryAll("SELECT DISTINCT standard_lead_time FROM material_prices WHERE is_deleted = 0 AND standard_lead_time != '' ORDER BY standard_lead_time").map(r => r.standard_lead_time)
-  res.json({ code: 0, data: { categories, factories, quoters, leadTimes } })
+  // 注意：key 命名与前端字段名一致，方便直接访问
+  const category = queryAll("SELECT DISTINCT category FROM material_prices WHERE is_deleted = 0 AND category != '' ORDER BY category").map(r => r.category)
+  const factory = queryAll("SELECT DISTINCT factory_code FROM material_prices WHERE is_deleted = 0 AND factory_code != '' ORDER BY factory_code").map(r => r.factory_code)
+  const quoter = queryAll("SELECT DISTINCT quoter FROM material_prices WHERE is_deleted = 0 AND quoter != '' ORDER BY quoter").map(r => r.quoter)
+  const leadTime = queryAll("SELECT DISTINCT standard_lead_time FROM material_prices WHERE is_deleted = 0 AND standard_lead_time != '' ORDER BY standard_lead_time").map(r => r.standard_lead_time)
+  // 技术参数字段去重值（用于产品参数编辑联想）
+  const brand = queryAll("SELECT DISTINCT brand FROM material_prices WHERE is_deleted = 0 AND brand != '' ORDER BY brand").map(r => r.brand)
+  const dimension = queryAll("SELECT DISTINCT dimension FROM material_prices WHERE is_deleted = 0 AND dimension != '' ORDER BY dimension").map(r => r.dimension)
+  const pin_count = queryAll("SELECT DISTINCT pin_count FROM material_prices WHERE is_deleted = 0 AND pin_count != '' ORDER BY pin_count").map(r => r.pin_count)
+  const frequency = queryAll("SELECT DISTINCT frequency FROM material_prices WHERE is_deleted = 0 AND frequency != '' ORDER BY frequency").map(r => r.frequency)
+  const load_cap = queryAll("SELECT DISTINCT load_cap FROM material_prices WHERE is_deleted = 0 AND load_cap != '' ORDER BY load_cap").map(r => r.load_cap)
+  const voltage = queryAll("SELECT DISTINCT voltage FROM material_prices WHERE is_deleted = 0 AND voltage != '' ORDER BY voltage").map(r => r.voltage)
+  const mode = queryAll("SELECT DISTINCT mode FROM material_prices WHERE is_deleted = 0 AND mode != '' ORDER BY mode").map(r => r.mode)
+  const freq_tol = queryAll("SELECT DISTINCT freq_tol FROM material_prices WHERE is_deleted = 0 AND freq_tol != '' ORDER BY freq_tol").map(r => r.freq_tol)
+  const temperature = queryAll("SELECT DISTINCT temperature FROM material_prices WHERE is_deleted = 0 AND temperature != '' ORDER BY temperature").map(r => r.temperature)
+  res.json({ code: 0, data: { category, factory, quoter, leadTime, brand, dimension, pin_count, frequency, load_cap, voltage, mode, freq_tol, temperature } })
 })
 
 // 物料编码的价格变更日志
