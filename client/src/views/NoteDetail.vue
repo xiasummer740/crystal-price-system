@@ -63,6 +63,34 @@
 
             <div class="note-content" v-html="renderedContent"></div>
 
+            <!-- 📋 更新历史时间线 -->
+            <div class="timeline" v-if="updateList.length">
+              <div class="divider"></div>
+              <h3 class="timeline-title">📋 更新记录</h3>
+              <div class="tl-item" v-for="(u, i) in updateList" :key="i">
+                <div class="tl-dot"></div>
+                <div class="tl-body">
+                  <div class="tl-meta">
+                    <span class="tl-time">📅 {{ u.time?.slice(0, 16) }}</span>
+                    <span v-if="u.status !== (updateList[i+1]?.status || note.status)" class="tl-status" :class="u.status">
+                      {{ {todo:'待办',in_progress:'进行中',done:'已完成',follow_up:'跟进后续'}[u.status] || '' }}
+                    </span>
+                  </div>
+                  <div class="tl-content" v-if="u.content" v-html="renderUpdateContent(u.content)"></div>
+                </div>
+              </div>
+              <!-- 创建记录 -->
+              <div class="tl-item tl-first">
+                <div class="tl-dot tl-dot-first"></div>
+                <div class="tl-body">
+                  <div class="tl-meta">
+                    <span class="tl-time">📅 {{ (note.created_at || '').slice(0, 16) }}</span>
+                    <span class="tl-status todo">创建记事</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <!-- 图片附件 -->
             <div class="img-gallery" v-if="imageList.length">
               <div v-for="(img, i) in imageList" :key="i" class="gallery-item" @click="previewIdx = i; showPreview = true">
@@ -136,6 +164,22 @@ const imageList = computed(() => {
 const fileList = computed(() => {
   try { return (JSON.parse(note.value?.images || '[]')).filter(u => !isImageUrl(u)) } catch { return [] }
 })
+
+// 更新历史（从旧到新排列）
+const updateList = computed(() => {
+  try {
+    const arr = JSON.parse(note.value?.updates || '[]')
+    return Array.isArray(arr) ? arr : []
+  } catch { return [] }
+})
+function renderUpdateContent(text) {
+  if (!text) return '<p style="color:#bbb;padding:4px 0;font-size:13px">（空）</p>'
+  let html = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    .replace(/\n/g, '<br/>')
+  return html
+}
 
 const renderedContent = computed(() => {
   if (!note.value?.content) return '<p style="color:#bbb;padding:8px 0">暂无内容</p>'
@@ -268,6 +312,25 @@ async function copyCurrentImage() {
 .reminder-pending { font-size: 10px; padding: 1px 6px; border-radius: 3px; background: #ff6b35; color: #fff; }
 .reminder-done { font-size: 10px; padding: 1px 6px; border-radius: 3px; background: #e8f5e9; color: #2e7d32; }
 .divider { height: 1px; background: #f0f0f0; margin: 12px 0; }
+
+/* 更新历史时间线 */
+.timeline { margin-top: 4px; }
+.timeline-title { font-size: 14px; font-weight: 600; color: #555; margin: 0 0 12px; }
+.tl-item { display: flex; gap: 12px; padding-bottom: 16px; position: relative; }
+.tl-item::before { content: ''; position: absolute; left: 7px; top: 14px; bottom: 0; width: 2px; background: #e8e8e8; }
+.tl-item:last-child::before { display: none; }
+.tl-dot { width: 16px; height: 16px; border-radius: 50%; background: var(--color-primary); flex-shrink: 0; margin-top: 2px; z-index: 1; border: 3px solid #fff; box-shadow: 0 0 0 1px #e0e0e0; }
+.tl-dot-first { background: #52c41a; }
+.tl-body { flex: 1; min-width: 0; }
+.tl-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 4px; }
+.tl-time { font-size: 12px; color: #999; }
+.tl-status { font-size: 10px; padding: 1px 6px; border-radius: 3px; }
+.tl-status.todo { background: #fff7e6; color: #d46b08; }
+.tl-status.in_progress { background: #e6f7ff; color: #1890ff; }
+.tl-status.done { background: #f6ffed; color: #389e0d; }
+.tl-status.follow_up { background: #fff3e0; color: #e65100; }
+.tl-content { font-size: 13px; color: #555; line-height: 1.6; padding: 6px 10px; background: #f9fafb; border-radius: 6px; word-break: break-word; }
+.tl-content :deep(code) { background: #eee; padding: 1px 4px; border-radius: 3px; font-size: 12px; }
 .note-content { font-size: 14px; line-height: 1.8; color: #323233; word-break: break-word; }
 .note-content :deep(code) { background: #f5f5f5; padding: 1px 4px; border-radius: 3px; font-size: 12px; }
 .note-content :deep(h1), .note-content :deep(h2), .note-content :deep(h3), .note-content :deep(h4) { margin: 12px 0 6px; }

@@ -171,6 +171,7 @@ export async function initDb() {
   try { db.run('CREATE INDEX IF NOT EXISTS idx_notes_reminder ON notes(reminder_at, is_reminded)') } catch {}
   try { db.run('CREATE INDEX IF NOT EXISTS idx_notes_status ON notes(status)') } catch {}
   try { db.run('CREATE INDEX IF NOT EXISTS idx_notes_deleted ON notes(is_deleted)') } catch {}
+  try { db.run("ALTER TABLE notes ADD COLUMN updates TEXT DEFAULT '[]'") } catch {}
 
   // 客户名库（Excel 导入 + 手动录入，去重）
   db.run(`

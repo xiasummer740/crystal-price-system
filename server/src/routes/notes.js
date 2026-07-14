@@ -254,8 +254,24 @@ router.put('/:id', (req, res) => {
   if (!existing) return res.status(404).json({ code: 1, msg: '记录不存在' })
 
   const b = req.body
+  // 内容或状态有变化 → 保存旧版本到 updates 历史
+  const contentChanged = b.content !== undefined && b.content !== existing.content
+  const statusChanged = b.status !== undefined && b.status !== existing.status
+  if (contentChanged || statusChanged) {
+    let updates = []
+    try { updates = JSON.parse(existing.updates || '[]') } catch {}
+    updates.push({
+      time: existing.updated_at,
+      content: existing.content || '',
+      status: existing.status || 'todo'
+    })
+    // 只保留最近 50 条，防止无限增长
+    if (updates.length > 50) updates = updates.slice(-50)
+    b._updates = JSON.stringify(updates)
+  }
+
   execute(`
-    UPDATE notes SET title=?, content=?, customer=?, category_id=?, images=?, reminder_at=?, priority=?, status=?, is_pinned=?, updated_at=datetime('now','localtime')
+    UPDATE notes SET title=?, content=?, customer=?, category_id=?, images=?, reminder_at=?, priority=?, status=?, is_pinned=?, updates=?, updated_at=datetime('now','localtime')
     WHERE id=?
   `, [
     b.title ?? existing.title,
@@ -267,6 +283,7 @@ router.put('/:id', (req, res) => {
     b.priority ?? existing.priority,
     b.status ?? existing.status,
     b.is_pinned !== undefined ? (b.is_pinned ? 1 : 0) : existing.is_pinned,
+    b._updates ?? existing.updates ?? '[]',
     Number(req.params.id)
   ])
   res.json({ code: 0, msg: '更新成功' })
