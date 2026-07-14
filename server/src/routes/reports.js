@@ -61,10 +61,16 @@ function summary(text, maxLen = 80) {
   return clean.slice(0, maxLen) + '…'
 }
 
-// 提取内容要点（前 20 行，每行 300 字）— 足够完整展示规格参数
+// 提取内容要点（只取最新一段，去掉时间戳和分隔符）
 function summarizeContent(content) {
   if (!content || !content.trim()) return ''
-  const lines = content.split('\n').filter(l => l.trim())
+  let text = content
+  // 只取第一个分隔符之前的内容（最新进度）
+  const sep = text.indexOf('\n\n---\n\n')
+  if (sep > 0) text = text.slice(0, sep)
+  // 去掉开头的 📅 时间戳行
+  text = text.replace(/^📅\s+\*\*.*?\*\*\n*/u, '')
+  const lines = text.split('\n').filter(l => l.trim())
   return lines.slice(0, 20).map(l => summary(l, 300)).join('\n')
 }
 
