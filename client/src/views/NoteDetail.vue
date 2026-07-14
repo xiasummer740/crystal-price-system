@@ -76,6 +76,7 @@
                     <span v-if="u.status !== (updateList[i+1]?.status || note.status)" class="tl-status" :class="u.status">
                       {{ {todo:'待办',in_progress:'进行中',done:'已完成',follow_up:'跟进后续'}[u.status] || '' }}
                     </span>
+                    <button class="tl-edit-btn" @click.stop="editTimelineEntry(i)" title="编辑此条记录">✏️</button>
                   </div>
                   <div class="tl-content" v-if="u.content" v-html="renderUpdateContent(u.content)"></div>
                 </div>
@@ -126,16 +127,16 @@
           </div>
         </van-overlay>
 
-        <!-- 新增进度弹窗 -->
+        <!-- 新增/编辑进度弹窗 -->
         <van-overlay :show="showProgressInput" z-index="2000">
           <div class="progress-overlay" @click="showProgressInput = false">
             <div class="progress-dialog" @click.stop>
-              <h3 class="progress-title">📋 新增进度</h3>
-              <p class="progress-hint">记录今天的跟进内容</p>
-              <textarea v-model="progressContent" class="progress-textarea" placeholder="输入今天的进度更新…" rows="4" ref="progressInputRef"></textarea>
+              <h3 class="progress-title">{{ progressEditIndex !== null ? '✏️ 编辑记录' : '📋 新增进度' }}</h3>
+              <p class="progress-hint">{{ progressEditIndex !== null ? '修改此条记录的跟进内容' : '记录今天的跟进内容' }}</p>
+              <textarea v-model="progressContent" class="progress-textarea" placeholder="输入跟进内容…" rows="4" ref="progressInputRef"></textarea>
               <div class="progress-actions">
                 <button class="progress-cancel" @click="showProgressInput = false">取消</button>
-                <button class="progress-save" :disabled="!progressContent.trim()" @click="saveProgress">保存进度</button>
+                <button class="progress-save" :disabled="!progressContent.trim()" @click="saveProgress">{{ progressEditIndex !== null ? '保存修改' : '保存进度' }}</button>
               </div>
             </div>
           </div>
@@ -157,24 +158,77 @@ const note = ref(null)
 const showPreview = ref(false)
 const showProgressInput = ref(false)
 const progressContent = ref('')
+const progressEditIndex = ref(null)
 const progressInputRef = ref(null)
 
 // 监听弹窗打开，自动聚焦输入框
 import { watch } from 'vue'
 watch(showProgressInput, async (v) => {
-  if (v) {
-    progressContent.value = ''
-    await nextTick()
-    progressInputRef.value?.focus()
-  }
+  if (!v) { progressEditIndex.value = null; return }
+  if (progressEditIndex.value === null) progressContent.value = ''
+  await nextTick()
+  progressInputRef.value?.focus()
 })
+
+function editTimelineEntry(idx) {
+  const updates = (() => { try { return JSON.parse(note.value?.updates || '[]') } catch { return [] } })()
+  const entry = updates[idx]
+  if (!entry) return
+  progressEditIndex.value = idx
+  progressContent.value = entry.content || ''
+  showProgressInput.value = true
+}
 
 async function saveProgress() {
   const text = progressContent.value.trim()
   if (!text) return
+
+  // 编辑历史记录
+  if (progressEditIndex.value !== null) {
+    let updates = []
+    try { updates = JSON.parse(note.value?.updates || '[]') } catch {}
+    if (!updates[progressEditIndex.value]) return
+    updates[progressEditIndex.value].content = text
+    // 重建 content：所有历史记录按时间排列
+    let rebuilt = note.value.content || ''
+    // 如果当前内容包含时间戳开头（新增进度产生的），保留最新一条
+    const latestLines = (note.value.content || '').split('\n\n---\n\n')
+    const latest = latestLines[0] || ''
+    // 从旧到新拼接所有 updates
+    let historyText = ''
+    for (let i = updates.length - 1; i >= 0; i--) {
+      const u = updates[i]
+      if (u.content) {
+        const timeStr = (u.time || '').slice(0, 16)
+        historyText += '\u{1F4C5} **' + timeStr + '**\n' + u.content + '\n\n---\n\n'
+      }
+    }
+    const finalContent = historyText + latest
+    try {
+      await updateNote(note.value.id, {
+        title: note.value.title,
+        content: finalContent,
+        customer: note.value.customer,
+        category_id: note.value.category_id,
+        status: note.value.status,
+        priority: note.value.priority,
+        images: (() => { try { return JSON.parse(note.value.images || '[]') } catch { return [] } })(),
+        _updatesOverride: JSON.stringify(updates)
+      })
+      showProgressInput.value = false
+      showToast('已更新')
+      const r = await getNote(route.params.id)
+      note.value = r.data
+    } catch (e) {
+      showToast('保存失败: ' + (e.response?.data?.msg || e.message))
+    }
+    return
+  }
+
+  // 新增进度
   const now = new Date()
-  const ts = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`
-  const newContent = `📅 **${ts}**\n${text}\n\n---\n\n${note.value.content || ''}`
+  const ts = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0') + '-' + String(now.getDate()).padStart(2,'0') + ' ' + String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0')
+  const newContent = '\u{1F4C5} **' + ts + '**\n' + text + '\n\n---\n\n' + (note.value.content || '')
   try {
     await updateNote(note.value.id, {
       title: note.value.title,
@@ -187,7 +241,6 @@ async function saveProgress() {
     })
     showProgressInput.value = false
     showToast('进度已更新')
-    // 重新加载详情
     const r = await getNote(route.params.id)
     note.value = r.data
   } catch (e) {
@@ -386,6 +439,8 @@ async function copyCurrentImage() {
 .tl-status.follow_up { background: #fff3e0; color: #e65100; }
 .tl-content { font-size: 13px; color: #555; line-height: 1.6; padding: 6px 10px; background: #f9fafb; border-radius: 6px; word-break: break-word; }
 .tl-content :deep(code) { background: #eee; padding: 1px 4px; border-radius: 3px; font-size: 12px; }
+.tl-edit-btn { background: none; border: none; font-size: 11px; cursor: pointer; padding: 0 2px; opacity: 0.4; transition: opacity .15s; line-height: 1; margin-left: auto; }
+.tl-edit-btn:hover { opacity: 1; }
 
 /* 新增进度弹窗 */
 .progress-overlay { display: flex; align-items: center; justify-content: center; padding: 24px; }

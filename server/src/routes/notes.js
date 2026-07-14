@@ -255,19 +255,24 @@ router.put('/:id', (req, res) => {
 
   const b = req.body
   // 内容或状态有变化 → 保存旧版本到 updates 历史
-  const contentChanged = b.content !== undefined && b.content !== existing.content
-  const statusChanged = b.status !== undefined && b.status !== existing.status
-  if (contentChanged || statusChanged) {
-    let updates = []
-    try { updates = JSON.parse(existing.updates || '[]') } catch {}
-    updates.push({
-      time: existing.updated_at,
-      content: existing.content || '',
-      status: existing.status || 'todo'
-    })
-    // 只保留最近 50 条，防止无限增长
-    if (updates.length > 50) updates = updates.slice(-50)
-    b._updates = JSON.stringify(updates)
+  // _updatesOverride: 前端已修改 updates 数组（如编辑历史记录），直接使用不做额外推送
+  if (b._updatesOverride !== undefined) {
+    b._updates = b._updatesOverride
+  } else {
+    const contentChanged = b.content !== undefined && b.content !== existing.content
+    const statusChanged = b.status !== undefined && b.status !== existing.status
+    if (contentChanged || statusChanged) {
+      let updates = []
+      try { updates = JSON.parse(existing.updates || '[]') } catch {}
+      updates.push({
+        time: existing.updated_at,
+        content: existing.content || '',
+        status: existing.status || 'todo'
+      })
+      // 只保留最近 50 条，防止无限增长
+      if (updates.length > 50) updates = updates.slice(-50)
+      b._updates = JSON.stringify(updates)
+    }
   }
 
   execute(`
