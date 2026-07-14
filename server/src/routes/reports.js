@@ -86,7 +86,7 @@ router.get('/', async (req, res) => {
       SELECT n.*, c.name as category_name, c.color as category_color
       FROM notes n
       LEFT JOIN note_categories c ON n.category_id = c.id AND c.is_deleted = 0
-      WHERE n.is_deleted = 0 AND n.created_at >= ? AND n.created_at <= ?
+      WHERE n.is_deleted = 0 AND n.updated_at >= ? AND n.updated_at <= ?
       ORDER BY n.customer ASC, n.created_at DESC
     `, [start, end])
 
