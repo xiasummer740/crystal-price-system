@@ -325,6 +325,8 @@ async function onSubmitNew() {
 .sug-item { padding:8px 14px; font-size:13px; color:#323233; cursor:pointer; border-bottom:1px solid #f5f5f5 }
 .sug-item:last-child { border-bottom:none }
 .sug-item:hover { background:rgba(var(--color-primary-rgb),.04); color:var(--color-primary) }
+/* 让 sug-drop 不被 cell-group 的 overflow:hidden 裁剪 */
+:deep(.van-cell-group--inset) { overflow: visible !important }
 .spec-zone { border-radius:6px; transition:all .2s; border:2px solid transparent }
 .spec-zone.drag-active { border-color:var(--color-primary); background:rgba(var(--color-primary-rgb),.04) }
 </style>
