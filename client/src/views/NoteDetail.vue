@@ -26,6 +26,7 @@
           <button class="back-btn" @click="goBack">‹ 返回</button>
           <h3>记事详情</h3>
           <div class="header-actions">
+            <button class="progress-btn" @click="showProgressInput = true">＋ 新增进度</button>
             <router-link :to="'/notes/edit/' + note.id" class="edit-btn">编辑</router-link>
             <button class="del-btn" @click="handleDelete">删除</button>
           </div>
@@ -124,21 +125,75 @@
             <button v-if="previewIdx < imageList.length - 1" class="viewer-nav viewer-next" @click.stop="previewIdx++">›</button>
           </div>
         </van-overlay>
+
+        <!-- 新增进度弹窗 -->
+        <van-overlay :show="showProgressInput" z-index="2000">
+          <div class="progress-overlay" @click="showProgressInput = false">
+            <div class="progress-dialog" @click.stop>
+              <h3 class="progress-title">📋 新增进度</h3>
+              <p class="progress-hint">记录今天的跟进内容</p>
+              <textarea v-model="progressContent" class="progress-textarea" placeholder="输入今天的进度更新…" rows="4" ref="progressInputRef"></textarea>
+              <div class="progress-actions">
+                <button class="progress-cancel" @click="showProgressInput = false">取消</button>
+                <button class="progress-save" :disabled="!progressContent.trim()" @click="saveProgress">保存进度</button>
+              </div>
+            </div>
+          </div>
+        </van-overlay>
       </template>
     </div>
   </transition>
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { showToast, showConfirmDialog } from 'vant'
-import { getNote, deleteNote } from '../utils/api.js'
+import { getNote, deleteNote, updateNote } from '../utils/api.js'
 
 const route = useRoute()
 const router = useRouter()
 const note = ref(null)
 const showPreview = ref(false)
+const showProgressInput = ref(false)
+const progressContent = ref('')
+const progressInputRef = ref(null)
+
+// 监听弹窗打开，自动聚焦输入框
+import { watch } from 'vue'
+watch(showProgressInput, async (v) => {
+  if (v) {
+    progressContent.value = ''
+    await nextTick()
+    progressInputRef.value?.focus()
+  }
+})
+
+async function saveProgress() {
+  const text = progressContent.value.trim()
+  if (!text) return
+  const now = new Date()
+  const ts = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`
+  const newContent = `📅 **${ts}**\n${text}\n\n---\n\n${note.value.content || ''}`
+  try {
+    await updateNote(note.value.id, {
+      title: note.value.title,
+      content: newContent,
+      customer: note.value.customer,
+      category_id: note.value.category_id,
+      status: note.value.status,
+      priority: note.value.priority,
+      images: (() => { try { return JSON.parse(note.value.images || '[]') } catch { return [] } })()
+    })
+    showProgressInput.value = false
+    showToast('进度已更新')
+    // 重新加载详情
+    const r = await getNote(route.params.id)
+    note.value = r.data
+  } catch (e) {
+    showToast('保存失败: ' + (e.response?.data?.msg || e.message))
+  }
+}
 const previewIdx = ref(0)
 
 // 判断 URL 是否为图片
@@ -331,6 +386,24 @@ async function copyCurrentImage() {
 .tl-status.follow_up { background: #fff3e0; color: #e65100; }
 .tl-content { font-size: 13px; color: #555; line-height: 1.6; padding: 6px 10px; background: #f9fafb; border-radius: 6px; word-break: break-word; }
 .tl-content :deep(code) { background: #eee; padding: 1px 4px; border-radius: 3px; font-size: 12px; }
+
+/* 新增进度弹窗 */
+.progress-overlay { display: flex; align-items: center; justify-content: center; padding: 24px; }
+.progress-dialog { width: 100%; max-width: 480px; background: #fff; border-radius: 12px; padding: 20px; box-shadow: 0 8px 30px rgba(0,0,0,.15); }
+.progress-title { font-size: 17px; font-weight: 600; margin: 0 0 4px; color: #323233; }
+.progress-hint { font-size: 12px; color: #999; margin: 0 0 12px; }
+.progress-textarea { width: 100%; border: 1px solid #e0e0e0; border-radius: 8px; padding: 10px; font-size: 14px; color: #323233; resize: vertical; outline: none; font-family: inherit; box-sizing: border-box; min-height: 80px; transition: border-color .2s; }
+.progress-textarea:focus { border-color: var(--color-primary); }
+.progress-textarea::placeholder { color: #bbb; }
+.progress-actions { display: flex; gap: 10px; margin-top: 14px; justify-content: flex-end; }
+.progress-cancel { padding: 8px 20px; border-radius: 6px; border: 1px solid #d9d9d9; background: #fff; color: #666; font-size: 13px; cursor: pointer; font-family: inherit; }
+.progress-cancel:hover { background: #f5f5f5; }
+.progress-save { padding: 8px 20px; border-radius: 6px; border: none; background: var(--color-primary); color: #fff; font-size: 13px; cursor: pointer; font-family: inherit; }
+.progress-save:hover { background: #1676d9; }
+.progress-save:disabled { background: #95c9f9; cursor: not-allowed; }
+.progress-btn { padding: 4px 10px; border-radius: 4px; border: 1px solid #52c41a; color: #52c41a; font-size: 12px; cursor: pointer; background: #f6ffed; text-decoration: none; transition: all .15s; white-space: nowrap; }
+.progress-btn:hover { background: #d9f7be; }
+
 .note-content { font-size: 14px; line-height: 1.8; color: #323233; word-break: break-word; }
 .note-content :deep(code) { background: #f5f5f5; padding: 1px 4px; border-radius: 3px; font-size: 12px; }
 .note-content :deep(h1), .note-content :deep(h2), .note-content :deep(h3), .note-content :deep(h4) { margin: 12px 0 6px; }
