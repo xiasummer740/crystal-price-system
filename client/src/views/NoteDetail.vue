@@ -291,7 +291,15 @@ function renderUpdateContent(text) {
 
 const renderedContent = computed(() => {
   if (!note.value?.content) return '<p style="color:#bbb;padding:8px 0">暂无内容</p>'
-  let html = note.value.content
+  // 如果内容包含时间戳分隔（新增进度产生的），只取最新一段
+  let displayText = note.value.content
+  const firstSep = displayText.indexOf('\n\n---\n\n')
+  if (firstSep > 0) {
+    displayText = displayText.slice(0, firstSep)
+  }
+  // 去掉开头的 📅 **时间戳** 行
+  displayText = displayText.replace(/^\u{1F4C5}\s+\*\*.*?\*\*\n*/u, '')
+  let html = displayText
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
     .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
     .replace(/#### (.+)/g, '<h4>$1</h4>')
