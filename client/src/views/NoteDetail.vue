@@ -62,8 +62,7 @@
 
             <div class="divider"></div>
 
-            <div class="note-content" v-html="renderedContent"></div>
-
+            <!-- 最新一条进度（第一条时间线已展示，不重复显示） -->
             <!-- 📋 更新历史时间线 -->
             <div class="timeline" v-if="updateList.length">
               <div class="divider"></div>

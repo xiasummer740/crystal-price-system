@@ -61,12 +61,15 @@
             </div>
             <div class="item-list">
               <div v-for="item in group.items" :key="item.id" class="report-item" @click="$router.push('/notes/' + item.id + '?from=reports')">
-                <span class="item-status" :class="'s-' + item.status">
-                  {{ {todo:'📋',in_progress:'🔄',done:'✅',follow_up:'🔄'}[item.status] || '📋' }}
-                </span>
                 <div class="item-body">
+                  <div class="item-meta">
+                    <span class="item-status" :class="'s-' + item.status">
+                      {{ {todo:'📋 待办',in_progress:'🔄 进行中',done:'✅ 已完成',follow_up:'🔄 跟进后续'}[item.status] || '📋' }}
+                    </span>
+                    <span class="item-date">{{ (item.created_at||'').slice(5, 10) }}</span>
+                  </div>
                   <div class="item-title" v-if="item.title">{{ item.title }}</div>
-                  <div class="item-content" v-if="item.content">📝 {{ item.content }}</div>
+                  <div class="item-content" v-if="item.content">{{ item.content }}</div>
                 </div>
               </div>
             </div>
@@ -284,13 +287,19 @@ async function copyReport() {
 
 /* 条目 */
 .item-list{border-top:1px solid #f5f5f5}
-.report-item{display:flex;align-items:flex-start;gap:10px;padding:10px 14px;cursor:pointer;border-bottom:1px solid #f5f5f5;transition:background .1s}
+.report-item{padding:10px 14px;cursor:pointer;border-bottom:1px solid #f5f5f5;transition:background .1s}
 .report-item:last-child{border-bottom:none}
 .report-item:hover{background:#f9f0ff}
-.item-status{font-size:16px;line-height:1.4;flex-shrink:0}
-.item-body{flex:1;min-width:0}
+.item-body{min-width:0}
+.item-meta{display:flex;align-items:center;gap:8px;margin-bottom:4px}
+.item-status{font-size:11px;padding:1px 6px;border-radius:3px;background:#f0f0f0;color:#666;white-space:nowrap}
+.item-status.s-todo{background:#fff7e6;color:#d46b08}
+.item-status.s-in_progress{background:#e6f7ff;color:#1890ff}
+.item-status.s-done{background:#f6ffed;color:#389e0d}
+.item-status.s-follow_up{background:#fff3e0;color:#e65100}
+.item-date{font-size:11px;color:#999}
 .item-title{font-size:13px;font-weight:500;color:#323233;margin-bottom:2px}
-.item-content{font-size:11px;color:#888;line-height:1.5}
+.item-content{font-size:11px;color:#555;line-height:1.5;white-space:pre-wrap}
 .item-ocr{font-size:11px;color:#722ed1;line-height:1.5;margin-top:2px;padding:3px 6px;background:#f9f0ff;border-radius:4px}
 .empty-state{padding:60px 0}
 

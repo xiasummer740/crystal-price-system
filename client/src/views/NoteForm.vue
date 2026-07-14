@@ -199,7 +199,12 @@ onMounted(async () => {
       form.title = d.title || ''
       form.customer = d.customer || ''
       form.category_id = d.category_id || 0
-      form.content = d.content || ''
+      // 编辑时只取最新一段内容（去掉时间戳和分隔历史）
+      let editContent = d.content || ''
+      const sepIdx = editContent.indexOf('\n\n---\n\n')
+      if (sepIdx > 0) editContent = editContent.slice(0, sepIdx)
+      editContent = editContent.replace(/^📅\s+\*\*.*?\*\*\n*/u, '')
+      form.content = editContent.trim()
       form.images = safeParse(d.images, [])
       form.reminder_at = d.reminder_at || ''
       form.priority = d.priority ?? 2
