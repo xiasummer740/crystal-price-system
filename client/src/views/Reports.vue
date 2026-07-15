@@ -190,7 +190,6 @@ function generateReport() {
 
   // 各客户
   const noTitle = /^(未命名|untitled)$/i
-  const showDate = range.value !== 'today'  // 日报不用显示日期
   for (const group of r.byCustomer) {
     const valid = group.items.filter(item => {
       if ((!item.title || noTitle.test(item.title.trim())) && !item.content) return false
@@ -201,10 +200,13 @@ function generateReport() {
     for (const item of valid) {
       const status = statusText[item.status] || '待办'
       const showTitle = item.title && !noTitle.test(item.title.trim())
-      const text = showTitle
+      const rawText = showTitle
         ? item.title + (item.content ? ' — ' + item.content : '')
         : item.content
-      const date = showDate && item.created_at ? item.created_at.slice(5, 10) : ''
+      // 去掉加粗标记
+      const text = (rawText || '').replace(/\*{1,2}/g, '').trim()
+      // 始终显示日期，日报也能看到记录来自哪天
+      const date = item.created_at ? item.created_at.slice(5, 10) : ''
       const prefix = date ? `${date} ` : ''
       lines.push(`  [${status}] ${prefix}${text}`)
     }

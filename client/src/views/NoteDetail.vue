@@ -80,6 +80,15 @@
                     <button class="tl-edit-btn" @click.stop="editTimelineEntry(i)" title="编辑此条记录">✏️</button>
                   </div>
                   <div class="tl-content" v-if="u.content" v-html="renderUpdateContent(u.content)"></div>
+                  <div class="tl-imgs" v-if="u.imgs && u.imgs.length">
+                    <div v-for="(imgUrl, ii) in u.imgs" :key="ii" class="tl-img-item">
+                      <img v-if="isImageUrl(imgUrl)" :src="imgUrl" @click="previewFile(imgUrl)" loading="lazy" />
+                      <div v-else class="tl-img-file" @click="previewFile(imgUrl)">
+                        <span class="tl-img-file-icon">{{ fileIcon(imgUrl) }}</span>
+                        <span class="tl-img-file-name">{{ fileName(imgUrl) }}</span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
               <!-- 创建记录 -->
@@ -131,10 +140,29 @@
         <!-- 新增/编辑进度弹窗 -->
         <van-overlay :show="showProgressInput" z-index="2000">
           <div class="progress-overlay" @click="showProgressInput = false">
-            <div class="progress-dialog" @click.stop>
+            <div class="progress-dialog" @click.stop @paste.prevent="onProgressPaste">
               <h3 class="progress-title">{{ progressEditIndex !== null ? '✏️ 编辑记录' : '📋 新增进度' }}</h3>
               <p class="progress-hint">{{ progressEditIndex !== null ? '修改此条记录的跟进内容' : '记录今天的跟进内容' }}</p>
               <textarea v-model="progressContent" class="progress-textarea" placeholder="输入跟进内容…" rows="4" ref="progressInputRef"></textarea>
+
+              <!-- 附件 -->
+              <div class="progress-attachments" v-if="progressFiles.length">
+                <div v-for="(url, i) in progressFiles" :key="i" class="progress-file-item">
+                  <template v-if="isImageUrl(url)">
+                    <img :src="url" class="progress-file-thumb" />
+                  </template>
+                  <template v-else>
+                    <span class="progress-file-icon">{{ fileIcon(url) }}</span>
+                    <span class="progress-file-name">{{ fileName(url) }}</span>
+                  </template>
+                  <button class="progress-file-del" @click="removeProgressFile(i)">×</button>
+                </div>
+              </div>
+              <div class="progress-upload-btn" @click="triggerProgressFileInput" @dragover.prevent @drop.prevent="onProgressDrop">
+                ＋ 添加附件
+                <input ref="progressFileInputRef" type="file" hidden multiple @change="onProgressFileChange" />
+              </div>
+
               <div class="progress-actions">
                 <button class="progress-cancel" @click="showProgressInput = false">取消</button>
                 <button class="progress-save" :disabled="!progressContent.trim()" @click="saveProgress">{{ progressEditIndex !== null ? '保存修改' : '保存进度' }}</button>
@@ -151,7 +179,7 @@
 import { ref, computed, onMounted, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { showToast, showConfirmDialog } from 'vant'
-import { getNote, deleteNote, updateNote } from '../utils/api.js'
+import { getNote, deleteNote, updateNote, uploadNoteImages } from '../utils/api.js'
 
 const route = useRoute()
 const router = useRouter()
@@ -161,12 +189,17 @@ const showProgressInput = ref(false)
 const progressContent = ref('')
 const progressEditIndex = ref(null)
 const progressInputRef = ref(null)
+const progressFiles = ref([])
+const progressFileInputRef = ref(null)
 
 // 监听弹窗打开，自动聚焦输入框
 import { watch } from 'vue'
 watch(showProgressInput, async (v) => {
-  if (!v) { progressEditIndex.value = null; return }
-  if (progressEditIndex.value === null) progressContent.value = ''
+  if (!v) { progressEditIndex.value = null; progressFiles.value = []; return }
+  if (progressEditIndex.value === null) {
+    progressContent.value = ''
+    progressFiles.value = []
+  }
   await nextTick()
   progressInputRef.value?.focus()
 })
@@ -177,12 +210,72 @@ function editTimelineEntry(idx) {
   if (!entry) return
   progressEditIndex.value = idx
   progressContent.value = entry.content || ''
+  progressFiles.value = entry.imgs || []
   showProgressInput.value = true
+}
+
+function triggerProgressFileInput() { progressFileInputRef.value?.click() }
+
+async function onProgressFileChange(e) {
+  const files = e.target.files
+  if (!files?.length) return
+  const fd = new FormData()
+  for (const f of files) fd.append('files', f)
+  try {
+    const r = await uploadNoteImages(fd)
+    const urls = r.data || []
+    progressFiles.value.push(...urls)
+  } catch (e) {
+    showToast('上传失败: ' + (e.response?.data?.msg || e.message))
+  }
+  progressFileInputRef.value.value = ''
+}
+
+function removeProgressFile(i) {
+  progressFiles.value.splice(i, 1)
+}
+
+async function handleProgressFiles(files) {
+  if (!files.length) return
+  const fd = new FormData()
+  for (const f of files) fd.append('files', f)
+  try {
+    const r = await uploadNoteImages(fd)
+    const urls = r.data || []
+    progressFiles.value.push(...urls)
+    showToast(`已添加 ${urls.length} 个附件`)
+  } catch (e) {
+    showToast('上传失败: ' + (e.response?.data?.msg || e.message))
+  }
+}
+
+async function onProgressDrop(e) {
+  const files = e.dataTransfer?.files
+  if (files?.length) await handleProgressFiles(Array.from(files))
+}
+
+async function onProgressPaste(e) {
+  const items = e.clipboardData?.items
+  if (!items) return
+  const files = []
+  for (const item of items) {
+    if (item.type?.startsWith('image/') || item.kind === 'file') {
+      const f = item.getAsFile()
+      if (f) files.push(f)
+    }
+  }
+  if (files.length) {
+    showToast(`检测到 ${files.length} 个文件`)
+    await handleProgressFiles(files)
+  }
 }
 
 async function saveProgress() {
   const text = progressContent.value.trim()
   if (!text) return
+
+  // 当前已有附件 URL
+  const currentImages = (() => { try { return JSON.parse(note.value?.images || '[]') } catch { return [] } })()
 
   // 编辑历史记录
   if (progressEditIndex.value !== null) {
@@ -190,12 +283,8 @@ async function saveProgress() {
     try { updates = JSON.parse(note.value?.updates || '[]') } catch {}
     if (!updates[progressEditIndex.value]) return
     updates[progressEditIndex.value].content = text
-    // 重建 content：所有历史记录按时间排列
-    let rebuilt = note.value.content || ''
-    // 如果当前内容包含时间戳开头（新增进度产生的），保留最新一条
-    const latestLines = (note.value.content || '').split('\n\n---\n\n')
-    const latest = latestLines[0] || ''
-    // 从旧到新拼接所有 updates
+    updates[progressEditIndex.value].imgs = [...progressFiles.value]
+    // 从旧到新拼接所有 updates 到 content
     let historyText = ''
     for (let i = updates.length - 1; i >= 0; i--) {
       const u = updates[i]
@@ -204,16 +293,22 @@ async function saveProgress() {
         historyText += '\u{1F4C5} **' + timeStr + '**\n' + u.content + '\n\n---\n\n'
       }
     }
-    const finalContent = historyText + latest
+    // 合并所有附件 URL（去重）
+    const allImgs = [...currentImages]
+    for (const u of updates) {
+      if (u.imgs) for (const url of u.imgs) {
+        if (!allImgs.includes(url)) allImgs.push(url)
+      }
+    }
     try {
       await updateNote(note.value.id, {
         title: note.value.title,
-        content: finalContent,
+        content: historyText,
         customer: note.value.customer,
         category_id: note.value.category_id,
         status: note.value.status,
         priority: note.value.priority,
-        images: (() => { try { return JSON.parse(note.value.images || '[]') } catch { return [] } })(),
+        images: allImgs,
         _updatesOverride: JSON.stringify(updates)
       })
       showProgressInput.value = false
@@ -230,6 +325,16 @@ async function saveProgress() {
   const now = new Date()
   const ts = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0') + '-' + String(now.getDate()).padStart(2,'0') + ' ' + String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0')
   const newContent = '\u{1F4C5} **' + ts + '**\n' + text + '\n\n---\n\n' + (note.value.content || '')
+  // 构造 updates 条目，让进度也出现在时间线
+  let updates = []
+  try { updates = JSON.parse(note.value?.updates || '[]') } catch {}
+  updates.push({ time: ts, content: text, status: note.value.status || 'todo', imgs: [...progressFiles.value] })
+  if (updates.length > 50) updates = updates.slice(-50)
+  // 合并附件 URL（去重）
+  const allImgs = [...currentImages]
+  for (const url of progressFiles.value) {
+    if (!allImgs.includes(url)) allImgs.push(url)
+  }
   try {
     await updateNote(note.value.id, {
       title: note.value.title,
@@ -238,7 +343,8 @@ async function saveProgress() {
       category_id: note.value.category_id,
       status: note.value.status,
       priority: note.value.priority,
-      images: (() => { try { return JSON.parse(note.value.images || '[]') } catch { return [] } })()
+      images: allImgs,
+      _updatesOverride: JSON.stringify(updates)
     })
     showProgressInput.value = false
     showToast('进度已更新')
@@ -362,6 +468,16 @@ function goBack() {
     router.push('/notes')
   }
 }
+// 预览文件：图片/PDF 浏览器打开，其他下载
+function previewFile(url) {
+  const ext = url.split('?')[0].split('.').pop()?.toLowerCase() || ''
+  if (['jpg','jpeg','png','gif','webp','bmp','svg','pdf'].includes(ext)) {
+    window.open(url, '_blank')
+  } else {
+    downloadFile(url)
+  }
+}
+
 // 下载文件，使用原始文件名（去掉时间戳前缀）
 async function downloadFile(url) {
   try {
@@ -468,6 +584,13 @@ async function copyCurrentImage() {
 .tl-content :deep(code) { background: #eee; padding: 1px 4px; border-radius: 3px; font-size: 12px; }
 .tl-edit-btn { background: none; border: none; font-size: 11px; cursor: pointer; padding: 0 2px; opacity: 0.4; transition: opacity .15s; line-height: 1; margin-left: auto; }
 .tl-edit-btn:hover { opacity: 1; }
+.tl-imgs { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.tl-img-item img { width: 60px; height: 60px; object-fit: cover; border-radius: 6px; cursor: pointer; border: 1px solid #eee; transition: transform .15s; }
+.tl-img-item img:hover { transform: scale(1.1); }
+.tl-img-file { display: inline-flex; align-items: center; gap: 4px; padding: 4px 8px; background: #f0f2f5; border-radius: 4px; cursor: pointer; font-size: 11px; }
+.tl-img-file:hover { background: #e6f0ff; }
+.tl-img-file-icon { font-size: 16px; }
+.tl-img-file-name { color: #555; max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* 新增进度弹窗 */
 .progress-overlay { display: flex; align-items: center; justify-content: center; padding: 24px; }
@@ -485,6 +608,17 @@ async function copyCurrentImage() {
 .progress-save:disabled { background: #95c9f9; cursor: not-allowed; }
 .progress-btn { padding: 4px 10px; border-radius: 4px; border: 1px solid #52c41a; color: #52c41a; font-size: 12px; cursor: pointer; background: #f6ffed; text-decoration: none; transition: all .15s; white-space: nowrap; }
 .progress-btn:hover { background: #d9f7be; }
+
+/* 进度弹窗附件 */
+.progress-attachments { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0 8px; }
+.progress-file-item { display: flex; align-items: center; gap: 4px; padding: 4px 8px; background: #f5f6f8; border-radius: 6px; font-size: 12px; }
+.progress-file-thumb { width: 36px; height: 36px; object-fit: cover; border-radius: 4px; }
+.progress-file-icon { font-size: 20px; }
+.progress-file-name { color: #555; max-width: 100px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.progress-file-del { background: none; border: none; color: #999; cursor: pointer; font-size: 14px; padding: 0 2px; line-height: 1; }
+.progress-file-del:hover { color: #ee0a24; }
+.progress-upload-btn { display: inline-flex; align-items: center; gap: 4px; padding: 6px 12px; border: 1px dashed #d9d9d9; border-radius: 6px; color: #999; font-size: 12px; cursor: pointer; transition: all .15s; margin-bottom: 4px; }
+.progress-upload-btn:hover { border-color: var(--color-primary); color: var(--color-primary); }
 
 .note-content { font-size: 14px; line-height: 1.8; color: #323233; word-break: break-word; }
 .note-content :deep(code) { background: #f5f5f5; padding: 1px 4px; border-radius: 3px; font-size: 12px; }
