@@ -286,7 +286,16 @@ const groupedByCustomer = computed(() => {
 })
 
 function contentPreview(text) {
-  return text.replace(/<[^>]+>/g, '').replace(/\n/g, ' ').slice(0, 80) + (text.length > 80 ? '…' : '')
+  if (!text) return ''
+  let t = text
+  // 只取最新一段（第一个 --- 分隔符之前）
+  const sep = t.indexOf('\n\n---\n\n')
+  if (sep > 0) t = t.slice(0, sep)
+  // 去掉开头的时间戳行 📅 **...**
+  t = t.replace(/^📅\s+\*\*.*?\*\*\n*/u, '')
+  // 去掉 markdown 标记
+  t = t.replace(/\*\*/g, '').replace(/<[^>]+>/g, '').replace(/\n/g, ' ')
+  return t.slice(0, 80) + (t.length > 80 ? '…' : '')
 }
 function fmtTime(t) {
   if (!t) return ''
@@ -551,7 +560,7 @@ onUnmounted(() => {
 .skeleton-area { flex: 1; overflow-y: auto; padding: 12px 16px; }
 .skeleton-group { margin-bottom: 20px; }
 .skeleton-header { height: 20px; width: 100px; background: #e8e8e8; border-radius: 4px; margin-bottom: 12px; animation: sk-pulse 1.5s infinite ease-in-out; }
-.skeleton-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+.skeleton-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(380px, 1fr)); gap: 12px; }
 .skeleton-card { background: #fff; border-radius: 12px; padding: 16px; border: 1px solid #f0f0f0; }
 .sk-hdr { display: flex; gap: 6px; margin-bottom: 10px; }
 .sk-dot { width: 14px; height: 14px; background: #eee; border-radius: 50%; animation: sk-pulse 1.5s infinite ease-in-out; }
@@ -575,7 +584,7 @@ onUnmounted(() => {
 .customer-add:hover { color: #52c41a; }
 
 /* 卡片网格 */
-.card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+.card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(380px, 1fr)); gap: 12px; }
 .card-stagger-enter-active { transition: all .25s ease; }
 .card-stagger-enter-from { opacity: 0; transform: translateY(12px); }
 .note-card { background: #fff; border-radius: 12px; padding: 16px; cursor: pointer; border: 1px solid #f0f0f0; transition: all .2s cubic-bezier(.4,0,.2,1); position: relative; overflow: hidden; }

@@ -66,18 +66,18 @@
             <div class="note-content" v-if="note.content" v-html="renderedContent"></div>
 
             <!-- 📋 更新历史时间线 -->
-            <div class="timeline">
-              <div class="divider" v-if="updateList.length"></div>
-              <h3 class="timeline-title" v-if="updateList.length">📋 更新记录</h3>
-              <div class="tl-item" v-for="(u, i) in updateList" :key="i">
+            <div class="timeline" v-if="displayTimeline.length || (!displayTimeline.length && updateList.length)">
+              <div class="divider" v-if="displayTimeline.length || updateList.length"></div>
+              <h3 class="timeline-title" v-if="displayTimeline.length">📋 更新记录</h3>
+              <div class="tl-item" v-for="(u, i) in displayTimeline" :key="i">
                 <div class="tl-dot"></div>
                 <div class="tl-body">
                   <div class="tl-meta">
                     <span class="tl-time">📅 {{ u.time?.slice(0, 16) }}</span>
-                    <span v-if="u.status !== (updateList[i+1]?.status || note.status)" class="tl-status" :class="u.status">
+                    <span v-if="u.status !== (displayTimeline[i+1]?.status || note.status)" class="tl-status" :class="u.status">
                       {{ {todo:'待办',in_progress:'进行中',done:'已完成',follow_up:'跟进后续'}[u.status] || '' }}
                     </span>
-                    <button class="tl-edit-btn" @click.stop="editTimelineEntry(i)" title="编辑此条记录">✏️</button>
+                    <button class="tl-edit-btn" @click.stop="editTimelineEntry(u._idx)" title="编辑此条记录">✏️</button>
                   </div>
                   <div class="tl-content" v-if="u.content" v-html="renderUpdateContent(u.content)"></div>
                   <div class="tl-imgs" v-if="u.imgs && u.imgs.length">
@@ -91,8 +91,8 @@
                   </div>
                 </div>
               </div>
-              <!-- 创建记录 -->
-              <div class="tl-item tl-first">
+              <!-- 创建记录：没有更新记录时才显示 -->
+              <div class="tl-item tl-first" v-if="!displayTimeline.length">
                 <div class="tl-dot tl-dot-first"></div>
                 <div class="tl-body">
                   <div class="tl-meta">
@@ -293,6 +293,9 @@ async function saveProgress() {
         historyText += '\u{1F4C5} **' + timeStr + '**\n' + u.content + '\n\n---\n\n'
       }
     }
+    // 保留 content 中最新的段（可能尚未进入 updates，如旧版进度）
+    const latestSeg = (note.value.content || '').split('\n\n---\n\n')[0] || ''
+    const finalContent = historyText + (latestSeg ? '\n' + latestSeg : '')
     // 合并所有附件 URL（去重）
     const allImgs = [...currentImages]
     for (const u of updates) {
@@ -303,7 +306,7 @@ async function saveProgress() {
     try {
       await updateNote(note.value.id, {
         title: note.value.title,
-        content: historyText,
+        content: finalContent,
         customer: note.value.customer,
         category_id: note.value.category_id,
         status: note.value.status,
@@ -404,6 +407,34 @@ const updateList = computed(() => {
     const arr = JSON.parse(note.value?.updates || '[]')
     return Array.isArray(arr) ? arr : []
   } catch { return [] }
+})
+// 去重后的时间线：同一天合并为一条，内容累加
+const displayTimeline = computed(() => {
+  const list = updateList.value
+  if (!list.length) return []
+  const groups = []
+  for (let i = 0; i < list.length; i++) {
+    const entry = list[i]
+    const day = (entry.time || '').slice(0, 10)
+    if (!day) { groups.push({ ...entry, _idx: i }); continue }
+    const last = groups[groups.length - 1]
+    if (last && last._day === day) {
+      // 同一天合并：内容拼接（去重），附件合并，保留最新编辑索引
+      if (entry.content && last._contents.indexOf(entry.content) === -1) {
+        last._contents.push(entry.content)
+      }
+      last.content = last._contents.join('\n')
+      if (entry.imgs) {
+        last.imgs = [...new Set([...(last.imgs || []), ...entry.imgs])]
+      }
+      last.time = entry.time
+      last.status = entry.status || last.status
+      last._idx = i // 指向最新一条，编辑时打开最新的
+    } else {
+      groups.push({ ...entry, _day: day, _contents: entry.content ? [entry.content] : [], _idx: i })
+    }
+  }
+  return groups.map(({ _day, _contents, ...rest }) => rest)
 })
 function renderUpdateContent(text) {
   if (!text) return '<p style="color:#bbb;padding:4px 0;font-size:13px">（空）</p>'

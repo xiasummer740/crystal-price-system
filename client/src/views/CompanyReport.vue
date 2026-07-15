@@ -210,7 +210,12 @@ async function load() {
 }
 
 function contentPreview(text) {
-  return text.replace(/<[^>]+>/g, '').replace(/\n/g, ' ').slice(0, 120) + (text.length > 120 ? '…' : '')
+  if (!text) return ''
+  let t = text
+  const sep = t.indexOf('\n\n---\n\n')
+  if (sep > 0) t = t.slice(0, sep)
+  t = t.replace(/^📅\s+\*\*.*?\*\*\n*/u, '').replace(/\*\*/g, '').replace(/<[^>]+>/g, '').replace(/\n/g, ' ')
+  return t.slice(0, 120) + (t.length > 120 ? '…' : '')
 }
 function hasAttachments(item) {
   try { const imgs = JSON.parse(item.images || '[]'); return imgs.length > 0 } catch { return false }
