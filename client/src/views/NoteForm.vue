@@ -358,11 +358,29 @@ function fileIcon(url) {
   if (['txt','json','xml','md'].includes(ext)) return '📃'
   return '📎'
 }
+// 修复 mojibake：UTF-8 字节被当 Latin-1 解码后的乱码还原
+function fixMojibake(str) {
+  if (!/[\x80-\xFF]/.test(str)) return str
+  try {
+    const bytes = new Uint8Array([...str].map(c => c.charCodeAt(0) & 0xFF))
+    const fixed = new TextDecoder('utf-8').decode(bytes)
+    if (/[一-鿿　-〿＀-￯]/.test(fixed)) return fixed
+  } catch {}
+  return str
+}
+
 // 从 URL 提取原始文件名
 function fileName(url) {
-  const name = decodeURIComponent(url.split('/').pop() || '')
-  // 去掉时间戳前缀：如 "1712345678901-abc123-报价单.pdf" → "报价单.pdf"
-  return name.replace(/^\d{13}-[a-z0-9]{6}-/, '')
+  // 优先取 ?name= 参数（新格式，前端上传时写入的正确文件名）
+  const nameMatch = url.match(/[?&]name=([^&]+)/)
+  if (nameMatch) {
+    try { return decodeURIComponent(nameMatch[1]) } catch {}
+  }
+  // 旧格式：从 URL 路径提取 + 修复乱码
+  let name = url.split('/').pop() || ''
+  try { name = decodeURIComponent(name) } catch {}
+  name = name.replace(/^\d{13}-[a-z0-9]{6}-/, '')
+  return fixMojibake(name)
 }
 
 async function uploadFiles(files) {
@@ -370,11 +388,14 @@ async function uploadFiles(files) {
   if (remaining <= 0) { showToast('最多上传9个文件'); return }
   const toUpload = Array.from(files).slice(0, remaining)
   const fd = new FormData()
+  const origNames = toUpload.map(f => f.name)  // 上传前捕获原始文件名（前端 File.name 永远正确）
   for (const f of toUpload) fd.append('files', f)
   try {
     const r = await uploadNoteImages(fd)
     const urls = r.data || []
-    form.images.push(...urls)
+    // 在 URL 后追加 ?name= 参数，确保文件名正确显示（绕过服务器端的编码问题）
+    const enriched = urls.map((url, i) => url + '?name=' + encodeURIComponent(origNames[i]))
+    form.images.push(...enriched)
     trackChange()
     showToast(`已上传 ${urls.length} 个文件`)
   } catch (e) {

@@ -62,11 +62,13 @@
 
             <div class="divider"></div>
 
-            <!-- 最新一条进度（第一条时间线已展示，不重复显示） -->
+            <!-- 📄 内容展示（最新一段，不重复时间线） -->
+            <div class="note-content" v-if="note.content" v-html="renderedContent"></div>
+
             <!-- 📋 更新历史时间线 -->
-            <div class="timeline" v-if="updateList.length">
-              <div class="divider"></div>
-              <h3 class="timeline-title">📋 更新记录</h3>
+            <div class="timeline">
+              <div class="divider" v-if="updateList.length"></div>
+              <h3 class="timeline-title" v-if="updateList.length">📋 更新记录</h3>
               <div class="tl-item" v-for="(u, i) in updateList" :key="i">
                 <div class="tl-dot"></div>
                 <div class="tl-body">
@@ -261,9 +263,27 @@ function fileIcon(url) {
   if (['txt','json','xml','md'].includes(ext)) return '📃'
   return '📎'
 }
+// 修复 mojibake：UTF-8 字节被当 Latin-1 解码后的乱码还原
+function fixMojibake(str) {
+  if (!/[\x80-\xFF]/.test(str)) return str
+  try {
+    const bytes = new Uint8Array([...str].map(c => c.charCodeAt(0) & 0xFF))
+    const fixed = new TextDecoder('utf-8').decode(bytes)
+    if (/[一-鿿　-〿＀-￯]/.test(fixed)) return fixed
+  } catch {}
+  return str
+}
+
 function fileName(url) {
-  return decodeURIComponent(url.split('/').pop() || '')
+  // 优先取 ?name= 参数（新格式）
+  const nameMatch = url.match(/[?&]name=([^&]+)/)
+  if (nameMatch) {
+    try { return decodeURIComponent(nameMatch[1]) } catch {}
+  }
+  // 旧格式：从 URL 路径提取 + 修复乱码
+  let name = decodeURIComponent(url.split('/').pop() || '')
     .replace(/^\d{13}-[a-z0-9]{6}-/, '')
+  return fixMojibake(name)
 }
 const imageList = computed(() => {
   try { return (JSON.parse(note.value?.images || '[]')).filter(isImageUrl) } catch { return [] }
