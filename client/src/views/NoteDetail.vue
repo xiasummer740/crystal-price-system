@@ -140,7 +140,7 @@
         <!-- 新增/编辑进度弹窗 -->
         <van-overlay :show="showProgressInput" z-index="2000">
           <div class="progress-overlay" @click="showProgressInput = false">
-            <div class="progress-dialog" @click.stop @paste.prevent="onProgressPaste">
+            <div class="progress-dialog" @click.stop @paste="onProgressPaste">
               <h3 class="progress-title">{{ progressEditIndex !== null ? '✏️ 编辑记录' : '📋 新增进度' }}</h3>
               <p class="progress-hint">{{ progressEditIndex !== null ? '修改此条记录的跟进内容' : '记录今天的跟进内容' }}</p>
               <textarea v-model="progressContent" class="progress-textarea" placeholder="输入跟进内容…" rows="4" ref="progressInputRef"></textarea>
@@ -265,6 +265,7 @@ async function onProgressPaste(e) {
     }
   }
   if (files.length) {
+    e.preventDefault() // 只有粘贴的是文件才拦截，文字粘贴放行
     showToast(`检测到 ${files.length} 个文件`)
     await handleProgressFiles(files)
   }

@@ -242,6 +242,7 @@ async function resolveDataDir() {
 }
 
 let mainWindow = null
+let _mainSaveTimer = null
 let serverPort = BASE_PORT
 let dbSaveNow = null
 let doFlushBackupPending = null
@@ -354,9 +355,13 @@ async function startServer() {
 
 function createWindow(port) {
   log(`Creating window, loading port ${port}`)
+  const cfg = loadFullConfig()
+  const saved = cfg?.mainWindow || {}
   mainWindow = new BrowserWindow({
-    width: 1400,
-    height: 900,
+    width: saved.width || 1400,
+    height: saved.height || 900,
+    x: saved.x,
+    y: saved.y,
     minWidth: 900,
     minHeight: 600,
     title: '晶振报价管理系统 v' + app.getVersion(),
@@ -370,6 +375,13 @@ function createWindow(port) {
   })
 
   mainWindow.setMenuBarVisibility(false)
+  // 监听大小/位置变化 → 节流保存
+  const debounceSave = () => {
+    if (_mainSaveTimer) clearTimeout(_mainSaveTimer)
+    _mainSaveTimer = setTimeout(saveMainBounds, 500)
+  }
+  mainWindow.on('resize', debounceSave)
+  mainWindow.on('move', debounceSave)
   mainWindow.once('ready-to-show', () => {
     log('Window ready to show')
     mainWindow.show()
@@ -453,6 +465,14 @@ function showSplash() {
 // 记事便签独立浮窗
 let notesWindow = null
 let _notesSaveTimer = null
+function saveMainBounds() {
+  if (!mainWindow || mainWindow.isDestroyed()) return
+  try {
+    const bounds = mainWindow.getBounds()
+    const cfg = loadFullConfig()
+    saveFullConfig({ mainWindow: { ...cfg.mainWindow, ...bounds } })
+  } catch (e) { log('saveMainBounds error: ' + e.message) }
+}
 function saveNotesBounds() {
   if (!notesWindow || notesWindow.isDestroyed()) return
   try {
