@@ -56,25 +56,25 @@
                 <td class="num-cell">1</td>
                 <td class="indicator-cell">部门销售目标达成率<br /><small>(当期实际销售额/当期计划销售额)*100%，少5%扣1分</small></td>
                 <td class="score-cell">10</td>
-                <td><input type="number" class="score-input" v-model.number="scores[1].self" min="0" max="10" /></td>
-                <td><input type="number" class="score-input" v-model.number="scores[1].sup" min="0" max="10" /></td>
-                <td><input type="number" class="score-input" v-model.number="scores[1].mgr" min="0" max="10" /></td>
+                <td><input type="number" class="score-input" @focus="selectInput" v-model.number="scores[1].self" min="0" max="10" /></td>
+                <td><input type="number" class="score-input" @focus="selectInput" v-model.number="scores[1].sup" min="0" max="10" /></td>
+                <td><input type="number" class="score-input" @focus="selectInput" v-model.number="scores[1].mgr" min="0" max="10" /></td>
               </tr>
               <tr class="dim-row">
                 <td class="num-cell">2</td>
                 <td class="indicator-cell">个人销售目标达成率<br /><small>(当期实际销售额/当期计划销售额)*100%，少5%扣1分</small></td>
                 <td class="score-cell">20</td>
-                <td><input type="number" class="score-input" v-model.number="scores[2].self" min="0" max="20" /></td>
-                <td><input type="number" class="score-input" v-model.number="scores[2].sup" min="0" max="20" /></td>
-                <td><input type="number" class="score-input" v-model.number="scores[2].mgr" min="0" max="20" /></td>
+                <td><input type="number" class="score-input" @focus="selectInput" v-model.number="scores[2].self" min="0" max="20" /></td>
+                <td><input type="number" class="score-input" @focus="selectInput" v-model.number="scores[2].sup" min="0" max="20" /></td>
+                <td><input type="number" class="score-input" @focus="selectInput" v-model.number="scores[2].mgr" min="0" max="20" /></td>
               </tr>
               <tr class="dim-row">
                 <td class="num-cell">3</td>
                 <td class="indicator-cell">回款率<br /><small>回款率100%，每少5%扣2分</small></td>
                 <td class="score-cell">15</td>
-                <td><input type="number" class="score-input" v-model.number="scores[3].self" min="0" max="15" /></td>
-                <td><input type="number" class="score-input" v-model.number="scores[3].sup" min="0" max="15" /></td>
-                <td><input type="number" class="score-input" v-model.number="scores[3].mgr" min="0" max="15" /></td>
+                <td><input type="number" class="score-input" @focus="selectInput" v-model.number="scores[3].self" min="0" max="15" /></td>
+                <td><input type="number" class="score-input" @focus="selectInput" v-model.number="scores[3].sup" min="0" max="15" /></td>
+                <td><input type="number" class="score-input" @focus="selectInput" v-model.number="scores[3].mgr" min="0" max="15" /></td>
               </tr>
               <!-- 财务小计 -->
               <tr class="subtotal-row">
@@ -89,19 +89,19 @@
               <tr class="dim-row">
                 <td class="dim-cell" rowspan="2">客户<br />30分</td>
                 <td class="num-cell">4</td>
-                <td class="indicator-cell">高端产品(OCXO,差分等)和新产品开发<br /><small>注册1家有效客户得2分(以CRM平台注册为准)</small></td>
+                <td class="indicator-cell">高端产品(OCXO,差分等)和新产品开发<br /><small>注册1家有效客户得2分（以CRM平台注册为准）<br/>有效客户（含：客户用料、竞争对手、进入机会）</small></td>
                 <td class="score-cell">15</td>
-                <td><input type="number" class="score-input" v-model.number="scores[4].self" min="0" max="15" /></td>
-                <td><input type="number" class="score-input" v-model.number="scores[4].sup" min="0" max="15" /></td>
-                <td><input type="number" class="score-input" v-model.number="scores[4].mgr" min="0" max="15" /></td>
+                <td><input type="number" class="score-input" @focus="selectInput" v-model.number="scores[4].self" min="0" max="15" /></td>
+                <td><input type="number" class="score-input" @focus="selectInput" v-model.number="scores[4].sup" min="0" max="15" /></td>
+                <td><input type="number" class="score-input" @focus="selectInput" v-model.number="scores[4].mgr" min="0" max="15" /></td>
               </tr>
               <tr class="dim-row">
                 <td class="num-cell">5</td>
                 <td class="indicator-cell">新客户开发<br /><small>以成交下单为准，每1家客户得5分</small></td>
                 <td class="score-cell">15</td>
-                <td><input type="number" class="score-input" v-model.number="scores[5].self" min="0" max="15" /></td>
-                <td><input type="number" class="score-input" v-model.number="scores[5].sup" min="0" max="15" /></td>
-                <td><input type="number" class="score-input" v-model.number="scores[5].mgr" min="0" max="15" /></td>
+                <td><input type="number" class="score-input" @focus="selectInput" v-model.number="scores[5].self" min="0" max="15" /></td>
+                <td><input type="number" class="score-input" @focus="selectInput" v-model.number="scores[5].sup" min="0" max="15" /></td>
+                <td><input type="number" class="score-input" @focus="selectInput" v-model.number="scores[5].mgr" min="0" max="15" /></td>
               </tr>
               <!-- 客户小计 -->
               <tr class="subtotal-row">
@@ -118,17 +118,17 @@
                 <td class="num-cell">6</td>
                 <td class="indicator-cell">个人库存控制<br /><small>个人库存情况异常严重的酌情扣分</small></td>
                 <td class="score-cell">10</td>
-                <td><input type="number" class="score-input" v-model.number="scores[6].self" min="0" max="10" /></td>
-                <td><input type="number" class="score-input" v-model.number="scores[6].sup" min="0" max="10" /></td>
-                <td><input type="number" class="score-input" v-model.number="scores[6].mgr" min="0" max="10" /></td>
+                <td><input type="number" class="score-input" @focus="selectInput" v-model.number="scores[6].self" min="0" max="10" /></td>
+                <td><input type="number" class="score-input" @focus="selectInput" v-model.number="scores[6].sup" min="0" max="10" /></td>
+                <td><input type="number" class="score-input" @focus="selectInput" v-model.number="scores[6].mgr" min="0" max="10" /></td>
               </tr>
               <tr class="dim-row">
                 <td class="num-cell">7</td>
-                <td class="indicator-cell">部门协作<br /><small>每月请经理陪同拜访(4分/家)、周会分享(2分/次)、传帮带(2分/次)</small></td>
+                <td class="indicator-cell">部门协作<br /><small>每月请经理陪同拜访或跟进客户，每1家得4分；<br/>销售周会分享（有效市场信息、案例)每1次得2分;<br/>资深销售人员传帮带、传授经验每1次得2分;</small></td>
                 <td class="score-cell">15</td>
-                <td><input type="number" class="score-input" v-model.number="scores[7].self" min="0" max="15" /></td>
-                <td><input type="number" class="score-input" v-model.number="scores[7].sup" min="0" max="15" /></td>
-                <td><input type="number" class="score-input" v-model.number="scores[7].mgr" min="0" max="15" /></td>
+                <td><input type="number" class="score-input" @focus="selectInput" v-model.number="scores[7].self" min="0" max="15" /></td>
+                <td><input type="number" class="score-input" @focus="selectInput" v-model.number="scores[7].sup" min="0" max="15" /></td>
+                <td><input type="number" class="score-input" @focus="selectInput" v-model.number="scores[7].mgr" min="0" max="15" /></td>
               </tr>
               <!-- 内部运营小计 -->
               <tr class="subtotal-row">
@@ -143,27 +143,27 @@
               <tr class="dim-row bonus-row">
                 <td class="dim-cell" rowspan="3">学习成长<br />加分项<br />10-30分</td>
                 <td class="num-cell">8</td>
-                <td class="indicator-cell">知识输出<br /><small>担任内训讲师(5-10分)、月末上课积极度(1-5分)、知识库共享文档(2-5分/篇)</small></td>
+                <td class="indicator-cell">知识输出<br /><small>1).担任内部培训讲师、输出文档或课件(根据调查问卷反馈加 5-10分）<br/> 90分以上100%（10分）、80-90分70%（7分）、70分-80分50%（5分）70分以下不加分<br/>2) 参与月末周六上课学习积极度加1-5分 （回答问题、主动分享，以课堂个人得分前五名进行阶梯式加分）<br/>3)公司平台知识库输出有价值的共享文档（2-5分/篇）</small></td>
                 <td class="score-cell">1-10</td>
-                <td><input type="number" class="score-input" v-model.number="scores[8].self" min="0" max="10" /></td>
-                <td><input type="number" class="score-input" v-model.number="scores[8].sup" min="0" max="10" /></td>
-                <td><input type="number" class="score-input" v-model.number="scores[8].mgr" min="0" max="10" /></td>
+                <td><input type="number" class="score-input" @focus="selectInput" v-model.number="scores[8].self" min="0" max="10" /></td>
+                <td><input type="number" class="score-input" @focus="selectInput" v-model.number="scores[8].sup" min="0" max="10" /></td>
+                <td><input type="number" class="score-input" @focus="selectInput" v-model.number="scores[8].mgr" min="0" max="10" /></td>
               </tr>
               <tr class="dim-row bonus-row">
                 <td class="num-cell">9</td>
-                <td class="indicator-cell">管理优化<br /><small>个人提报合理的改进建议，并书面输出解决方案(1-10分)</small></td>
+                <td class="indicator-cell">管理优化<br /><small>个人提报合理的改进建议，并书面输出解决方案与操作流程，由各部门领导、管理部共同审核确认（1-10分）</small></td>
                 <td class="score-cell">1-10</td>
-                <td><input type="number" class="score-input" v-model.number="scores[9].self" min="0" max="10" /></td>
-                <td><input type="number" class="score-input" v-model.number="scores[9].sup" min="0" max="10" /></td>
-                <td><input type="number" class="score-input" v-model.number="scores[9].mgr" min="0" max="10" /></td>
+                <td><input type="number" class="score-input" @focus="selectInput" v-model.number="scores[9].self" min="0" max="10" /></td>
+                <td><input type="number" class="score-input" @focus="selectInput" v-model.number="scores[9].sup" min="0" max="10" /></td>
+                <td><input type="number" class="score-input" @focus="selectInput" v-model.number="scores[9].mgr" min="0" max="10" /></td>
               </tr>
               <tr class="dim-row bonus-row">
                 <td class="num-cell">10</td>
-                <td class="indicator-cell">团队贡献<br /><small>出镜直播(5分)、短视频(3分)、投稿(2分)、引荐人才(2-5分)、成功案例(2-5分)等</small></td>
+                <td class="indicator-cell">团队贡献<br /><small>1）非新媒体部门人员出镜直播5分、短视频拍摄3分、投稿被采用2分，月度最高10分<br/>2）为公司引荐优秀人才：入职2分、成功转正5分<br/>3）客户端按要求收集成功案例素材2-5分/条 <br/>4）其它对公司、部门团队建设贡献 1-10分/条</small></td>
                 <td class="score-cell">1-10</td>
-                <td><input type="number" class="score-input" v-model.number="scores[10].self" min="0" max="10" /></td>
-                <td><input type="number" class="score-input" v-model.number="scores[10].sup" min="0" max="10" /></td>
-                <td><input type="number" class="score-input" v-model.number="scores[10].mgr" min="0" max="10" /></td>
+                <td><input type="number" class="score-input" @focus="selectInput" v-model.number="scores[10].self" min="0" max="10" /></td>
+                <td><input type="number" class="score-input" @focus="selectInput" v-model.number="scores[10].sup" min="0" max="10" /></td>
+                <td><input type="number" class="score-input" @focus="selectInput" v-model.number="scores[10].mgr" min="0" max="10" /></td>
               </tr>
               <!-- 学习成长小计 -->
               <tr class="subtotal-row bonus-st">
@@ -177,8 +177,11 @@
               <!-- 减分项 -->
               <tr class="deduct-head">
                 <td colspan="7" class="deduct-label">
-                  减分项
-                  <button class="add-deduct-btn" @click="addDeduction">＋ 添加</button>
+                  <div class="deduct-head-row">
+                    <span>减分项</span>
+                    <small>工作失误：工作过程中，出现严重失误，对公司及团队造成严重影响（视具体情况扣0-100分）</small>
+                    <button class="add-deduct-btn" @click="addDeduction">＋ 添加</button>
+                  </div>
                 </td>
               </tr>
               <tr v-for="(d, di) in deductions" :key="di" class="deduct-row">
@@ -187,11 +190,11 @@
                   <input v-model="d.desc" placeholder="工作失误描述" class="deduct-input" />
                 </td>
                 <td class="score-cell">-</td>
-                <td><input type="number" class="score-input deduct-score" v-model.number="d.self" min="0" /></td>
-                <td><input type="number" class="score-input deduct-score" v-model.number="d.sup" min="0" /></td>
+                <td><input type="number" class="score-input deduct-score" @focus="selectInput" v-model.number="d.self" min="0" /></td>
+                <td><input type="number" class="score-input deduct-score" @focus="selectInput" v-model.number="d.sup" min="0" /></td>
                 <td>
                   <div class="deduct-actions">
-                    <input type="number" class="score-input deduct-score" v-model.number="d.mgr" min="0" />
+                    <input type="number" class="score-input deduct-score" @focus="selectInput" v-model.number="d.mgr" min="0" />
                     <button class="deduct-del" @click="deductions.splice(di, 1)">×</button>
                   </div>
                 </td>
@@ -294,6 +297,10 @@ const totals = computed(() => {
 const totalFullMark = computed(() => {
   return "100+加分";
 });
+
+function selectInput(e) {
+  e.target.select();
+}
 
 function addDeduction() {
   deductions.push({ desc: "", self: 0, sup: 0, mgr: 0 });
@@ -646,9 +653,20 @@ onMounted(() => {
   font-weight: 600;
   color: #c62828;
   font-size: 13px;
+}
+.deduct-head-row {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-wrap: wrap;
+}
+.deduct-head-row small {
+  font-weight: 400;
+  font-size: 10px;
+  color: #e53935;
+  flex: 1;
+  min-width: 200px;
+  line-height: 1.4;
 }
 .add-deduct-btn {
   padding: 2px 10px;

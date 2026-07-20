@@ -625,11 +625,26 @@ function openMapWindow(port) {
 }
 
 let perfWindow = null
+let _perfSaveTimer = null
+function savePerfBounds() {
+  if (!perfWindow || perfWindow.isDestroyed()) return
+  try {
+    const bounds = perfWindow.getBounds()
+    const cfg = loadFullConfig()
+    saveFullConfig({ perfWindow: { ...cfg.perfWindow, ...bounds } })
+  } catch (e) { log('savePerfBounds error: ' + e.message) }
+}
 function openPerfWindow(port) {
   if (perfWindow && !perfWindow.isDestroyed()) { perfWindow.focus(); return }
+  const cfg = loadFullConfig()
+  const saved = cfg?.perfWindow || {}
+  const mainPos = mainWindow?.getBounds()
   perfWindow = new BrowserWindow({
-    width: 960, height: 720,
+    width: saved.width || 960,
+    height: saved.height || 720,
     minWidth: 640, minHeight: 500,
+    x: saved.x ?? (mainPos ? mainPos.x + 80 : undefined),
+    y: saved.y ?? (mainPos ? mainPos.y + 60 : undefined),
     title: '绩效明细',
     icon: path.join(__dirname, '..', 'client', 'dist', 'SJK-256.png'),
     webPreferences: {
@@ -640,9 +655,18 @@ function openPerfWindow(port) {
     }
   })
   perfWindow.setMenuBarVisibility(false)
+  const debounceSave = () => {
+    if (_perfSaveTimer) clearTimeout(_perfSaveTimer)
+    _perfSaveTimer = setTimeout(savePerfBounds, 500)
+  }
+  perfWindow.on('resize', debounceSave)
+  perfWindow.on('move', debounceSave)
   const url = `http://localhost:${port}/#/performance?standalone=1&v=${app.getVersion()}&packaged=${app.isPackaged}`
   perfWindow.loadURL(url)
-  perfWindow.on('closed', () => { perfWindow = null })
+  perfWindow.on('closed', () => {
+    perfWindow = null
+    if (_perfSaveTimer) { clearTimeout(_perfSaveTimer); _perfSaveTimer = null }
+  })
 }
 
 // IPC：渲染进程请求打开地图窗口
