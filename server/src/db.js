@@ -329,6 +329,8 @@ export async function initDb() {
     )
   `)
   try { db.run('CREATE INDEX IF NOT EXISTS idx_perf_month ON performance_reviews(month)') } catch {}
+  // 移除旧版添加的唯一索引（避免保存冲突）
+  try { db.run('DROP INDEX IF EXISTS idx_perf_month_emp') } catch {}
 
   // 应用设置表（Key-Value 持久化，跨升级保留）
   db.run(`CREATE TABLE IF NOT EXISTS app_settings (key TEXT PRIMARY KEY, value TEXT DEFAULT '')`)

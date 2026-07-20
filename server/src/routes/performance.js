@@ -46,7 +46,8 @@ router.post("/reviews", (req, res) => {
     );
     res.json({ code: 0, data: { id: r.lastInsertRowid } });
   } catch (e) {
-    throw e;
+    console.error('[performance] create error:', e.message);
+    res.status(500).json({ code: 1, msg: '保存失败: ' + e.message });
   }
 });
 
