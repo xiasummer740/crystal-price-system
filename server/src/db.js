@@ -329,7 +329,6 @@ export async function initDb() {
     )
   `)
   try { db.run('CREATE INDEX IF NOT EXISTS idx_perf_month ON performance_reviews(month)') } catch {}
-  try { db.run('CREATE UNIQUE INDEX IF NOT EXISTS idx_perf_month_emp ON performance_reviews(month, employee_name)') } catch {}
 
   // 应用设置表（Key-Value 持久化，跨升级保留）
   db.run(`CREATE TABLE IF NOT EXISTS app_settings (key TEXT PRIMARY KEY, value TEXT DEFAULT '')`)

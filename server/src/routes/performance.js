@@ -46,8 +46,6 @@ router.post("/reviews", (req, res) => {
     );
     res.json({ code: 0, data: { id: r.lastInsertRowid } });
   } catch (e) {
-    if (e.message?.includes("UNIQUE"))
-      return res.status(400).json({ code: 1, msg: "该月份该员工已存在记录" });
     throw e;
   }
 });
