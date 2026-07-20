@@ -44,7 +44,7 @@
                 <th style="width:60px">牵引点</th>
                 <th style="width:200px">考核指标</th>
                 <th style="width:60px">分数</th>
-                <th style="width:120px">自评得分</th>
+                <th style="width:180px">自评得分</th>
                 <th style="width:70px">上级评分</th>
                 <th style="width:80px">最高主管评分</th>
               </tr>
@@ -651,23 +651,26 @@ onMounted(() => {
   width: 46px;
 }
 .score-self-cell {
-  min-width: 100px;
+  min-width: 160px;
 }
 .score-note {
   display: block;
-  width: 80px;
-  margin: 3px auto 0;
+  width: calc(100% - 8px);
+  margin: 4px auto 0;
   border: none;
   border-bottom: 1px dashed #e0e0e0;
   padding: 2px 4px;
-  font-size: 9px;
+  font-size: 10px;
   font-family: inherit;
   outline: none;
   background: transparent;
-  color: #888;
-  text-align: center;
-  line-height: 1.3;
+  color: #666;
+  text-align: left;
+  line-height: 1.4;
   transition: border-color 0.15s;
+  white-space: normal;
+  word-break: break-all;
+  resize: none;
 }
 .score-note:focus {
   border-bottom-color: #2e7d32;
