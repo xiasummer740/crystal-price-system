@@ -30,6 +30,7 @@ const routes = [
   { path: '/reports', name: 'Reports', component: Reports, meta: { title: '总结汇报' } },
   { path: '/reports/company/:customer', name: 'CompanyReport', component: CompanyReport, meta: { title: '公司记事汇总' } },
   { path: '/map-addresses', name: 'MapAddresses', component: () => import('../views/MapAddresses.vue'), meta: { title: '地图地址' } },
+  { path: '/performance', name: 'Performance', component: () => import('../views/PerformanceReview.vue'), meta: { title: '绩效明细' } },
   { path: '/trip-plans', name: 'TripPlans', component: () => import('../views/TripPlan.vue'), meta: { title: '行程规划' } },
   { path: '/:pathMatch(.*)*', redirect: '/' }
 ]

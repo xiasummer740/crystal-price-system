@@ -313,6 +313,24 @@ export async function initDb() {
   `)
   try { db.run('CREATE INDEX IF NOT EXISTS idx_map_trip_points_pid ON map_trip_points(plan_id)') } catch {}
 
+  // ====== 绩效明细表 ======
+  db.run(`
+    CREATE TABLE IF NOT EXISTS performance_reviews (
+      id              INTEGER PRIMARY KEY AUTOINCREMENT,
+      month           TEXT NOT NULL,
+      employee_name   TEXT DEFAULT '',
+      department      TEXT DEFAULT '',
+      position        TEXT DEFAULT '',
+      scores          TEXT DEFAULT '{}',
+      deductions      TEXT DEFAULT '[]',
+      total_score     REAL DEFAULT 0,
+      created_at      DATETIME DEFAULT (datetime('now','localtime')),
+      updated_at      DATETIME DEFAULT (datetime('now','localtime'))
+    )
+  `)
+  try { db.run('CREATE INDEX IF NOT EXISTS idx_perf_month ON performance_reviews(month)') } catch {}
+  try { db.run('CREATE UNIQUE INDEX IF NOT EXISTS idx_perf_month_emp ON performance_reviews(month, employee_name)') } catch {}
+
   // 应用设置表（Key-Value 持久化，跨升级保留）
   db.run(`CREATE TABLE IF NOT EXISTS app_settings (key TEXT PRIMARY KEY, value TEXT DEFAULT '')`)
 

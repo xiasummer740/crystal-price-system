@@ -412,6 +412,11 @@ function createWindow(port) {
       openNotesWindow(serverPort)
       return { action: 'deny' }
     }
+    // 绩效明细窗口
+    if (url.includes('/#/performance') && url.includes('?standalone=1')) {
+      openPerfWindow(serverPort)
+      return { action: 'deny' }
+    }
     // 仅允许 http/https 外部链接通过系统浏览器打开
     if (url.startsWith('http://') || url.startsWith('https://')) {
       shell.openExternal(url)
@@ -617,6 +622,27 @@ function openMapWindow(port) {
     mapWindow = null
     if (_mapSaveTimer) { clearTimeout(_mapSaveTimer); _mapSaveTimer = null }
   })
+}
+
+let perfWindow = null
+function openPerfWindow(port) {
+  if (perfWindow && !perfWindow.isDestroyed()) { perfWindow.focus(); return }
+  perfWindow = new BrowserWindow({
+    width: 960, height: 720,
+    minWidth: 640, minHeight: 500,
+    title: '绩效明细',
+    icon: path.join(__dirname, '..', 'client', 'dist', 'SJK-256.png'),
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true,
+      sandbox: false,
+      preload: path.join(__dirname, 'preload.cjs')
+    }
+  })
+  perfWindow.setMenuBarVisibility(false)
+  const url = `http://localhost:${port}/#/performance?standalone=1&v=${app.getVersion()}&packaged=${app.isPackaged}`
+  perfWindow.loadURL(url)
+  perfWindow.on('closed', () => { perfWindow = null })
 }
 
 // IPC：渲染进程请求打开地图窗口
