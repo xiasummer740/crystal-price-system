@@ -848,13 +848,13 @@ function onCheckUpdate() {
   if (updateStatus.value === 'checking') return
   updateStatus.value = 'checking'
   window.electronAPI?.checkUpdate?.()
-  // 15s 超时兜底
+  // 30s 超时兜底（国内访问 GitHub API 较慢）
   const checkTimer = setTimeout(() => {
     if (updateStatus.value === 'checking') {
       updateStatus.value = 'error'
       updateError.value = '检查超时，请检查网络后重试'
     }
-  }, 15000)
+  }, 30000)
   // 任何事件都能清除超时
   const clearTimer = () => clearTimeout(checkTimer)
   const unsubs = []
