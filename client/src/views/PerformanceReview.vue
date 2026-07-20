@@ -412,9 +412,13 @@ function addDeduction() {
 }
 
 // 加载数据
+let _loadKey = 0;
 async function loadData() {
+  const key = ++_loadKey;
   try {
     const r = await http.get("/performance/reviews", { params: { month: monthKey.value } });
+    // 如果加载期间月份又变了，丢弃本次结果
+    if (key !== _loadKey) return;
     const list = r.data?.data || [];
     if (list.length) {
       const item = list[0];
