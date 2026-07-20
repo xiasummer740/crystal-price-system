@@ -328,6 +328,17 @@ async function loadData() {
       for (const d of savedDed) {
         deductions.push({ desc: d.desc || "", self: d.self || 0, sup: d.sup || 0, mgr: d.mgr || 0 });
       }
+    } else {
+      // 该月无记录 → 清空表单
+      form.employee_name = "";
+      form.department = "";
+      form.position = "";
+      for (let i = 1; i <= 10; i++) {
+        scores[i].self = 0;
+        scores[i].sup = 0;
+        scores[i].mgr = 0;
+      }
+      deductions.length = 0;
     }
   } catch {}
 }
