@@ -31,7 +31,6 @@ export function initUpdater(window) {
 
     autoUpdater.autoDownload = false
     autoUpdater.autoInstallOnAppQuit = true
-    autoUpdater.forceDevUpdateConfig = true
 
     autoUpdater.on('update-available', (info) => {
       LOG(`EVENT: update-available v${info.version}`)
