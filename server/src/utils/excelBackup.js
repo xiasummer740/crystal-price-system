@@ -4,7 +4,7 @@
 import path from 'path'
 import fs from 'fs'
 import { fileURLToPath } from 'url'
-import { exportToExcel, exportSamples, exportNotes } from './export.js'
+import { exportToExcel, exportSamples, exportNotes, exportMapCustomers } from './export.js'
 
 const THROTTLE_MS = 5 * 1000
 const KEEP = 5
@@ -14,7 +14,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const state = {
   prices: { pending: false, timer: null, lastFlush: 0 },
   samples: { pending: false, timer: null, lastFlush: 0 },
-  notes: { pending: false, timer: null, lastFlush: 0 }
+  notes: { pending: false, timer: null, lastFlush: 0 },
+  map: { pending: false, timer: null, lastFlush: 0 }
 }
 
 function ts() {
@@ -60,6 +61,11 @@ function doFlush(type) {
       const prefix = '记事便签-自动备份-'
       fs.writeFileSync(path.join(dir, `${prefix}${stamp}.xlsx`), buf)
       pruneFifo(dir, prefix)
+    } else if (type === 'map') {
+      const buf = exportMapCustomers()
+      const prefix = '客户地址-自动备份-'
+      fs.writeFileSync(path.join(dir, `${prefix}${stamp}.xlsx`), buf)
+      pruneFifo(dir, prefix)
     }
   } catch (e) {
     console.warn(`[excelBackup] ${type} 备份失败:`, e.message)
@@ -69,7 +75,7 @@ function doFlush(type) {
 // 节流触发：写操作发生 → 标记 pending → 5 秒窗口结束后落盘
 // 窗口期内反复触发只重置定时器，最终只写 1 份
 export function triggerBackup(type) {
-  if (type !== 'prices' && type !== 'samples' && type !== 'notes') return
+  if (type !== 'prices' && type !== 'samples' && type !== 'notes' && type !== 'map') return
   const st = state[type]
   st.pending = true
   if (st.timer) clearTimeout(st.timer)

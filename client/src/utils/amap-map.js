@@ -45,6 +45,15 @@ export function createAmapMap(container, center = [114.3, 30.5], zoom = 6) {
     rotateEnable: false,          // 禁止旋转
     animateEnable: false,         // 关闭动画减少重绘
   });
+  // 添加缩放控件（放大缩小按钮）
+  AMap.plugin('AMap.ToolBar', () => {
+    const toolbar = new AMap.ToolBar({
+      position: 'RB',
+      ruler: false,
+      noIpLocate: true,
+    });
+    map.addControl(toolbar);
+  });
   return map;
 }
 

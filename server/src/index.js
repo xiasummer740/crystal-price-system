@@ -73,6 +73,8 @@ app.use((req, res, next) => {
           triggerBackup('samples')
         } else if (req.originalUrl.startsWith('/api/notes')) {
           triggerBackup('notes')
+        } else if (req.originalUrl.startsWith('/api/map')) {
+          triggerBackup('map')
         }
       }
     })
