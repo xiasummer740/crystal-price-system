@@ -8,9 +8,6 @@
         <button class="hdr-btn" @click="prevMonth">‹ 上月</button>
         <span class="month-label">{{ curLabel }}</span>
         <button class="hdr-btn" @click="nextMonth">下月 ›</button>
-        <button class="hdr-btn" :class="{ active: showExtraCols }" @click="showExtraCols = !showExtraCols" style="font-size:11px">
-          {{ showExtraCols ? '🙋 收起' : '🙋 上级/主管' }}
-        </button>
         <button class="hdr-btn primary" @click="handleSave" :disabled="saving">
           {{ saving ? '保存中…' : '💾 保存' }}
         </button>
@@ -30,16 +27,15 @@
 
         <!-- 考核表 -->
         <div class="table-wrap">
-          <table class="perf-table" :class="{ 'hide-extra': !showExtraCols }">
+          <table class="perf-table">
             <thead>
               <tr>
                 <th style="width:80px">考核维度</th>
                 <th style="width:60px">牵引点</th>
                 <th style="width:200px">考核指标</th>
                 <th style="width:60px">分数</th>
-                <th style="width:180px">自评得分</th>
-                <th v-if="showExtraCols" style="width:70px">上级评分</th>
-                <th v-if="showExtraCols" style="width:80px">最高主管评分</th>
+                <th style="width:170px">自评得分</th>
+                <th style="width:130px">备注</th>
               </tr>
             </thead>
             <tbody>
@@ -53,8 +49,7 @@
                   <input type="number" class="score-input" @focus="selectInput" v-model.number="scores[1].self" min="0" max="10" />
                   <textarea class="score-note" placeholder="评分说明..." v-model="scores[1].self_note" rows="2"></textarea>
                 </td>
-                <td><input type="number" class="score-input" @focus="selectInput" v-model.number="scores[1].sup" min="0" max="10" /></td>
-                <td><input type="number" class="score-input" @focus="selectInput" v-model.number="scores[1].mgr" min="0" max="10" /></td>
+                <td><textarea class="remark-input" placeholder="备注..." v-model="scores[1].remark" rows="2"></textarea></td>
               </tr>
               <tr class="dim-row">
                 <td class="num-cell">2</td>
@@ -64,8 +59,7 @@
                   <input type="number" class="score-input" @focus="selectInput" v-model.number="scores[2].self" min="0" max="20" />
                   <textarea class="score-note" placeholder="评分说明..." v-model="scores[2].self_note" rows="2"></textarea>
                 </td>
-                <td><input type="number" class="score-input" @focus="selectInput" v-model.number="scores[2].sup" min="0" max="20" /></td>
-                <td><input type="number" class="score-input" @focus="selectInput" v-model.number="scores[2].mgr" min="0" max="20" /></td>
+                <td><textarea class="remark-input" placeholder="备注..." v-model="scores[2].remark" rows="2"></textarea></td>
               </tr>
               <tr class="dim-row">
                 <td class="num-cell">3</td>
@@ -75,16 +69,14 @@
                   <input type="number" class="score-input" @focus="selectInput" v-model.number="scores[3].self" min="0" max="15" />
                   <textarea class="score-note" placeholder="评分说明..." v-model="scores[3].self_note" rows="2"></textarea>
                 </td>
-                <td><input type="number" class="score-input" @focus="selectInput" v-model.number="scores[3].sup" min="0" max="15" /></td>
-                <td><input type="number" class="score-input" @focus="selectInput" v-model.number="scores[3].mgr" min="0" max="15" /></td>
+                <td><textarea class="remark-input" placeholder="备注..." v-model="scores[3].remark" rows="2"></textarea></td>
               </tr>
               <!-- 财务小计 -->
               <tr class="subtotal-row">
                 <td colspan="3" class="subtotal-label">财务 小计</td>
                 <td class="score-cell">45</td>
                 <td class="subtotal-val">{{ dimSubtotals.finance.self }}</td>
-                <td class="subtotal-val">{{ dimSubtotals.finance.sup }}</td>
-                <td class="subtotal-val">{{ dimSubtotals.finance.mgr }}</td>
+                <td></td>
               </tr>
 
               <!-- 客户维度 -->
@@ -97,8 +89,7 @@
                   <input type="number" class="score-input" @focus="selectInput" v-model.number="scores[4].self" min="0" max="15" />
                   <textarea class="score-note" placeholder="评分说明..." v-model="scores[4].self_note" rows="2"></textarea>
                 </td>
-                <td><input type="number" class="score-input" @focus="selectInput" v-model.number="scores[4].sup" min="0" max="15" /></td>
-                <td><input type="number" class="score-input" @focus="selectInput" v-model.number="scores[4].mgr" min="0" max="15" /></td>
+                <td><textarea class="remark-input" placeholder="备注..." v-model="scores[4].remark" rows="2"></textarea></td>
               </tr>
               <tr class="dim-row">
                 <td class="num-cell">5</td>
@@ -108,16 +99,14 @@
                   <input type="number" class="score-input" @focus="selectInput" v-model.number="scores[5].self" min="0" max="15" />
                   <textarea class="score-note" placeholder="评分说明..." v-model="scores[5].self_note" rows="2"></textarea>
                 </td>
-                <td><input type="number" class="score-input" @focus="selectInput" v-model.number="scores[5].sup" min="0" max="15" /></td>
-                <td><input type="number" class="score-input" @focus="selectInput" v-model.number="scores[5].mgr" min="0" max="15" /></td>
+                <td><textarea class="remark-input" placeholder="备注..." v-model="scores[5].remark" rows="2"></textarea></td>
               </tr>
               <!-- 客户小计 -->
               <tr class="subtotal-row">
                 <td colspan="3" class="subtotal-label">客户 小计</td>
                 <td class="score-cell">30</td>
                 <td class="subtotal-val">{{ dimSubtotals.customer.self }}</td>
-                <td class="subtotal-val">{{ dimSubtotals.customer.sup }}</td>
-                <td class="subtotal-val">{{ dimSubtotals.customer.mgr }}</td>
+                <td></td>
               </tr>
 
               <!-- 内部运营维度 -->
@@ -130,8 +119,7 @@
                   <input type="number" class="score-input" @focus="selectInput" v-model.number="scores[6].self" min="0" max="10" />
                   <textarea class="score-note" placeholder="评分说明..." v-model="scores[6].self_note" rows="2"></textarea>
                 </td>
-                <td><input type="number" class="score-input" @focus="selectInput" v-model.number="scores[6].sup" min="0" max="10" /></td>
-                <td><input type="number" class="score-input" @focus="selectInput" v-model.number="scores[6].mgr" min="0" max="10" /></td>
+                <td><textarea class="remark-input" placeholder="备注..." v-model="scores[6].remark" rows="2"></textarea></td>
               </tr>
               <tr class="dim-row">
                 <td class="num-cell">7</td>
@@ -141,16 +129,14 @@
                   <input type="number" class="score-input" @focus="selectInput" v-model.number="scores[7].self" min="0" max="15" />
                   <textarea class="score-note" placeholder="评分说明..." v-model="scores[7].self_note" rows="2"></textarea>
                 </td>
-                <td><input type="number" class="score-input" @focus="selectInput" v-model.number="scores[7].sup" min="0" max="15" /></td>
-                <td><input type="number" class="score-input" @focus="selectInput" v-model.number="scores[7].mgr" min="0" max="15" /></td>
+                <td><textarea class="remark-input" placeholder="备注..." v-model="scores[7].remark" rows="2"></textarea></td>
               </tr>
               <!-- 内部运营小计 -->
               <tr class="subtotal-row">
                 <td colspan="3" class="subtotal-label">内部运营 小计</td>
                 <td class="score-cell">25</td>
                 <td class="subtotal-val">{{ dimSubtotals.ops.self }}</td>
-                <td class="subtotal-val">{{ dimSubtotals.ops.sup }}</td>
-                <td class="subtotal-val">{{ dimSubtotals.ops.mgr }}</td>
+                <td></td>
               </tr>
 
               <!-- 学习成长（加分项） -->
@@ -163,8 +149,7 @@
                   <input type="number" class="score-input" @focus="selectInput" v-model.number="scores[8].self" min="0" max="10" />
                   <textarea class="score-note" placeholder="评分说明..." v-model="scores[8].self_note" rows="2"></textarea>
                 </td>
-                <td><input type="number" class="score-input" @focus="selectInput" v-model.number="scores[8].sup" min="0" max="10" /></td>
-                <td><input type="number" class="score-input" @focus="selectInput" v-model.number="scores[8].mgr" min="0" max="10" /></td>
+                <td><textarea class="remark-input" placeholder="备注..." v-model="scores[8].remark" rows="2"></textarea></td>
               </tr>
               <tr class="dim-row bonus-row">
                 <td class="num-cell">9</td>
@@ -174,8 +159,7 @@
                   <input type="number" class="score-input" @focus="selectInput" v-model.number="scores[9].self" min="0" max="10" />
                   <textarea class="score-note" placeholder="评分说明..." v-model="scores[9].self_note" rows="2"></textarea>
                 </td>
-                <td><input type="number" class="score-input" @focus="selectInput" v-model.number="scores[9].sup" min="0" max="10" /></td>
-                <td><input type="number" class="score-input" @focus="selectInput" v-model.number="scores[9].mgr" min="0" max="10" /></td>
+                <td><textarea class="remark-input" placeholder="备注..." v-model="scores[9].remark" rows="2"></textarea></td>
               </tr>
               <tr class="dim-row bonus-row">
                 <td class="num-cell">10</td>
@@ -185,21 +169,19 @@
                   <input type="number" class="score-input" @focus="selectInput" v-model.number="scores[10].self" min="0" max="10" />
                   <textarea class="score-note" placeholder="评分说明..." v-model="scores[10].self_note" rows="2"></textarea>
                 </td>
-                <td><input type="number" class="score-input" @focus="selectInput" v-model.number="scores[10].sup" min="0" max="10" /></td>
-                <td><input type="number" class="score-input" @focus="selectInput" v-model.number="scores[10].mgr" min="0" max="10" /></td>
+                <td><textarea class="remark-input" placeholder="备注..." v-model="scores[10].remark" rows="2"></textarea></td>
               </tr>
               <!-- 学习成长小计 -->
               <tr class="subtotal-row bonus-st">
                 <td colspan="3" class="subtotal-label">学习成长 小计</td>
                 <td class="score-cell">10-30</td>
                 <td class="subtotal-val">{{ dimSubtotals.growth.self }}</td>
-                <td class="subtotal-val">{{ dimSubtotals.growth.sup }}</td>
-                <td class="subtotal-val">{{ dimSubtotals.growth.mgr }}</td>
+                <td></td>
               </tr>
 
               <!-- 减分项 -->
               <tr class="deduct-head">
-                <td colspan="7" class="deduct-label">
+                <td colspan="6" class="deduct-label">
                   <div class="deduct-head-row">
                     <span>减分项</span>
                     <small>工作失误：工作过程中，出现严重失误，对公司及团队造成严重影响（视具体情况扣0-100分）</small>
@@ -214,16 +196,12 @@
                 </td>
                 <td class="score-cell">-</td>
                 <td><input type="number" class="score-input deduct-score" @focus="selectInput" v-model.number="d.self" min="0" /></td>
-                <td><input type="number" class="score-input deduct-score" @focus="selectInput" v-model.number="d.sup" min="0" /></td>
                 <td>
-                  <div class="deduct-actions">
-                    <input type="number" class="score-input deduct-score" @focus="selectInput" v-model.number="d.mgr" min="0" />
-                    <button class="deduct-del" @click="deductions.splice(di, 1)">×</button>
-                  </div>
+<button class="deduct-del" @click="deductions.splice(di, 1)">×</button>
                 </td>
               </tr>
               <tr v-if="!deductions.length" class="deduct-row">
-                <td colspan="7" class="deduct-empty">无减分项（点击「＋ 添加」添加）</td>
+                <td colspan="6" class="deduct-empty">无减分项（点击「＋ 添加」添加）</td>
               </tr>
 
               <!-- 合计 -->
@@ -231,8 +209,7 @@
                 <td colspan="3" class="total-label">合 计</td>
                 <td class="score-cell">{{ totalFullMark }}</td>
                 <td class="total-val">{{ totals.self }}</td>
-                <td class="total-val">{{ totals.sup }}</td>
-                <td class="total-val">{{ totals.mgr }}</td>
+                <td></td>
               </tr>
             </tbody>
           </table>
@@ -312,12 +289,11 @@ const saved = ref(false);
 const savedAt = ref("");
 const viewTab = ref('form');
 const allRecords = ref([]);
-const showExtraCols = ref(false); // 上级评分/最高主管评分 显示/隐藏
 
-// 10个指标的评分
+// 10个指标的评分（self=自评, self_note=评分说明, remark=备注）
 const scores = reactive({});
 for (let i = 1; i <= 10; i++) {
-  scores[i] = { self: 0, sup: 0, mgr: 0, self_note: "" };
+  scores[i] = { self: 0, self_note: "", remark: "" };
 }
 
 const deductions = reactive([]);
@@ -334,9 +310,7 @@ const dimSubtotals = computed(() => {
   const r = {};
   for (const [key, items] of Object.entries(dims)) {
     const self = items.reduce((s, i) => s + (scores[i]?.self || 0), 0);
-    const sup = items.reduce((s, i) => s + (scores[i]?.sup || 0), 0);
-    const mgr = items.reduce((s, i) => s + (scores[i]?.mgr || 0), 0);
-    r[key] = { self, sup, mgr };
+    r[key] = { self };
   }
   return r;
 });
@@ -345,7 +319,7 @@ const deductTotal = computed(() => {
   const self = deductions.reduce((s, d) => s + (d.self || 0), 0);
   const sup = deductions.reduce((s, d) => s + (d.sup || 0), 0);
   const mgr = deductions.reduce((s, d) => s + (d.mgr || 0), 0);
-  return { self, sup, mgr };
+  return { self };
 });
 
 const totals = computed(() => {
@@ -353,7 +327,7 @@ const totals = computed(() => {
   const self = base.finance.self + base.customer.self + base.ops.self + base.growth.self - deductTotal.value.self;
   const sup = base.finance.sup + base.customer.sup + base.ops.sup + base.growth.sup - deductTotal.value.sup;
   const mgr = base.finance.mgr + base.customer.mgr + base.ops.mgr + base.growth.mgr - deductTotal.value.mgr;
-  return { self: Math.max(0, self), sup: Math.max(0, sup), mgr: Math.max(0, mgr) };
+  return { self: Math.max(0, self) };
 });
 
 const totalFullMark = computed(() => {
@@ -408,7 +382,7 @@ function jumpToMonth(month) {
 }
 
 function addDeduction() {
-  deductions.push({ desc: "", self: 0, sup: 0, mgr: 0 });
+  deductions.push({ desc: "", self: 0 });
 }
 
 // 加载数据
@@ -426,22 +400,20 @@ async function loadData() {
       for (let i = 1; i <= 10; i++) {
         const s = savedScores[i] || {};
         scores[i].self = s.self || 0;
-        scores[i].sup = s.sup || 0;
-        scores[i].mgr = s.mgr || 0;
         scores[i].self_note = s.self_note || "";
+        scores[i].remark = s.remark || "";
       }
       const savedDed = typeof item.deductions === "string" ? JSON.parse(item.deductions) : (item.deductions || []);
       deductions.length = 0;
       for (const d of savedDed) {
-        deductions.push({ desc: d.desc || "", self: d.self || 0, sup: d.sup || 0, mgr: d.mgr || 0 });
+        deductions.push({ desc: d.desc || "", self: d.self || 0 });
       }
     } else {
       // 该月无记录 → 清空表单
       for (let i = 1; i <= 10; i++) {
         scores[i].self = 0;
-        scores[i].sup = 0;
-        scores[i].mgr = 0;
         scores[i].self_note = "";
+        scores[i].remark = "";
       }
       deductions.length = 0;
     }
@@ -458,24 +430,16 @@ watch([curYear, curMonth], () => {
 async function handleSave() {
   saving.value = true;
   try {
-    // 查是否已有记录
-    const r = await http.get("/performance/reviews", { params: { month: monthKey.value } });
-    const list = r.data?.data || [];
     const payload = {
       month: monthKey.value,
       scores: JSON.parse(JSON.stringify(scores)),
       deductions: JSON.parse(JSON.stringify(deductions)),
       total_score: totals.value.self,
     };
-    if (list.length) {
-      await http.put(`/performance/reviews/${list[0].id}`, payload);
-    } else {
-      await http.post("/performance/reviews", payload);
-    }
+    await http.post("/performance/reviews", payload);
     saved.value = true;
     const d = new Date();
     savedAt.value = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`;
-    // 刷新评分记录列表
     await loadAllRecords();
     showToast("✅ 保存成功");
   } catch (e) {
@@ -717,14 +681,6 @@ onMounted(() => {
 }
 
 /* 移除的信息字段样式保留空白占位 */
-
-/* 隐藏上级/主管评分列 */
-.perf-table.hide-extra th:nth-child(6),
-.perf-table.hide-extra th:nth-child(7),
-.perf-table.hide-extra td:nth-child(6),
-.perf-table.hide-extra td:nth-child(7) {
-  display: none;
-}
 
 /* 表格容器 */
 .table-wrap {
