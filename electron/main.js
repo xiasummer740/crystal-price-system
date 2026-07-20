@@ -289,7 +289,7 @@ if (!gotLock) {
 
 // 第二实例启动时，激活已有窗口
 app.on('second-instance', () => {
-  if (mainWindow) {
+  if (mainWindow && !mainWindow.isDestroyed()) {
     if (mainWindow.isMinimized()) mainWindow.restore()
     mainWindow.focus()
   }
@@ -547,7 +547,7 @@ function startReminderPolling(port) {
             })
             notif.show()
             notif.on('click', () => {
-              if (mainWindow) {
+              if (mainWindow && !mainWindow.isDestroyed()) {
                 if (mainWindow.isMinimized()) mainWindow.restore()
                 mainWindow.focus()
                 mainWindow.webContents.executeJavaScript(
@@ -659,7 +659,7 @@ app.whenReady().then(async () => {
         { role: 'quit', label: '退出' }
       ]},
       { label: '帮助', submenu: [
-        { label: '检查更新', click: () => { if (mainWindow) { mainWindow.webContents.executeJavaScript('window.__checkUpdate?.()') } } },
+        { label: '检查更新', click: () => { if (mainWindow && !mainWindow.isDestroyed()) { mainWindow.webContents.executeJavaScript('window.__checkUpdate?.()') } } },
         { type: 'separator' },
         { label: '关于', click: () => dialog.showMessageBox({ type: 'info', title: '关于', message: '晶振报价管理系统 v' + app.getVersion(), detail: '晶振公司内部报价管理与查询系统' }) }
       ]}
