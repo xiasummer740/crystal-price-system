@@ -215,12 +215,7 @@
           </table>
         </div>
 
-        <div class="save-bar">
-          <button class="save-btn" @click="handleSave" :disabled="saving">
-            {{ saving ? '保存中…' : '💾 保存' }}
-          </button>
-          <span class="save-tip" v-if="saved">✅ 已保存（{{ savedAt }}）</span>
-        </div>
+        <span class="save-tip" v-if="saved">✅ 已保存（{{ savedAt }}）</span>
       </div>
     </div>
 
@@ -436,7 +431,9 @@ async function handleSave() {
       deductions: JSON.parse(JSON.stringify(deductions)),
       total_score: totals.value.self,
     };
-    await http.post("/performance/reviews", payload);
+    const saveResult = await http.post("/performance/reviews", payload);
+    // 保存后立即从数据库重新加载，确认数据写入正确
+    await loadData();
     saved.value = true;
     const d = new Date();
     savedAt.value = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`;
@@ -942,30 +939,6 @@ onMounted(() => {
   font-size: 16px;
 }
 
-/* 保存栏 */
-.save-bar {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  margin-top: 20px;
-  padding-top: 16px;
-  border-top: 1px solid #f0f0f0;
-}
-.save-btn {
-  padding: 8px 32px;
-  border-radius: 20px;
-  font-size: 14px;
-  font-weight: 600;
-  cursor: pointer;
-  border: none;
-  background: #2e7d32;
-  color: #fff;
-  font-family: inherit;
-  transition: all 0.15s;
-}
-.save-btn:hover { background: #1b5e20; }
-.save-btn:disabled { opacity: 0.6; cursor: default; }
 .save-tip {
   font-size: 12px;
   color: #2e7d32;
