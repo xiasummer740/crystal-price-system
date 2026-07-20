@@ -8,6 +8,9 @@
         <button class="hdr-btn" @click="prevMonth">‹ 上月</button>
         <span class="month-label">{{ curLabel }}</span>
         <button class="hdr-btn" @click="nextMonth">下月 ›</button>
+        <button class="hdr-btn" :class="{ active: showExtraCols }" @click="showExtraCols = !showExtraCols" style="font-size:11px">
+          {{ showExtraCols ? '🙋 收起' : '🙋 上级/主管' }}
+        </button>
         <button class="hdr-btn primary" @click="handleSave" :disabled="saving">
           {{ saving ? '保存中…' : '💾 保存' }}
         </button>
@@ -27,7 +30,7 @@
 
         <!-- 考核表 -->
         <div class="table-wrap">
-          <table class="perf-table">
+          <table class="perf-table" :class="{ 'hide-extra': !showExtraCols }">
             <thead>
               <tr>
                 <th style="width:80px">考核维度</th>
@@ -35,8 +38,8 @@
                 <th style="width:200px">考核指标</th>
                 <th style="width:60px">分数</th>
                 <th style="width:180px">自评得分</th>
-                <th style="width:70px">上级评分</th>
-                <th style="width:80px">最高主管评分</th>
+                <th v-if="showExtraCols" style="width:70px">上级评分</th>
+                <th v-if="showExtraCols" style="width:80px">最高主管评分</th>
               </tr>
             </thead>
             <tbody>
@@ -309,6 +312,7 @@ const saved = ref(false);
 const savedAt = ref("");
 const viewTab = ref('form');
 const allRecords = ref([]);
+const showExtraCols = ref(false); // 上级评分/最高主管评分 显示/隐藏
 
 // 10个指标的评分
 const scores = reactive({});
@@ -360,10 +364,11 @@ function selectInput(e) {
   e.target.select();
 }
 
-function loadAllRecords() {
-  http.get("/performance/reviews").then(r => {
+async function loadAllRecords() {
+  try {
+    const r = await http.get("/performance/reviews");
     allRecords.value = (r.data?.data || []).sort((a, b) => b.month.localeCompare(a.month));
-  }).catch(() => {});
+  } catch {}
 }
 
 function calcTotalSelf(r) {
@@ -466,6 +471,8 @@ async function handleSave() {
     saved.value = true;
     const d = new Date();
     savedAt.value = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`;
+    // 刷新评分记录列表
+    await loadAllRecords();
     showToast("✅ 保存成功");
   } catch (e) {
     showToast("保存失败: " + (e.message || ""));
@@ -706,6 +713,14 @@ onMounted(() => {
 }
 
 /* 移除的信息字段样式保留空白占位 */
+
+/* 隐藏上级/主管评分列 */
+.perf-table.hide-extra th:nth-child(6),
+.perf-table.hide-extra th:nth-child(7),
+.perf-table.hide-extra td:nth-child(6),
+.perf-table.hide-extra td:nth-child(7) {
+  display: none;
+}
 
 /* 表格容器 */
 .table-wrap {
