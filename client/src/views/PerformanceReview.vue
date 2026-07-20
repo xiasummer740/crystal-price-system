@@ -253,7 +253,10 @@
             </div>
             <div class="rc-footer">
               <span class="rc-updated">{{ formatDate(r.updated_at) }}</span>
-              <span class="rc-edit-hint">点击查看详情 ›</span>
+              <div class="rc-footer-right">
+                <span class="rc-edit-hint">点击查看详情 ›</span>
+                <span class="rc-del" @click.stop="handleDeleteRecord(r)">🗑️</span>
+              </div>
             </div>
           </div>
         </div>
@@ -367,6 +370,19 @@ function calcDeductSelf(r) {
 function formatDate(d) {
   if (!d) return '';
   return d.slice(0, 10);
+}
+
+async function handleDeleteRecord(r) {
+  try {
+    const { showConfirmDialog } = await import('vant');
+    await showConfirmDialog({
+      title: '确认删除',
+      message: `确定删除 ${r.month.replace('-', '年')}月 的评分记录？`,
+    });
+    await http.delete(`/performance/reviews/${r.id}`);
+    allRecords.value = allRecords.value.filter(item => item.id !== r.id);
+    showToast('已删除');
+  } catch {}
 }
 
 function jumpToMonth(month) {
@@ -647,6 +663,21 @@ onMounted(async () => {
 .rc-edit-hint {
   color: #2e7d32;
   font-weight: 500;
+}
+.rc-footer-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.rc-del {
+  cursor: pointer;
+  font-size: 13px;
+  opacity: 0.4;
+  transition: opacity 0.15s;
+  user-select: none;
+}
+.rc-del:hover {
+  opacity: 1;
 }
 .panel-empty {
   text-align: center;

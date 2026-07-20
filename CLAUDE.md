@@ -46,6 +46,13 @@ Electron Main Process
 SQLite `server/data.db`，核心表 `material_prices`（14字段，软删除）。
 索引: material_code, material_name, factory_code。
 
+## 🔬 验证规则
+
+- **所有新功能/修改开发完成后，必须在 headless 浏览器中真实验证通过才能发版**
+- 使用 `browser-use` 工具打开真实页面、填写表单、保存、切换、检查结果
+- 不允许仅靠代码审查或手动抽象测试就认为功能正常
+- 验证通过后截图留证
+
 ## 项目特有规则
 
 - **🔥 改完代码必须发版** — 任何代码改动（修bug/加功能/改UI）完成后，必须：bump版本号 → `npm run package` → git commit+tag+push → GitHub Release。不发版祥哥没法点"检查更新"测试
