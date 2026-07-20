@@ -336,7 +336,7 @@ function selectInput(e) {
 async function loadAllRecords() {
   try {
     const r = await http.get("/performance/reviews");
-    allRecords.value = (r.data?.data || []).sort((a, b) => b.month.localeCompare(a.month));
+    allRecords.value = (r.data || []).sort((a, b) => b.month.localeCompare(a.month));
   } catch {}
 }
 
@@ -388,7 +388,7 @@ async function loadData() {
     const r = await http.get("/performance/reviews", { params: { month: monthKey.value } });
     // 如果加载期间月份又变了，丢弃本次结果
     if (key !== _loadKey) return;
-    const list = r.data?.data || [];
+    const list = r.data || [];
     if (list.length) {
       const item = list[0];
       const savedScores = typeof item.scores === "string" ? JSON.parse(item.scores) : (item.scores || {});
@@ -440,7 +440,9 @@ async function handleSave() {
     await loadAllRecords();
     showToast("✅ 保存成功");
   } catch (e) {
-    showToast("保存失败: " + (e.message || ""));
+    const errMsg = e.response?.data?.msg || e.message || '未知错误';
+    console.error('[performance] handleSave error:', errMsg, e);
+    showToast("保存失败: " + errMsg);
   } finally {
     saving.value = false;
   }
@@ -472,8 +474,10 @@ function goBack() {
   }
 }
 
-onMounted(() => {
-  loadData();
+onMounted(async () => {
+  // 等待 DOM 完全渲染后再加载数据
+  await new Promise(r => setTimeout(r, 100));
+  await loadData();
 });
 </script>
 
