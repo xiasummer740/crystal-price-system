@@ -58,7 +58,7 @@
                 <td class="score-cell">10</td>
                 <td class="score-self-cell">
                   <input type="number" class="score-input" @focus="selectInput" v-model.number="scores[1].self" min="0" max="10" />
-                  <input class="score-note" placeholder="评分说明..." v-model="scores[1].self_note" />
+                  <textarea class="score-note" placeholder="评分说明..." v-model="scores[1].self_note" rows="2"></textarea>
                 </td>
                 <td><input type="number" class="score-input" @focus="selectInput" v-model.number="scores[1].sup" min="0" max="10" /></td>
                 <td><input type="number" class="score-input" @focus="selectInput" v-model.number="scores[1].mgr" min="0" max="10" /></td>
@@ -69,7 +69,7 @@
                 <td class="score-cell">20</td>
                 <td class="score-self-cell">
                   <input type="number" class="score-input" @focus="selectInput" v-model.number="scores[2].self" min="0" max="20" />
-                  <input class="score-note" placeholder="评分说明..." v-model="scores[2].self_note" />
+                  <textarea class="score-note" placeholder="评分说明..." v-model="scores[2].self_note" rows="2"></textarea>
                 </td>
                 <td><input type="number" class="score-input" @focus="selectInput" v-model.number="scores[2].sup" min="0" max="20" /></td>
                 <td><input type="number" class="score-input" @focus="selectInput" v-model.number="scores[2].mgr" min="0" max="20" /></td>
@@ -80,7 +80,7 @@
                 <td class="score-cell">15</td>
                 <td class="score-self-cell">
                   <input type="number" class="score-input" @focus="selectInput" v-model.number="scores[3].self" min="0" max="15" />
-                  <input class="score-note" placeholder="评分说明..." v-model="scores[3].self_note" />
+                  <textarea class="score-note" placeholder="评分说明..." v-model="scores[3].self_note" rows="2"></textarea>
                 </td>
                 <td><input type="number" class="score-input" @focus="selectInput" v-model.number="scores[3].sup" min="0" max="15" /></td>
                 <td><input type="number" class="score-input" @focus="selectInput" v-model.number="scores[3].mgr" min="0" max="15" /></td>
@@ -102,7 +102,7 @@
                 <td class="score-cell">15</td>
                 <td class="score-self-cell">
                   <input type="number" class="score-input" @focus="selectInput" v-model.number="scores[4].self" min="0" max="15" />
-                  <input class="score-note" placeholder="评分说明..." v-model="scores[4].self_note" />
+                  <textarea class="score-note" placeholder="评分说明..." v-model="scores[4].self_note" rows="2"></textarea>
                 </td>
                 <td><input type="number" class="score-input" @focus="selectInput" v-model.number="scores[4].sup" min="0" max="15" /></td>
                 <td><input type="number" class="score-input" @focus="selectInput" v-model.number="scores[4].mgr" min="0" max="15" /></td>
@@ -113,7 +113,7 @@
                 <td class="score-cell">15</td>
                 <td class="score-self-cell">
                   <input type="number" class="score-input" @focus="selectInput" v-model.number="scores[5].self" min="0" max="15" />
-                  <input class="score-note" placeholder="评分说明..." v-model="scores[5].self_note" />
+                  <textarea class="score-note" placeholder="评分说明..." v-model="scores[5].self_note" rows="2"></textarea>
                 </td>
                 <td><input type="number" class="score-input" @focus="selectInput" v-model.number="scores[5].sup" min="0" max="15" /></td>
                 <td><input type="number" class="score-input" @focus="selectInput" v-model.number="scores[5].mgr" min="0" max="15" /></td>
@@ -135,7 +135,7 @@
                 <td class="score-cell">10</td>
                 <td class="score-self-cell">
                   <input type="number" class="score-input" @focus="selectInput" v-model.number="scores[6].self" min="0" max="10" />
-                  <input class="score-note" placeholder="评分说明..." v-model="scores[6].self_note" />
+                  <textarea class="score-note" placeholder="评分说明..." v-model="scores[6].self_note" rows="2"></textarea>
                 </td>
                 <td><input type="number" class="score-input" @focus="selectInput" v-model.number="scores[6].sup" min="0" max="10" /></td>
                 <td><input type="number" class="score-input" @focus="selectInput" v-model.number="scores[6].mgr" min="0" max="10" /></td>
@@ -146,7 +146,7 @@
                 <td class="score-cell">15</td>
                 <td class="score-self-cell">
                   <input type="number" class="score-input" @focus="selectInput" v-model.number="scores[7].self" min="0" max="15" />
-                  <input class="score-note" placeholder="评分说明..." v-model="scores[7].self_note" />
+                  <textarea class="score-note" placeholder="评分说明..." v-model="scores[7].self_note" rows="2"></textarea>
                 </td>
                 <td><input type="number" class="score-input" @focus="selectInput" v-model.number="scores[7].sup" min="0" max="15" /></td>
                 <td><input type="number" class="score-input" @focus="selectInput" v-model.number="scores[7].mgr" min="0" max="15" /></td>
@@ -168,7 +168,7 @@
                 <td class="score-cell">1-10</td>
                 <td class="score-self-cell">
                   <input type="number" class="score-input" @focus="selectInput" v-model.number="scores[8].self" min="0" max="10" />
-                  <input class="score-note" placeholder="评分说明..." v-model="scores[8].self_note" />
+                  <textarea class="score-note" placeholder="评分说明..." v-model="scores[8].self_note" rows="2"></textarea>
                 </td>
                 <td><input type="number" class="score-input" @focus="selectInput" v-model.number="scores[8].sup" min="0" max="10" /></td>
                 <td><input type="number" class="score-input" @focus="selectInput" v-model.number="scores[8].mgr" min="0" max="10" /></td>
@@ -179,7 +179,7 @@
                 <td class="score-cell">1-10</td>
                 <td class="score-self-cell">
                   <input type="number" class="score-input" @focus="selectInput" v-model.number="scores[9].self" min="0" max="10" />
-                  <input class="score-note" placeholder="评分说明..." v-model="scores[9].self_note" />
+                  <textarea class="score-note" placeholder="评分说明..." v-model="scores[9].self_note" rows="2"></textarea>
                 </td>
                 <td><input type="number" class="score-input" @focus="selectInput" v-model.number="scores[9].sup" min="0" max="10" /></td>
                 <td><input type="number" class="score-input" @focus="selectInput" v-model.number="scores[9].mgr" min="0" max="10" /></td>
@@ -190,7 +190,7 @@
                 <td class="score-cell">1-10</td>
                 <td class="score-self-cell">
                   <input type="number" class="score-input" @focus="selectInput" v-model.number="scores[10].self" min="0" max="10" />
-                  <input class="score-note" placeholder="评分说明..." v-model="scores[10].self_note" />
+                  <textarea class="score-note" placeholder="评分说明..." v-model="scores[10].self_note" rows="2"></textarea>
                 </td>
                 <td><input type="number" class="score-input" @focus="selectInput" v-model.number="scores[10].sup" min="0" max="10" /></td>
                 <td><input type="number" class="score-input" @focus="selectInput" v-model.number="scores[10].mgr" min="0" max="10" /></td>
@@ -657,20 +657,28 @@ onMounted(() => {
   display: block;
   width: calc(100% - 8px);
   margin: 4px auto 0;
-  border: none;
-  border-bottom: 1px dashed #e0e0e0;
-  padding: 2px 4px;
+  border: 1px solid #e8e8e8;
+  border-radius: 3px;
+  padding: 3px 4px;
   font-size: 10px;
   font-family: inherit;
   outline: none;
-  background: transparent;
+  background: #fafafa;
   color: #666;
   text-align: left;
   line-height: 1.4;
-  transition: border-color 0.15s;
+  transition: border-color 0.15s, background 0.15s;
   white-space: normal;
   word-break: break-all;
-  resize: none;
+  resize: vertical;
+  min-height: 32px;
+  max-height: 60px;
+  overflow-y: auto;
+}
+.score-note:focus {
+  border-color: #2e7d32;
+  background: #fff;
+  color: #333;
 }
 .score-note:focus {
   border-bottom-color: #2e7d32;
@@ -870,6 +878,7 @@ onMounted(() => {
   .info-field input { width: 100%; }
   .score-input { width: 40px; font-size: 11px; }
   .score-input.deduct-score { width: 36px; }
+  .score-note { font-size: 9px; min-height: 26px; }
   .perf-table { min-width: 600px; font-size: 10px; }
   .indicator-cell small { font-size: 9px; }
 }
