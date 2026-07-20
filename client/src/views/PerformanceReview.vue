@@ -44,7 +44,7 @@
                 <th style="width:60px">牵引点</th>
                 <th style="width:200px">考核指标</th>
                 <th style="width:60px">分数</th>
-                <th style="width:70px">自评得分</th>
+                <th style="width:120px">自评得分</th>
                 <th style="width:70px">上级评分</th>
                 <th style="width:80px">最高主管评分</th>
               </tr>
@@ -56,7 +56,10 @@
                 <td class="num-cell">1</td>
                 <td class="indicator-cell">部门销售目标达成率<br /><small>(当期实际销售额/当期计划销售额)*100%，少5%扣1分</small></td>
                 <td class="score-cell">10</td>
-                <td><input type="number" class="score-input" @focus="selectInput" v-model.number="scores[1].self" min="0" max="10" /></td>
+                <td class="score-self-cell">
+                  <input type="number" class="score-input" @focus="selectInput" v-model.number="scores[1].self" min="0" max="10" />
+                  <input class="score-note" placeholder="评分说明..." v-model="scores[1].self_note" />
+                </td>
                 <td><input type="number" class="score-input" @focus="selectInput" v-model.number="scores[1].sup" min="0" max="10" /></td>
                 <td><input type="number" class="score-input" @focus="selectInput" v-model.number="scores[1].mgr" min="0" max="10" /></td>
               </tr>
@@ -64,7 +67,10 @@
                 <td class="num-cell">2</td>
                 <td class="indicator-cell">个人销售目标达成率<br /><small>(当期实际销售额/当期计划销售额)*100%，少5%扣1分</small></td>
                 <td class="score-cell">20</td>
-                <td><input type="number" class="score-input" @focus="selectInput" v-model.number="scores[2].self" min="0" max="20" /></td>
+                <td class="score-self-cell">
+                  <input type="number" class="score-input" @focus="selectInput" v-model.number="scores[2].self" min="0" max="20" />
+                  <input class="score-note" placeholder="评分说明..." v-model="scores[2].self_note" />
+                </td>
                 <td><input type="number" class="score-input" @focus="selectInput" v-model.number="scores[2].sup" min="0" max="20" /></td>
                 <td><input type="number" class="score-input" @focus="selectInput" v-model.number="scores[2].mgr" min="0" max="20" /></td>
               </tr>
@@ -72,7 +78,10 @@
                 <td class="num-cell">3</td>
                 <td class="indicator-cell">回款率<br /><small>回款率100%，每少5%扣2分</small></td>
                 <td class="score-cell">15</td>
-                <td><input type="number" class="score-input" @focus="selectInput" v-model.number="scores[3].self" min="0" max="15" /></td>
+                <td class="score-self-cell">
+                  <input type="number" class="score-input" @focus="selectInput" v-model.number="scores[3].self" min="0" max="15" />
+                  <input class="score-note" placeholder="评分说明..." v-model="scores[3].self_note" />
+                </td>
                 <td><input type="number" class="score-input" @focus="selectInput" v-model.number="scores[3].sup" min="0" max="15" /></td>
                 <td><input type="number" class="score-input" @focus="selectInput" v-model.number="scores[3].mgr" min="0" max="15" /></td>
               </tr>
@@ -91,7 +100,10 @@
                 <td class="num-cell">4</td>
                 <td class="indicator-cell">高端产品(OCXO,差分等)和新产品开发<br /><small>注册1家有效客户得2分（以CRM平台注册为准）<br/>有效客户（含：客户用料、竞争对手、进入机会）</small></td>
                 <td class="score-cell">15</td>
-                <td><input type="number" class="score-input" @focus="selectInput" v-model.number="scores[4].self" min="0" max="15" /></td>
+                <td class="score-self-cell">
+                  <input type="number" class="score-input" @focus="selectInput" v-model.number="scores[4].self" min="0" max="15" />
+                  <input class="score-note" placeholder="评分说明..." v-model="scores[4].self_note" />
+                </td>
                 <td><input type="number" class="score-input" @focus="selectInput" v-model.number="scores[4].sup" min="0" max="15" /></td>
                 <td><input type="number" class="score-input" @focus="selectInput" v-model.number="scores[4].mgr" min="0" max="15" /></td>
               </tr>
@@ -99,7 +111,10 @@
                 <td class="num-cell">5</td>
                 <td class="indicator-cell">新客户开发<br /><small>以成交下单为准，每1家客户得5分</small></td>
                 <td class="score-cell">15</td>
-                <td><input type="number" class="score-input" @focus="selectInput" v-model.number="scores[5].self" min="0" max="15" /></td>
+                <td class="score-self-cell">
+                  <input type="number" class="score-input" @focus="selectInput" v-model.number="scores[5].self" min="0" max="15" />
+                  <input class="score-note" placeholder="评分说明..." v-model="scores[5].self_note" />
+                </td>
                 <td><input type="number" class="score-input" @focus="selectInput" v-model.number="scores[5].sup" min="0" max="15" /></td>
                 <td><input type="number" class="score-input" @focus="selectInput" v-model.number="scores[5].mgr" min="0" max="15" /></td>
               </tr>
@@ -118,7 +133,10 @@
                 <td class="num-cell">6</td>
                 <td class="indicator-cell">个人库存控制<br /><small>个人库存情况异常严重的酌情扣分</small></td>
                 <td class="score-cell">10</td>
-                <td><input type="number" class="score-input" @focus="selectInput" v-model.number="scores[6].self" min="0" max="10" /></td>
+                <td class="score-self-cell">
+                  <input type="number" class="score-input" @focus="selectInput" v-model.number="scores[6].self" min="0" max="10" />
+                  <input class="score-note" placeholder="评分说明..." v-model="scores[6].self_note" />
+                </td>
                 <td><input type="number" class="score-input" @focus="selectInput" v-model.number="scores[6].sup" min="0" max="10" /></td>
                 <td><input type="number" class="score-input" @focus="selectInput" v-model.number="scores[6].mgr" min="0" max="10" /></td>
               </tr>
@@ -126,7 +144,10 @@
                 <td class="num-cell">7</td>
                 <td class="indicator-cell">部门协作<br /><small>每月请经理陪同拜访或跟进客户，每1家得4分；<br/>销售周会分享（有效市场信息、案例)每1次得2分;<br/>资深销售人员传帮带、传授经验每1次得2分;</small></td>
                 <td class="score-cell">15</td>
-                <td><input type="number" class="score-input" @focus="selectInput" v-model.number="scores[7].self" min="0" max="15" /></td>
+                <td class="score-self-cell">
+                  <input type="number" class="score-input" @focus="selectInput" v-model.number="scores[7].self" min="0" max="15" />
+                  <input class="score-note" placeholder="评分说明..." v-model="scores[7].self_note" />
+                </td>
                 <td><input type="number" class="score-input" @focus="selectInput" v-model.number="scores[7].sup" min="0" max="15" /></td>
                 <td><input type="number" class="score-input" @focus="selectInput" v-model.number="scores[7].mgr" min="0" max="15" /></td>
               </tr>
@@ -145,7 +166,10 @@
                 <td class="num-cell">8</td>
                 <td class="indicator-cell">知识输出<br /><small>1).担任内部培训讲师、输出文档或课件(根据调查问卷反馈加 5-10分）<br/> 90分以上100%（10分）、80-90分70%（7分）、70分-80分50%（5分）70分以下不加分<br/>2) 参与月末周六上课学习积极度加1-5分 （回答问题、主动分享，以课堂个人得分前五名进行阶梯式加分）<br/>3)公司平台知识库输出有价值的共享文档（2-5分/篇）</small></td>
                 <td class="score-cell">1-10</td>
-                <td><input type="number" class="score-input" @focus="selectInput" v-model.number="scores[8].self" min="0" max="10" /></td>
+                <td class="score-self-cell">
+                  <input type="number" class="score-input" @focus="selectInput" v-model.number="scores[8].self" min="0" max="10" />
+                  <input class="score-note" placeholder="评分说明..." v-model="scores[8].self_note" />
+                </td>
                 <td><input type="number" class="score-input" @focus="selectInput" v-model.number="scores[8].sup" min="0" max="10" /></td>
                 <td><input type="number" class="score-input" @focus="selectInput" v-model.number="scores[8].mgr" min="0" max="10" /></td>
               </tr>
@@ -153,7 +177,10 @@
                 <td class="num-cell">9</td>
                 <td class="indicator-cell">管理优化<br /><small>个人提报合理的改进建议，并书面输出解决方案与操作流程，由各部门领导、管理部共同审核确认（1-10分）</small></td>
                 <td class="score-cell">1-10</td>
-                <td><input type="number" class="score-input" @focus="selectInput" v-model.number="scores[9].self" min="0" max="10" /></td>
+                <td class="score-self-cell">
+                  <input type="number" class="score-input" @focus="selectInput" v-model.number="scores[9].self" min="0" max="10" />
+                  <input class="score-note" placeholder="评分说明..." v-model="scores[9].self_note" />
+                </td>
                 <td><input type="number" class="score-input" @focus="selectInput" v-model.number="scores[9].sup" min="0" max="10" /></td>
                 <td><input type="number" class="score-input" @focus="selectInput" v-model.number="scores[9].mgr" min="0" max="10" /></td>
               </tr>
@@ -161,7 +188,10 @@
                 <td class="num-cell">10</td>
                 <td class="indicator-cell">团队贡献<br /><small>1）非新媒体部门人员出镜直播5分、短视频拍摄3分、投稿被采用2分，月度最高10分<br/>2）为公司引荐优秀人才：入职2分、成功转正5分<br/>3）客户端按要求收集成功案例素材2-5分/条 <br/>4）其它对公司、部门团队建设贡献 1-10分/条</small></td>
                 <td class="score-cell">1-10</td>
-                <td><input type="number" class="score-input" @focus="selectInput" v-model.number="scores[10].self" min="0" max="10" /></td>
+                <td class="score-self-cell">
+                  <input type="number" class="score-input" @focus="selectInput" v-model.number="scores[10].self" min="0" max="10" />
+                  <input class="score-note" placeholder="评分说明..." v-model="scores[10].self_note" />
+                </td>
                 <td><input type="number" class="score-input" @focus="selectInput" v-model.number="scores[10].sup" min="0" max="10" /></td>
                 <td><input type="number" class="score-input" @focus="selectInput" v-model.number="scores[10].mgr" min="0" max="10" /></td>
               </tr>
@@ -255,7 +285,7 @@ const form = reactive({
 // 10个指标的评分
 const scores = reactive({});
 for (let i = 1; i <= 10; i++) {
-  scores[i] = { self: 0, sup: 0, mgr: 0 };
+  scores[i] = { self: 0, sup: 0, mgr: 0, self_note: "" };
 }
 
 const deductions = reactive([]);
@@ -322,6 +352,7 @@ async function loadData() {
         scores[i].self = s.self || 0;
         scores[i].sup = s.sup || 0;
         scores[i].mgr = s.mgr || 0;
+        scores[i].self_note = s.self_note || "";
       }
       const savedDed = typeof item.deductions === "string" ? JSON.parse(item.deductions) : (item.deductions || []);
       deductions.length = 0;
@@ -337,6 +368,7 @@ async function loadData() {
         scores[i].self = 0;
         scores[i].sup = 0;
         scores[i].mgr = 0;
+        scores[i].self_note = "";
       }
       deductions.length = 0;
     }
@@ -617,6 +649,32 @@ onMounted(() => {
 }
 .score-input.deduct-score {
   width: 46px;
+}
+.score-self-cell {
+  min-width: 100px;
+}
+.score-note {
+  display: block;
+  width: 80px;
+  margin: 3px auto 0;
+  border: none;
+  border-bottom: 1px dashed #e0e0e0;
+  padding: 2px 4px;
+  font-size: 9px;
+  font-family: inherit;
+  outline: none;
+  background: transparent;
+  color: #888;
+  text-align: center;
+  line-height: 1.3;
+  transition: border-color 0.15s;
+}
+.score-note:focus {
+  border-bottom-color: #2e7d32;
+  color: #333;
+}
+.score-note::placeholder {
+  color: #ccc;
 }
 
 .dim-row td:first-child {
