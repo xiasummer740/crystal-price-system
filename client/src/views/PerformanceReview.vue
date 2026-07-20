@@ -14,26 +14,16 @@
       </div>
     </header>
 
+    <!-- Tabs -->
+    <div class="perf-tabs">
+      <span class="perf-tab" :class="{ active: viewTab === 'form' }" @click="viewTab = 'form'">📝 考核表</span>
+      <span class="perf-tab" :class="{ active: viewTab === 'list' }" @click="viewTab = 'list'; loadAllRecords()">📊 评分记录</span>
+    </div>
+
     <!-- 月度考核表 -->
-    <div class="perf-body">
+    <div class="perf-body" v-if="viewTab === 'form'">
       <div class="perf-sheet">
         <h2 class="sheet-title">{{ curYear }}年 月度考核表</h2>
-
-        <!-- 被考核人信息 -->
-        <div class="info-row">
-          <div class="info-field">
-            <label>被考核人姓名</label>
-            <input v-model="form.employee_name" placeholder="姓名" />
-          </div>
-          <div class="info-field">
-            <label>部 门</label>
-            <input v-model="form.department" placeholder="部门" />
-          </div>
-          <div class="info-field">
-            <label>岗 位</label>
-            <input v-model="form.position" placeholder="岗位" />
-          </div>
-        </div>
 
         <!-- 考核表 -->
         <div class="table-wrap">
@@ -253,6 +243,48 @@
         </div>
       </div>
     </div>
+
+    <!-- 评分记录 -->
+    <div class="perf-body" v-if="viewTab === 'list'">
+      <div class="perf-sheet">
+        <h2 class="sheet-title">📊 评分记录</h2>
+        <div class="record-list" v-if="allRecords.length">
+          <div class="record-card" v-for="r in allRecords" :key="r.id" @click="jumpToMonth(r.month)">
+            <div class="rc-header">
+              <span class="rc-month">{{ r.month.replace('-', '年') }}月</span>
+              <span class="rc-total">自评总分: <strong>{{ calcTotalSelf(r) }}</strong></span>
+            </div>
+            <div class="rc-body">
+              <div class="rc-dim">
+                <span class="rc-dim-label">财务</span>
+                <span class="rc-dim-score">{{ calcDimSelf(r, [1,2,3]) }}</span>
+              </div>
+              <div class="rc-dim">
+                <span class="rc-dim-label">客户</span>
+                <span class="rc-dim-score">{{ calcDimSelf(r, [4,5]) }}</span>
+              </div>
+              <div class="rc-dim">
+                <span class="rc-dim-label">内部运营</span>
+                <span class="rc-dim-score">{{ calcDimSelf(r, [6,7]) }}</span>
+              </div>
+              <div class="rc-dim bonus">
+                <span class="rc-dim-label">学习成长</span>
+                <span class="rc-dim-score">{{ calcDimSelf(r, [8,9,10]) }}</span>
+              </div>
+              <div class="rc-dim deduct" v-if="calcDeductSelf(r) > 0">
+                <span class="rc-dim-label">减分</span>
+                <span class="rc-dim-score">-{{ calcDeductSelf(r) }}</span>
+              </div>
+            </div>
+            <div class="rc-footer">
+              <span class="rc-updated">{{ formatDate(r.updated_at) }}</span>
+              <span class="rc-edit-hint">点击查看详情 ›</span>
+            </div>
+          </div>
+        </div>
+        <div v-else class="panel-empty">暂无评分记录</div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -275,12 +307,8 @@ const monthKey = computed(() => `${curYear.value}-${String(curMonth.value).padSt
 const saving = ref(false);
 const saved = ref(false);
 const savedAt = ref("");
-
-const form = reactive({
-  employee_name: "",
-  department: "",
-  position: "",
-});
+const viewTab = ref('form');
+const allRecords = ref([]);
 
 // 10个指标的评分
 const scores = reactive({});
@@ -332,6 +360,48 @@ function selectInput(e) {
   e.target.select();
 }
 
+function loadAllRecords() {
+  http.get("/performance/reviews").then(r => {
+    allRecords.value = (r.data?.data || []).sort((a, b) => b.month.localeCompare(a.month));
+  }).catch(() => {});
+}
+
+function calcTotalSelf(r) {
+  if (!r.scores) return 0;
+  const s = typeof r.scores === "string" ? JSON.parse(r.scores) : r.scores;
+  let total = 0;
+  for (let i = 1; i <= 10; i++) total += (s[i]?.self || 0);
+  if (r.deductions) {
+    const d = typeof r.deductions === "string" ? JSON.parse(r.deductions) : r.deductions;
+    d.forEach(item => { total -= (item.self || 0); });
+  }
+  return Math.max(0, total);
+}
+
+function calcDimSelf(r, indices) {
+  if (!r.scores) return 0;
+  const s = typeof r.scores === "string" ? JSON.parse(r.scores) : r.scores;
+  return indices.reduce((sum, i) => sum + (s[i]?.self || 0), 0);
+}
+
+function calcDeductSelf(r) {
+  if (!r.deductions) return 0;
+  const d = typeof r.deductions === "string" ? JSON.parse(r.deductions) : r.deductions;
+  return d.reduce((sum, item) => sum + (item.self || 0), 0);
+}
+
+function formatDate(d) {
+  if (!d) return '';
+  return d.slice(0, 10);
+}
+
+function jumpToMonth(month) {
+  const parts = month.split('-');
+  curYear.value = parseInt(parts[0]);
+  curMonth.value = parseInt(parts[1]);
+  viewTab.value = 'form';
+}
+
 function addDeduction() {
   deductions.push({ desc: "", self: 0, sup: 0, mgr: 0 });
 }
@@ -343,9 +413,6 @@ async function loadData() {
     const list = r.data?.data || [];
     if (list.length) {
       const item = list[0];
-      form.employee_name = item.employee_name || "";
-      form.department = item.department || "";
-      form.position = item.position || "";
       const savedScores = typeof item.scores === "string" ? JSON.parse(item.scores) : (item.scores || {});
       for (let i = 1; i <= 10; i++) {
         const s = savedScores[i] || {};
@@ -361,9 +428,6 @@ async function loadData() {
       }
     } else {
       // 该月无记录 → 清空表单
-      form.employee_name = "";
-      form.department = "";
-      form.position = "";
       for (let i = 1; i <= 10; i++) {
         scores[i].self = 0;
         scores[i].sup = 0;
@@ -390,9 +454,6 @@ async function handleSave() {
     const list = r.data?.data || [];
     const payload = {
       month: monthKey.value,
-      employee_name: form.employee_name,
-      department: form.department,
-      position: form.position,
       scores: JSON.parse(JSON.stringify(scores)),
       deductions: JSON.parse(JSON.stringify(deductions)),
       total_score: totals.value.self,
@@ -515,6 +576,109 @@ onMounted(() => {
   font-family: inherit;
 }
 
+/* ===== Tabs ===== */
+.perf-tabs {
+  display: flex;
+  background: #fff;
+  border-bottom: 1px solid #e0e0e0;
+  flex-shrink: 0;
+}
+.perf-tab {
+  flex: 1;
+  padding: 10px 0;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 500;
+  color: #888;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: all 0.15s;
+}
+.perf-tab.active {
+  color: #2e7d32;
+  border-bottom-color: #2e7d32;
+  background: #f1f8e9;
+}
+
+/* 评分记录列表 */
+.record-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.record-card {
+  border: 1px solid #e8e8e8;
+  border-radius: 8px;
+  padding: 12px 14px;
+  cursor: pointer;
+  transition: all 0.12s;
+  background: #fff;
+}
+.record-card:hover {
+  border-color: #a5d6a7;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+}
+.rc-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.rc-month {
+  font-size: 15px;
+  font-weight: 700;
+  color: #2e7d32;
+}
+.rc-total {
+  font-size: 12px;
+  color: #666;
+}
+.rc-total strong {
+  color: #1b5e20;
+  font-size: 16px;
+}
+.rc-body {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  margin-bottom: 6px;
+}
+.rc-dim {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+}
+.rc-dim-label {
+  color: #888;
+}
+.rc-dim-score {
+  font-weight: 600;
+  color: #333;
+  font-size: 12px;
+}
+.rc-dim.bonus .rc-dim-label { color: #a68b00; }
+.rc-dim.bonus .rc-dim-score { color: #8d6e00; }
+.rc-dim.deduct .rc-dim-label { color: #c62828; }
+.rc-dim.deduct .rc-dim-score { color: #c62828; }
+.rc-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 10px;
+  color: #bbb;
+}
+.rc-edit-hint {
+  color: #2e7d32;
+  font-weight: 500;
+}
+.panel-empty {
+  text-align: center;
+  padding: 40px 0;
+  font-size: 13px;
+  color: #bbb;
+}
+
 /* 主体 */
 .perf-body {
   flex: 1;
@@ -541,38 +705,7 @@ onMounted(() => {
   margin: 0 0 16px;
 }
 
-/* 被考核人信息 */
-.info-row {
-  display: flex;
-  gap: 16px;
-  margin-bottom: 20px;
-  flex-wrap: wrap;
-}
-.info-field {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.info-field label {
-  font-size: 13px;
-  color: #555;
-  white-space: nowrap;
-  font-weight: 500;
-}
-.info-field input {
-  border: 1px solid #e0e0e0;
-  border-radius: 4px;
-  padding: 6px 10px;
-  font-size: 13px;
-  font-family: inherit;
-  outline: none;
-  width: 120px;
-  background: #fafafa;
-}
-.info-field input:focus {
-  border-color: #2e7d32;
-  background: #fff;
-}
+/* 移除的信息字段样式保留空白占位 */
 
 /* 表格容器 */
 .table-wrap {
@@ -874,8 +1007,7 @@ onMounted(() => {
   .perf-body { padding: 8px; }
   .perf-sheet { padding: 12px 8px; }
   .sheet-title { font-size: 16px; }
-  .info-row { flex-direction: column; gap: 6px; }
-  .info-field input { width: 100%; }
+  .perf-tabs { display: none; }
   .score-input { width: 40px; font-size: 11px; }
   .score-input.deduct-score { width: 36px; }
   .score-note { font-size: 9px; min-height: 26px; }
