@@ -440,59 +440,35 @@ export function generateSampleTemplate() {
 }
 
 // ===== 地图客户地址导出（供自动备份用） =====
+// 只导出客户名和联系人信息，不含地址
 
 export function exportMapCustomers() {
   const customers = queryAll(`
     SELECT mc.*,
-      (SELECT COUNT(*) FROM map_purchasers WHERE customer_id = mc.id) as purchaser_count,
-      (SELECT COUNT(*) FROM map_addresses WHERE customer_id = mc.id) as address_count,
-      (SELECT COUNT(*) FROM map_sites WHERE customer_id = mc.id) as site_count
+      (SELECT COUNT(*) FROM map_purchasers WHERE customer_id = mc.id) as purchaser_count
     FROM map_customers mc ORDER BY mc.name ASC
   `);
   const purchasers = queryAll(
     "SELECT mp.*, mc.name as customer_name FROM map_purchasers mp LEFT JOIN map_customers mc ON mp.customer_id = mc.id ORDER BY mc.name, mp.name",
   );
-  const addresses = queryAll(
-    "SELECT ma.*, mc.name as customer_name, mp.name as purchaser_name FROM map_addresses ma LEFT JOIN map_customers mc ON ma.customer_id = mc.id LEFT JOIN map_purchasers mp ON ma.purchaser_id = mp.id ORDER BY mc.name, ma.label",
-  );
-  const sites = queryAll(
-    "SELECT ms.*, mc.name as customer_name FROM map_sites ms LEFT JOIN map_customers mc ON ms.customer_id = mc.id ORDER BY mc.name, ms.name",
-  );
 
   const wb = XLSX.utils.book_new();
 
-  // Sheet1: 客户信息
-  const ws1Data = [["客户名","电话","地址","纬度","经度","备注","采购数","地址数","创建时间"]];
+  // Sheet1: 客户信息（只保留客户名+电话+备注）
+  const ws1Data = [["客户名","电话","联系人数量","备注"]];
   for (const c of customers) {
-    ws1Data.push([c.name,c.phone,c.address,c.latitude,c.longitude,c.notes,c.purchaser_count,c.address_count,c.created_at]);
+    ws1Data.push([c.name, c.phone || "", c.purchaser_count, c.notes || ""]);
   }
   const ws1 = XLSX.utils.aoa_to_sheet(ws1Data);
   XLSX.utils.book_append_sheet(wb, ws1, "客户信息");
 
   // Sheet2: 采购联系人
-  const ws2Data = [["所属客户","采购名","电话","职位","备注"]];
+  const ws2Data = [["所属客户","联系人","电话","职位","收件地址","备注"]];
   for (const p of purchasers) {
-    ws2Data.push([p.customer_name, p.name, p.phone, p.title, p.notes]);
+    ws2Data.push([p.customer_name, p.name, p.phone || "", p.title || "", p.address || "", p.notes || ""]);
   }
   const ws2 = XLSX.utils.aoa_to_sheet(ws2Data);
-  XLSX.utils.book_append_sheet(wb, ws2, "采购联系人");
-
-  // Sheet3: 收件地址
-  const ws3Data = [["所属客户","所属采购","标签","地址","收件人","联系电话","纬度","经度","是否默认","备注"]];
-  for (const a of addresses) {
-    ws3Data.push([a.customer_name,a.purchaser_name||"",a.label,a.address,a.contact_name,a.contact_phone,a.latitude,a.longitude,a.is_default?"是":"否",a.notes]);
-  }
-  const ws3 = XLSX.utils.aoa_to_sheet(ws3Data);
-  XLSX.utils.book_append_sheet(wb, ws3, "收件地址");
-
-  // Sheet4: 收货点
-  const siteTypeMap = { office: "自有厂区", oem: "代工厂", warehouse: "仓库", branch: "办事处" };
-  const ws4Data = [["所属客户","名称","类型","地址","纬度","经度","收件人","联系电话","是否默认","备注"]];
-  for (const s of sites) {
-    ws4Data.push([s.customer_name,s.name,siteTypeMap[s.site_type]||s.site_type,s.address,s.latitude,s.longitude,s.contact_name,s.contact_phone,s.is_default?"是":"否",s.notes]);
-  }
-  const ws4 = XLSX.utils.aoa_to_sheet(ws4Data);
-  XLSX.utils.book_append_sheet(wb, ws4, "收货点");
+  XLSX.utils.book_append_sheet(wb, ws2, "联系人");
 
   return XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
 }

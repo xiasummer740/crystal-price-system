@@ -2995,7 +2995,7 @@ onUnmounted(() => {
 }
 .map-legend {
   position: absolute;
-  bottom: 20px;
+  bottom: 100px;
   right: 12px;
   background: rgba(255, 255, 255, 0.9);
   padding: 6px 10px;
@@ -3052,7 +3052,7 @@ onUnmounted(() => {
 
   /* 地图容器 */
   .map-container{flex:1;min-height:300px;order:0}
-  .map-legend{font-size:8px;padding:4px 6px;bottom:8px;right:6px;gap:2px}
+  .map-legend{font-size:8px;padding:4px 6px;bottom:80px;right:6px;gap:2px}
   .legend-dot{width:6px;height:6px}
 
   /* 地图搜索框 */
