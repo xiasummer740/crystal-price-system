@@ -1,20 +1,22 @@
 // 自动在线升级
 //
 // 版本检查：直接调 GitHub API（比 electron-updater 快，国内网络友好）
-// 下载安装：仍用 electron-updater（自动处理校验、进度回调、静默安装）
+// 下载安装：先用 autoUpdater 尝试下载，失败则直连 GitHub 用 https 下载
 //
 // autoDownload: false — 检测到新版本只通知，下载由用户触发
 // autoInstallOnAppQuit: true — 下载完成后退出时自动安装
 
 import { createRequire } from 'module'
-import { appendFileSync } from 'fs'
+import { appendFileSync, createWriteStream, unlinkSync, existsSync } from 'fs'
 import https from 'https'
+import path from 'path'
 const _require = createRequire(import.meta.url)
 
 let autoUpdater = null
 let mainWindow = null
 let initialized = false
 let appVersion = ''
+let directDownloadPath = null  // 直连下载的文件路径，用于安装
 
 const LOG = (msg) => {
   try { appendFileSync('C:\\Users\\Administrator\\AppData\\Local\\Temp\\crystal-updater-debug.log', `[${new Date().toISOString()}] ${msg}\n`) } catch {}
@@ -59,34 +61,131 @@ export function initUpdater(window) {
   }
 }
 
-export function downloadUpdate() {
-  if (autoUpdater) {
-    LOG('calling autoUpdater.downloadUpdate()')
-    // 添加超时保护：30秒后如果还没进度，提示用户
-    const timeoutTimer = setTimeout(() => {
-      mainWindow?.webContents.send('update:error', { message: '连接超时，请检查网络后重试（可点手动下载）' })
-    }, 30000)
-    // 监听一次进度就取消超时
-    const onProgress = () => { clearTimeout(timeoutTimer); autoUpdater.removeListener('download-progress', onProgress) }
-    autoUpdater.on('download-progress', onProgress)
-    // 下载完成也取消超时
-    const onDone = () => { clearTimeout(timeoutTimer); autoUpdater.removeListener('update-downloaded', onDone) }
-    autoUpdater.on('update-downloaded', onDone)
-
-    autoUpdater.downloadUpdate().catch(err => {
-      clearTimeout(timeoutTimer)
-      autoUpdater.removeListener('download-progress', onProgress)
-      autoUpdater.removeListener('update-downloaded', onDone)
-      LOG(`downloadUpdate error: ${err.message}`)
-      mainWindow?.webContents.send('update:error', { message: `下载失败: ${err.message}` })
-    })
-  } else {
+// 下载更新：先用 autoUpdater，失败则自己直连 GitHub 下载
+export async function downloadUpdate() {
+  if (!autoUpdater) {
     mainWindow?.webContents.send('update:error', { message: '下载模块未就绪' })
+    return
+  }
+  LOG('downloadUpdate called')
+
+  // 1) 确保 autoUpdater 有更新信息
+  if (!autoUpdater.updateInfoAndProvider) {
+    LOG('updateInfoAndProvider is null, calling checkForUpdates() first')
+    try {
+      await autoUpdater.checkForUpdates()
+    } catch (err) {
+      LOG(`checkForUpdates before download failed: ${err.message}`)
+      // autoUpdater 不行 → 改用直连下载
+      await directDownload()
+      return
+    }
+  }
+
+  // 2) autoUpdater 下载
+  try {
+    await autoUpdater.downloadUpdate()
+  } catch (err) {
+    LOG(`autoUpdater.downloadUpdate failed: ${err.message}`)
+    // 回退到直连下载
+    await directDownload()
+  }
+}
+
+// 直连 GitHub 下载（不依赖 autoUpdater）
+async function directDownload() {
+  LOG('directDownload called')
+  try {
+    const { app } = _require('electron')
+    const userDataPath = app.getPath('userData')
+    const downloadUrl = `https://github.com/xiasummer740/crystal-price-system/releases/download/v${appVersion}/crystal-price-system-setup-${appVersion}.exe`
+    const destDir = path.join(userDataPath, '__update__')
+    const destFile = path.join(destDir, `crystal-price-system-setup-${appVersion}.exe`)
+
+    // 确保目录存在
+    const { mkdirSync } = _require('fs')
+    if (!existsSync(destDir)) mkdirSync(destDir, { recursive: true })
+
+    // 删除旧文件
+    if (existsSync(destFile)) unlinkSync(destFile)
+
+    LOG(`downloading from ${downloadUrl}`)
+
+    await new Promise((resolve, reject) => {
+      const req = https.get(downloadUrl, { headers: { 'User-Agent': 'crystal-price-system' }, timeout: 120000 }, (res) => {
+        // GitHub 返回 302 重定向到 CDN
+        if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+          LOG(`redirect to ${res.headers.location}`)
+          https.get(res.headers.location, { timeout: 120000 }, (res2) => {
+            if (res2.statusCode !== 200) {
+              reject(new Error(`HTTP ${res2.statusCode}`))
+              return
+            }
+            const total = parseInt(res2.headers['content-length'] || '0', 10)
+            let downloaded = 0
+            const fileStream = createWriteStream(destFile)
+            res2.pipe(fileStream)
+
+            res2.on('data', (chunk) => {
+              downloaded += chunk.length
+              if (total > 0) {
+                const percent = Math.round(downloaded / total * 100)
+                mainWindow?.webContents.send('update:progress', { percent, bytesPerSecond: 0, total, transferred: downloaded })
+              }
+            })
+            res2.on('end', () => {
+              fileStream.end()
+              resolve()
+            })
+            res2.on('error', reject)
+          }).on('error', reject).on('timeout', () => { reject(new Error('下载超时')) })
+        } else if (res.statusCode === 200) {
+          // 直接响应（不走重定向）
+          const total = parseInt(res.headers['content-length'] || '0', 10)
+          let downloaded = 0
+          const fileStream = createWriteStream(destFile)
+          res.pipe(fileStream)
+          res.on('data', (chunk) => {
+            downloaded += chunk.length
+            if (total > 0) {
+              mainWindow?.webContents.send('update:progress', { percent: Math.round(downloaded / total * 100), bytesPerSecond: 0, total, transferred: downloaded })
+            }
+          })
+          res.on('end', () => { fileStream.end(); resolve() })
+          res.on('error', reject)
+        } else {
+          reject(new Error(`HTTP ${res.statusCode}`))
+        }
+      })
+      req.on('error', reject)
+      req.on('timeout', () => { req.destroy(); reject(new Error('连接服务器超时')) })
+    })
+
+    // 下载完成，记录路径并通知前端
+    directDownloadPath = destFile
+    LOG(`download complete: ${destFile}`)
+    mainWindow?.webContents.send('update:downloaded')
+  } catch (err) {
+    LOG(`directDownload error: ${err.message}`)
+    mainWindow?.webContents.send('update:error', { message: `下载失败: ${err.message}。请手动下载安装` })
   }
 }
 
 export function quitAndInstall() {
-  if (autoUpdater) autoUpdater.quitAndInstall()
+  if (autoUpdater && autoUpdater.updateInfoAndProvider) {
+    autoUpdater.quitAndInstall()
+  } else if (directDownloadPath) {
+    // 直连下载的文件，直接跑安装程序
+    LOG(`quitAndInstall: running ${directDownloadPath}`)
+    try {
+      const { spawn } = _require('child_process')
+      const { app } = _require('electron')
+      spawn(directDownloadPath, ['--updated'], { detached: true, stdio: 'ignore' })
+      app.quit()
+    } catch (err) {
+      LOG(`quitAndInstall spawn error: ${err.message}`)
+    }
+  }
 }
 
 // 直接调 GitHub API 检查最新版本（比 electron-updater 快，国内网络更友好）
@@ -117,14 +216,16 @@ export function checkForUpdates() {
 
         // 对比版本号
         if (compareVersions(latestVer, appVersion) > 0) {
-          // 有新版 → 通知前端
+          // 有新版 → 更新 appVersion 为目标版本，用于直连下载拼 URL
+          appVersion = latestVer
+          // 通知前端
           mainWindow?.webContents.send('update:available', {
             version: latestVer,
             releaseDate: release.published_at || '',
             releaseNotes: release.body || '',
             releaseName: release.name || latestVer,
           })
-          // 同时在后台启动 autoUpdater 检查，确保点下载时它能找到更新
+          // 后台启动 autoUpdater 检查，下载时优先用它
           if (autoUpdater) {
             LOG('triggering autoUpdater.checkForUpdates() in background')
             autoUpdater.checkForUpdates().catch(err => {

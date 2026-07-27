@@ -1,18 +1,23 @@
 # 进度记录
 
-> 最后更新: 2026-07-27 | 当前版本: v1.0.178
-> 下一版本预判: v1.0.179
+> 最后更新: 2026-07-27 | 当前版本: v1.0.179
+> 下一版本预判: v1.0.180
 
 ---
 
 ## 当前工作：已完成
 
-**状态：v1.0.178 修报价编码保存+更新下载错误处理**
+**状态：v1.0.179 重写更新下载：autoUpdater失败自动回退直连**
+
+### 已完成（v1.0.179）
+
+- [x] **重写下载逻辑** — `downloadUpdate()` 先检查 updateInfoAndProvider，不可用时先调 checkForUpdates()；autoUpdater 下载失败自动回退到 Node.js https 直连下载，不再卡"连接中..."
+- [x] **直连下载+安装** — 直接 https.get 下载安装包，支持进度通知，安装时同步 electron-updater 参数（--updated）
 
 ### 已完成（v1.0.178）
 
-- [x] **🐛 修报价物料编码无法保存** — AddRecord 编辑模式编码字段只读导致无法输入（`:readonly="isEdit"` 已移除）；后端 batch-update-specs 缺少 material_code 导致弹窗编辑也不写入（已补上）
-- [x] **🐛 修更新下载卡"连接中..."** — `downloadUpdate()` 缺少错误处理 + 超时保护，下载失败时 UI 永远不报错（已加 30s 超时 + .catch 透传错误）
+- [x] **🐛 修报价物料编码无法保存** — AddRecord 编辑模式编码字段只读（已移除）；后端 batch-update-specs 缺 material_code（已补上）
+- [x] **🐛 修更新下载卡"连接中..."** — downloadUpdate 加错误处理 + 超时保护
 
 ### 已完成（v1.0.177）
 
