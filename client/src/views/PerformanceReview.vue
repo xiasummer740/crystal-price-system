@@ -49,7 +49,7 @@
                   <input type="number" class="score-input" @focus="selectInput" v-model.number="scores[1].self" min="0" max="10" />
                   <textarea class="score-note" placeholder="评分说明..." v-model="scores[1].self_note" rows="2"></textarea>
                 </td>
-                <td><textarea class="remark-input" placeholder="备注..." v-model="scores[1].remark" rows="2"></textarea></td>
+                <td><textarea class="remark-input" placeholder="备注..." v-model="scores[1].remark" rows="2" @input="autoResize($event.target)"></textarea></td>
               </tr>
               <tr class="dim-row">
                 <td class="num-cell">2</td>
@@ -59,7 +59,7 @@
                   <input type="number" class="score-input" @focus="selectInput" v-model.number="scores[2].self" min="0" max="20" />
                   <textarea class="score-note" placeholder="评分说明..." v-model="scores[2].self_note" rows="2"></textarea>
                 </td>
-                <td><textarea class="remark-input" placeholder="备注..." v-model="scores[2].remark" rows="2"></textarea></td>
+                <td><textarea class="remark-input" placeholder="备注..." v-model="scores[2].remark" rows="2" @input="autoResize($event.target)"></textarea></td>
               </tr>
               <tr class="dim-row">
                 <td class="num-cell">3</td>
@@ -69,7 +69,7 @@
                   <input type="number" class="score-input" @focus="selectInput" v-model.number="scores[3].self" min="0" max="15" />
                   <textarea class="score-note" placeholder="评分说明..." v-model="scores[3].self_note" rows="2"></textarea>
                 </td>
-                <td><textarea class="remark-input" placeholder="备注..." v-model="scores[3].remark" rows="2"></textarea></td>
+                <td><textarea class="remark-input" placeholder="备注..." v-model="scores[3].remark" rows="2" @input="autoResize($event.target)"></textarea></td>
               </tr>
               <!-- 财务小计 -->
               <tr class="subtotal-row">
@@ -89,7 +89,7 @@
                   <input type="number" class="score-input" @focus="selectInput" v-model.number="scores[4].self" min="0" max="15" />
                   <textarea class="score-note" placeholder="评分说明..." v-model="scores[4].self_note" rows="2"></textarea>
                 </td>
-                <td><textarea class="remark-input" placeholder="备注..." v-model="scores[4].remark" rows="2"></textarea></td>
+                <td><textarea class="remark-input" placeholder="备注..." v-model="scores[4].remark" rows="2" @input="autoResize($event.target)"></textarea></td>
               </tr>
               <tr class="dim-row">
                 <td class="num-cell">5</td>
@@ -99,7 +99,7 @@
                   <input type="number" class="score-input" @focus="selectInput" v-model.number="scores[5].self" min="0" max="15" />
                   <textarea class="score-note" placeholder="评分说明..." v-model="scores[5].self_note" rows="2"></textarea>
                 </td>
-                <td><textarea class="remark-input" placeholder="备注..." v-model="scores[5].remark" rows="2"></textarea></td>
+                <td><textarea class="remark-input" placeholder="备注..." v-model="scores[5].remark" rows="2" @input="autoResize($event.target)"></textarea></td>
               </tr>
               <!-- 客户小计 -->
               <tr class="subtotal-row">
@@ -119,7 +119,7 @@
                   <input type="number" class="score-input" @focus="selectInput" v-model.number="scores[6].self" min="0" max="10" />
                   <textarea class="score-note" placeholder="评分说明..." v-model="scores[6].self_note" rows="2"></textarea>
                 </td>
-                <td><textarea class="remark-input" placeholder="备注..." v-model="scores[6].remark" rows="2"></textarea></td>
+                <td><textarea class="remark-input" placeholder="备注..." v-model="scores[6].remark" rows="2" @input="autoResize($event.target)"></textarea></td>
               </tr>
               <tr class="dim-row">
                 <td class="num-cell">7</td>
@@ -129,7 +129,7 @@
                   <input type="number" class="score-input" @focus="selectInput" v-model.number="scores[7].self" min="0" max="15" />
                   <textarea class="score-note" placeholder="评分说明..." v-model="scores[7].self_note" rows="2"></textarea>
                 </td>
-                <td><textarea class="remark-input" placeholder="备注..." v-model="scores[7].remark" rows="2"></textarea></td>
+                <td><textarea class="remark-input" placeholder="备注..." v-model="scores[7].remark" rows="2" @input="autoResize($event.target)"></textarea></td>
               </tr>
               <!-- 内部运营小计 -->
               <tr class="subtotal-row">
@@ -149,7 +149,7 @@
                   <input type="number" class="score-input" @focus="selectInput" v-model.number="scores[8].self" min="0" max="10" />
                   <textarea class="score-note" placeholder="评分说明..." v-model="scores[8].self_note" rows="2"></textarea>
                 </td>
-                <td><textarea class="remark-input" placeholder="备注..." v-model="scores[8].remark" rows="2"></textarea></td>
+                <td><textarea class="remark-input" placeholder="备注..." v-model="scores[8].remark" rows="2" @input="autoResize($event.target)"></textarea></td>
               </tr>
               <tr class="dim-row bonus-row">
                 <td class="num-cell">9</td>
@@ -159,7 +159,7 @@
                   <input type="number" class="score-input" @focus="selectInput" v-model.number="scores[9].self" min="0" max="10" />
                   <textarea class="score-note" placeholder="评分说明..." v-model="scores[9].self_note" rows="2"></textarea>
                 </td>
-                <td><textarea class="remark-input" placeholder="备注..." v-model="scores[9].remark" rows="2"></textarea></td>
+                <td><textarea class="remark-input" placeholder="备注..." v-model="scores[9].remark" rows="2" @input="autoResize($event.target)"></textarea></td>
               </tr>
               <tr class="dim-row bonus-row">
                 <td class="num-cell">10</td>
@@ -169,7 +169,7 @@
                   <input type="number" class="score-input" @focus="selectInput" v-model.number="scores[10].self" min="0" max="10" />
                   <textarea class="score-note" placeholder="评分说明..." v-model="scores[10].self_note" rows="2"></textarea>
                 </td>
-                <td><textarea class="remark-input" placeholder="备注..." v-model="scores[10].remark" rows="2"></textarea></td>
+                <td><textarea class="remark-input" placeholder="备注..." v-model="scores[10].remark" rows="2" @input="autoResize($event.target)"></textarea></td>
               </tr>
               <!-- 学习成长小计 -->
               <tr class="subtotal-row bonus-st">
@@ -267,7 +267,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted, watch } from "vue";
+import { ref, reactive, computed, onMounted, watch, nextTick } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { showToast } from "vant";
 import { http } from "../utils/api.js";
@@ -334,6 +334,11 @@ const totalFullMark = computed(() => {
 
 function selectInput(e) {
   e.target.select();
+}
+
+function autoResize(el) {
+  el.style.height = 'auto';
+  el.style.height = el.scrollHeight + 'px';
 }
 
 async function loadAllRecords() {
@@ -428,6 +433,9 @@ async function loadData() {
       }
       deductions.length = 0;
     }
+    // 数据加载完成后，自动调整备注 textarea 高度以显示全部文本
+    await nextTick();
+    document.querySelectorAll('.remark-input').forEach(el => autoResize(el));
   } catch {}
 }
 
@@ -826,6 +834,29 @@ onMounted(async () => {
 }
 .score-note::placeholder {
   color: #ccc;
+}
+
+.remark-input {
+  width: 100%;
+  border: 1px solid #e8e8e8;
+  border-radius: 3px;
+  padding: 3px 4px;
+  font-size: 10px;
+  font-family: inherit;
+  outline: none;
+  background: #fafafa;
+  color: #666;
+  text-align: left;
+  line-height: 1.4;
+  resize: vertical;
+  min-height: 32px;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+.remark-input:focus {
+  border-color: #2e7d32;
+  background: #fff;
+  color: #333;
 }
 
 .dim-row td:first-child {
