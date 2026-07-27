@@ -62,7 +62,24 @@ export function initUpdater(window) {
 export function downloadUpdate() {
   if (autoUpdater) {
     LOG('calling autoUpdater.downloadUpdate()')
-    autoUpdater.downloadUpdate()
+    // 添加超时保护：30秒后如果还没进度，提示用户
+    const timeoutTimer = setTimeout(() => {
+      mainWindow?.webContents.send('update:error', { message: '连接超时，请检查网络后重试（可点手动下载）' })
+    }, 30000)
+    // 监听一次进度就取消超时
+    const onProgress = () => { clearTimeout(timeoutTimer); autoUpdater.removeListener('download-progress', onProgress) }
+    autoUpdater.on('download-progress', onProgress)
+    // 下载完成也取消超时
+    const onDone = () => { clearTimeout(timeoutTimer); autoUpdater.removeListener('update-downloaded', onDone) }
+    autoUpdater.on('update-downloaded', onDone)
+
+    autoUpdater.downloadUpdate().catch(err => {
+      clearTimeout(timeoutTimer)
+      autoUpdater.removeListener('download-progress', onProgress)
+      autoUpdater.removeListener('update-downloaded', onDone)
+      LOG(`downloadUpdate error: ${err.message}`)
+      mainWindow?.webContents.send('update:error', { message: `下载失败: ${err.message}` })
+    })
   } else {
     mainWindow?.webContents.send('update:error', { message: '下载模块未就绪' })
   }

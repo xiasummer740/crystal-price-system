@@ -4,7 +4,7 @@
     <div class="page-content">
       <van-form @submit="onSubmit">
         <van-cell-group inset title="物料信息">
-          <van-field v-model="form.material_code" label="物料编码" placeholder="输入编码自动匹配" @change="onCodeChange" :readonly="isEdit" />
+          <van-field v-model="form.material_code" label="物料编码" placeholder="输入编码自动匹配" @change="onCodeChange" />
           <van-field v-model="form.material_name" label="物料名称" placeholder="物料名称" :readonly="isEdit" />
           <van-field v-model="form.material_spec" label="物料规格" placeholder="如：SMD3225" :readonly="isEdit" />
           <!-- 品类：快捷选填 -->

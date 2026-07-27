@@ -231,7 +231,7 @@ router.post('/batch-update-specs', (req, res) => {
   const b = req.body; const source = b.source || {}
   const { keyword, factory, quoter, currency, category, startDate, endDate, multiFilter } = b
   const matchCols = ['material_code','material_name','material_spec','category','brand','dimension','pin_count','frequency','load_cap','voltage','mode','freq_tol','temperature']
-  const techFields = ['material_name','material_spec','category','brand','dimension','pin_count','frequency','load_cap','voltage','mode','freq_tol','temperature']
+  const techFields = ['material_code','material_name','material_spec','category','brand','dimension','pin_count','frequency','load_cap','voltage','mode','freq_tol','temperature']
   const hasFilter = keyword || factory || quoter || currency || category || startDate || endDate || multiFilter ||
     Object.keys(b).some(k => matchCols.includes(k) || ['standard_lead_time','first_inquiry_customer'].includes(k))
   if (!hasFilter) return res.status(400).json({ code: 1, msg: '请指定筛选条件或选择记录' })
