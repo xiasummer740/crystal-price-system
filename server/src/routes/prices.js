@@ -236,10 +236,16 @@ router.post('/batch-update-specs', (req, res) => {
     Object.keys(b).some(k => matchCols.includes(k) || ['standard_lead_time','first_inquiry_customer'].includes(k))
   if (!hasFilter) return res.status(400).json({ code: 1, msg: '请指定筛选条件或选择记录' })
   const conditions = ['is_deleted = 0']; const params = []
-  for (const c of matchCols) { conditions.push(`COALESCE(${c},'') = ?`); params.push(source[c] ?? '') }
+  // 只用 material_code 匹配（原匹配全部字段太严格，空字段稍微不对就更新0行）
+  const mc = (source.material_code || '').trim()
+  if (mc) {
+    conditions.push('material_code = ?'); params.push(mc)
+  } else {
+    conditions.push("(material_code IS NULL OR material_code = '')")
+  }
   const sets = techFields.map(f => `${f} = ?`); const vals = techFields.map(f => b[f] ?? source[f] ?? '')
-  execute(`UPDATE material_prices SET updated_at = datetime('now','localtime'), ${sets.join(', ')} WHERE ${conditions.join(' AND ')}`, [...vals, ...params])
-  res.json({ code: 0, msg: '技术参数已批量更新' })
+  const result = execute(`UPDATE material_prices SET updated_at = datetime('now','localtime'), ${sets.join(', ')} WHERE ${conditions.join(' AND ')}`, [...vals, ...params])
+  res.json({ code: 0, msg: `技术参数已批量更新（影响 ${result.changes} 行）` })
 })
 
 // POST 批量软删除（按条件）

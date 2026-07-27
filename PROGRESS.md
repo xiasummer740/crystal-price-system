@@ -1,18 +1,23 @@
 # 进度记录
 
-> 最后更新: 2026-07-27 | 当前版本: v1.0.179
-> 下一版本预判: v1.0.180
+> 最后更新: 2026-07-27 | 当前版本: v1.0.180
+> 下一版本预判: v1.0.181
 
 ---
 
 ## 当前工作：已完成
 
-**状态：v1.0.179 重写更新下载：autoUpdater失败自动回退直连**
+**状态：v1.0.180 修复batch-update-specs匹配+刷新按钮+保存后自动刷新**
+
+### 已完成（v1.0.180）
+
+- [x] **🐛 修 batch-update-specs 匹配太严格** — 原来匹配全部14字段，空字段稍微不一致就更新0行。改为只按 material_code 匹配，无编码的记录也正确更新
+- [x] **刷新按钮** — 报价页面顶部新增「⟳ 刷新」按钮
+- [x] **产品参数保存后自动刷新** — 点完「✎ 产品参数」保存后自动刷新主页表格
 
 ### 已完成（v1.0.179）
 
-- [x] **重写下载逻辑** — `downloadUpdate()` 先检查 updateInfoAndProvider，不可用时先调 checkForUpdates()；autoUpdater 下载失败自动回退到 Node.js https 直连下载，不再卡"连接中..."
-- [x] **直连下载+安装** — 直接 https.get 下载安装包，支持进度通知，安装时同步 electron-updater 参数（--updated）
+- [x] **重写下载逻辑** — downloadUpdate 先检查 updateInfoAndProvider，不可用时先调 checkForUpdates()；autoUpdater 下载失败自动回退到 Node.js https 直连下载
 
 ### 已完成（v1.0.178）
 

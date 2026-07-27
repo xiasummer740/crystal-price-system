@@ -50,6 +50,7 @@
         <button v-if="checkedIds.length" class="tb-btn danger" @click="batchDelete">删除 {{ checkedIds.length }}</button>
         <router-link to="/add" class="tb-btn primary" style="text-decoration:none">&#65291; 新增报价</router-link>
         <button class="tb-btn" @click="handleImport">导入</button>
+        <button class="tb-btn" @click="reload">⟳ 刷新</button>
         <button class="tb-btn" @click="downloadTemplate">模板</button>
         <button class="tb-btn" @click="handleExport">导出</button>
         <button class="tb-btn adv-btn" @click="showAdvFilter = true">高级筛选</button>
@@ -585,7 +586,7 @@ function editGroupSpecs() {
 }
 async function saveSpecs() {
   specSaving.value = true
-  try { await http.post('/prices/batch-update-specs', {...specEditForm.value, source: specSource.value}); showSpecEdit.value = false; showToast('参数已批量更新'); setTimeout(() => showDetail(specEditForm.value), 400) }
+  try { const r = await http.post('/prices/batch-update-specs', {...specEditForm.value, source: specSource.value}); showSpecEdit.value = false; showToast(r.msg || '保存成功'); reload(); setTimeout(() => showDetail(specEditForm.value), 400) }
   catch (e) { showToast('保存失败: '+(e.response?.data?.msg||e.message)) }
   finally { specSaving.value = false }
 }
