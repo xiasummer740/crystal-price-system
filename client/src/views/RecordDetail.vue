@@ -34,7 +34,7 @@
 
       <van-cell-group inset title="其他信息">
         <van-cell title="标准交期" :value="detail.standard_lead_time||'-'" />
-        <van-cell title="规格书"><template #value><a v-if="detail.spec_document" :href="detail.spec_document" target="_blank" class="spec-link">{{ decodeURIComponent(detail.spec_document.replace('/api/specs/','')) }}</a><span v-else>-</span></template></van-cell>
+        <van-cell title="规格书"><template #value><a v-if="detail.spec_document" :href="detail.spec_document" target="_blank" class="spec-link" @click.prevent="openExternal(detail.spec_document)">{{ decodeURIComponent(detail.spec_document.replace('/api/specs/','')) }}</a><span v-else>-</span></template></van-cell>
         <van-cell title="初次询价客户" :value="detail.first_inquiry_customer||'-'" />
         <van-cell title="备注" :label="detail.remarks||''" />
       </van-cell-group>
@@ -53,6 +53,7 @@
 import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { usePriceStore } from '../stores/price.js'
+function openExternal(url) { window.electronAPI?.openExternal?.(url) || window.open(url, '_blank') }
 import { showConfirmDialog, showToast } from 'vant'
 
 const route = useRoute()

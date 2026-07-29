@@ -278,7 +278,10 @@
 
           <template v-else-if="updateStatus === 'available'">
             <div class="update-info">发现新版本 v{{ updateVersion }}</div>
-            <button class="update-btn" @click="onDownloadUpdate">⬇ 下载更新</button>
+            <div class="update-actions">
+              <button class="update-btn" @click="onDownloadUpdate">⬇ 下载更新</button>
+              <a :href="'https://github.com/xiasummer740/crystal-price-system/releases/tag/v' + updateVersion" target="_blank" class="manual-link" @click.stop>🌐 浏览器下载</a>
+            </div>
             <div v-if="releaseNotes" class="rn-wrap">
               <div class="rn-toggle" @click="showRn = !showRn">{{ showRn ? '▼' : '▶' }} 更新说明</div>
               <pre v-if="showRn" class="rn-body">{{ releaseNotes }}</pre>
@@ -400,7 +403,7 @@
         <div class="spec-zone" style="margin-top:8px" @dragenter.prevent="specEditDragOver=true" @dragover.prevent="specEditDragOver=true" @dragleave.prevent="specEditDragOver=false" @drop.prevent="onSpecEditDrop" :class="{'drag-active':specEditDragOver}">
           <van-cell title="规格书" class="spec-field">
             <template #value>
-              <a v-if="specEditForm.spec_document" :href="specEditForm.spec_document" target="_blank" class="spec-link">{{ decodeSpecName(specEditForm.spec_document) }}</a>
+              <a v-if="specEditForm.spec_document" :href="specEditForm.spec_document" target="_blank" class="spec-link" @click.prevent="openExternal(specEditForm.spec_document)">{{ decodeSpecName(specEditForm.spec_document) }}</a>
               <span v-else class="spec-placeholder">点击上传或拖入文件</span>
             </template>
             <template #right-icon>
@@ -599,6 +602,7 @@ function onSpecSugClickOutside(e) {
 }
 function onSpecEditDrop(e) { specEditDragOver.value=false; const file=e.dataTransfer?.files?.[0]; if(file) uploadSpecEditFile(file) }
 async function onSpecEditUpload(e) { const file=e.target.files[0]; if(file) uploadSpecEditFile(file); specEditFileInput.value && (specEditFileInput.value.value='') }
+function openExternal(url) { window.electronAPI?.openExternal?.(url) || window.open(url, '_blank') }
 function decodeSpecName(url) {
   if (!url) return ''
   try {

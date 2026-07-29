@@ -60,7 +60,7 @@
             <td class="ellip" :title="item.first_inquiry_customer">{{ item.first_inquiry_customer||'-' }}</td>
             <td class="ellip" :title="item.remarks">{{ item.remarks||'-' }}</td>
             <td class="act-col">
-              <a v-if="item.spec_document" class="spec-link" :href="item.spec_document" target="_blank">📄</a>
+              <a v-if="item.spec_document" class="spec-link" :href="item.spec_document" target="_blank" @click.prevent="openExternal(item.spec_document)">📄</a>
               <span v-if="item.record_count>1 && item.factory_count>0" class="group-badge" @click.stop="$emit('showDetail', item)">{{ item.factory_count||0 }}厂 {{ item.record_count||0 }}条</span>
               <router-link v-if="item.record_count<=1" :to="'/edit/'+item.id" class="row-btn edit" @click.stop>改</router-link>
               <button v-if="item.record_count>1" class="row-btn edit" @click.stop="$emit('groupEdit', item)">改</button>
@@ -88,6 +88,7 @@
 <script setup>
 import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
+function openExternal(url) { window.electronAPI?.openExternal?.(url) || window.open(url, '_blank') }
 
 const props = defineProps({
   list: { type: Array, default: () => [] },
