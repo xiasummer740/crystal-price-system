@@ -116,12 +116,16 @@
             </div>
           </div>
           <div class="spec-zone" @dragenter.prevent="dragOver=true" @dragover.prevent="dragOver=true" @dragleave.prevent="dragOver=false" @drop.prevent="onSpecDrop" :class="{'drag-active':dragOver}">
-            <van-field v-model="form.spec_document" label="规格书" placeholder="粘贴链接 / 拖入文件 / 上传">
-              <template #button>
-                <van-button v-if="form.spec_document" size="small" type="danger" plain @click="form.spec_document=''">删除</van-button>
-                <van-button size="small" type="primary" @click="pickSpecFile">上传</van-button>
+            <van-cell title="规格书" class="spec-field">
+              <template #value>
+                <a v-if="form.spec_document" :href="form.spec_document" target="_blank" class="spec-link">{{ specDisplayName(form.spec_document) }}</a>
+                <span v-else class="spec-placeholder">粘贴链接 / 拖入文件 / 上传</span>
               </template>
-            </van-field>
+              <template #right-icon>
+                <van-button v-if="form.spec_document" size="small" type="danger" plain style="margin-left:6px;font-size:11px" @click="form.spec_document=''">删除</van-button>
+                <van-button size="small" type="primary" style="margin-left:4px;font-size:11px" @click="pickSpecFile">上传</van-button>
+              </template>
+            </van-cell>
             <input ref="specFileInput" type="file" hidden @change="onSpecUpload" />
           </div>
           <van-field v-model="form.first_inquiry_customer" label="初次询价客户" placeholder="如：某某科技" />
@@ -183,6 +187,13 @@ onMounted(() => window.addEventListener('beforeunload', onBeforeUnload))
 onUnmounted(() => window.removeEventListener('beforeunload', onBeforeUnload))
 
 // 统一返回：router.push 触发 onBeforeRouteLeave 守卫检测未保存
+function specDisplayName(url) {
+  if (!url) return ''
+  try {
+    const name = url.replace('/api/specs/', '')
+    return decodeURIComponent(name)
+  } catch { return url }
+}
 function goBack() {
   router.push('/')
 }
@@ -333,4 +344,8 @@ async function onSubmitNew() {
 :deep(.van-cell-group--inset) { overflow: visible !important }
 .spec-zone { border-radius:6px; transition:all .2s; border:2px solid transparent }
 .spec-zone.drag-active { border-color:var(--color-primary); background:rgba(var(--color-primary-rgb),.04) }
+.spec-field :deep(.van-cell__value){flex:1;overflow:hidden;text-overflow:ellipsis}
+.spec-link{color:var(--color-primary);text-decoration:none;font-size:12px}
+.spec-link:hover{text-decoration:underline}
+.spec-placeholder{color:#bbb;font-size:12px}
 </style>

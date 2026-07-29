@@ -398,12 +398,16 @@
         </div>
         <van-field v-model="specEditForm.temperature" label="温度" readonly is-link placeholder="选择温度范围" @click="showSpecTempPicker=true" />
         <div class="spec-zone" style="margin-top:8px" @dragenter.prevent="specEditDragOver=true" @dragover.prevent="specEditDragOver=true" @dragleave.prevent="specEditDragOver=false" @drop.prevent="onSpecEditDrop" :class="{'drag-active':specEditDragOver}">
-          <van-field v-model="specEditForm.spec_document" label="规格书" placeholder="粘贴链接 / 拖入文件 / 上传">
-            <template #button>
-              <van-button v-if="specEditForm.spec_document" size="small" type="danger" plain @click="specEditForm.spec_document=''">删除</van-button>
-              <van-button size="small" type="primary" @click="specEditFileInput?.click()">上传</van-button>
+          <van-cell title="规格书" class="spec-field">
+            <template #value>
+              <a v-if="specEditForm.spec_document" :href="specEditForm.spec_document" target="_blank" class="spec-link">{{ decodeSpecName(specEditForm.spec_document) }}</a>
+              <span v-else class="spec-placeholder">点击上传或拖入文件</span>
             </template>
-          </van-field>
+            <template #right-icon>
+              <van-button v-if="specEditForm.spec_document" size="small" type="danger" plain style="margin-left:6px;font-size:11px" @click="specEditForm.spec_document=''">删除</van-button>
+              <van-button size="small" type="primary" style="margin-left:4px;font-size:11px" @click="specEditFileInput?.click()">上传</van-button>
+            </template>
+          </van-cell>
           <input ref="specEditFileInput" type="file" hidden @change="onSpecEditUpload" />
         </div>
         <div style="margin:16px 0"><van-button block round type="primary" :loading="specSaving" @click="saveSpecs">保存参数（更新全部记录）</van-button></div>
@@ -595,6 +599,13 @@ function onSpecSugClickOutside(e) {
 }
 function onSpecEditDrop(e) { specEditDragOver.value=false; const file=e.dataTransfer?.files?.[0]; if(file) uploadSpecEditFile(file) }
 async function onSpecEditUpload(e) { const file=e.target.files[0]; if(file) uploadSpecEditFile(file); specEditFileInput.value && (specEditFileInput.value.value='') }
+function decodeSpecName(url) {
+  if (!url) return ''
+  try {
+    const name = url.replace('/api/specs/', '')
+    return decodeURIComponent(name)
+  } catch { return url }
+}
 async function uploadSpecEditFile(file) {
   const fd=new FormData(); fd.append('file',file)
   try { const r=await http.post('/upload-spec',fd); specEditForm.value.spec_document=r.data.url; showToast('上传成功') } catch { showToast('上传失败') }
@@ -1164,6 +1175,10 @@ onUnmounted(() => { if (clockTimer) clearInterval(clockTimer); if (colFilterTime
 .spec-edit-hint{font-size:11px;color:#e6a23c;margin:0 0 12px}
 .spec-zone{border-radius:6px;transition:all .2s;border:2px solid transparent}
 .spec-zone.drag-active{border-color:var(--color-primary);background:rgba(var(--color-primary-rgb),.04)}
+.spec-field :deep(.van-cell__value){flex:1;overflow:hidden;text-overflow:ellipsis}
+.spec-link{color:var(--color-primary);text-decoration:none;font-size:12px}
+.spec-link:hover{text-decoration:underline}
+.spec-placeholder{color:#bbb;font-size:12px}
 /* 产品参数联想下拉 */
 .sug-wrapper{position:relative}
 .sug-drop{position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid #e8e8e8;border-radius:6px;box-shadow:0 4px 16px rgba(0,0,0,.1);z-index:999;max-height:180px;overflow-y:auto}
