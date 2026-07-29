@@ -602,7 +602,11 @@ function onSpecSugClickOutside(e) {
 }
 function onSpecEditDrop(e) { specEditDragOver.value=false; const file=e.dataTransfer?.files?.[0]; if(file) uploadSpecEditFile(file) }
 async function onSpecEditUpload(e) { const file=e.target.files[0]; if(file) uploadSpecEditFile(file); specEditFileInput.value && (specEditFileInput.value.value='') }
-function openExternal(url) { window.electronAPI?.openExternal?.(url) || window.open(url, '_blank') }
+function openExternal(url) {
+  if (!url) return
+  const fullUrl = url.startsWith('http') ? url : window.location.origin + url
+  window.electronAPI?.openExternal?.(fullUrl) || window.open(fullUrl, '_blank')
+}
 function decodeSpecName(url) {
   if (!url) return ''
   try {

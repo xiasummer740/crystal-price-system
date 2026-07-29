@@ -118,7 +118,7 @@
           <div class="spec-zone" @dragenter.prevent="dragOver=true" @dragover.prevent="dragOver=true" @dragleave.prevent="dragOver=false" @drop.prevent="onSpecDrop" :class="{'drag-active':dragOver}">
             <van-cell title="规格书" class="spec-field">
               <template #value>
-                <a v-if="form.spec_document" :href="form.spec_document" target="_blank" class="spec-link" @click.prevent="window.electronAPI?.openExternal?.(form.spec_document) || window.open(form.spec_document, '_blank')">{{ specDisplayName(form.spec_document) }}</a>
+                <a v-if="form.spec_document" :href="form.spec_document" target="_blank" class="spec-link" @click.prevent="openExternal(form.spec_document)">{{ specDisplayName(form.spec_document) }}</a>
                 <span v-else class="spec-placeholder">粘贴链接 / 拖入文件 / 上传</span>
               </template>
               <template #right-icon>
@@ -187,6 +187,11 @@ onMounted(() => window.addEventListener('beforeunload', onBeforeUnload))
 onUnmounted(() => window.removeEventListener('beforeunload', onBeforeUnload))
 
 // 统一返回：router.push 触发 onBeforeRouteLeave 守卫检测未保存
+function openExternal(url) {
+  if (!url) return
+  const fullUrl = url.startsWith('http') ? url : window.location.origin + url
+  window.electronAPI?.openExternal?.(fullUrl) || window.open(fullUrl, '_blank')
+}
 function specDisplayName(url) {
   if (!url) return ''
   try {

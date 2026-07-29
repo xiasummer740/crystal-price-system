@@ -53,7 +53,11 @@
 import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { usePriceStore } from '../stores/price.js'
-function openExternal(url) { window.electronAPI?.openExternal?.(url) || window.open(url, '_blank') }
+function openExternal(url) {
+  if (!url) return
+  const fullUrl = url.startsWith('http') ? url : window.location.origin + url
+  window.electronAPI?.openExternal?.(fullUrl) || window.open(fullUrl, '_blank')
+}
 import { showConfirmDialog, showToast } from 'vant'
 
 const route = useRoute()
