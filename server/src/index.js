@@ -183,7 +183,7 @@ app.post('/api/upload-spec', (req, res) => {
     const url = `/api/specs/${encodeURIComponent(req.file.filename)}`
     // 返回 decode 后的原始文件名给前端显示
     let displayName
-    try { displayName = Buffer.from(file.originalname, 'binary').toString('utf8') } catch { displayName = file.originalname }
+    try { displayName = Buffer.from(req.file.originalname, 'binary').toString('utf8') } catch { displayName = req.file.originalname }
     res.json({ code: 0, data: { url, filename: displayName } })
   })
 })
