@@ -195,19 +195,23 @@ const activeSug = ref(null)
 async function loadSuggestions() {
   try { const r = await http.get('/prices/form-suggestions'); if (r?.data) { sugAll.value = r.data; sugFiltered.value = { ...r.data } } } catch { /* 静默失败，不影响用户操作 */ }
 }
+function fieldKey(field) {
+  const map = { leadTime: 'standard_lead_time', factory: 'factory_code' }
+  return map[field] || field
+}
 function openSug(field) {
   activeSug.value = field
   // 根据当前输入框的值过滤
-  const val = (form.value[field === 'leadTime' ? 'standard_lead_time' : field] || '').toLowerCase()
+  const val = (form.value[fieldKey(field)] || '').toLowerCase()
   sugFiltered.value[field] = (sugAll.value[field] || []).filter(v => v.toLowerCase().includes(val))
 }
 function filterSug(field) {
   if (activeSug.value !== field) return
-  const val = (form.value[field === 'leadTime' ? 'standard_lead_time' : field] || '').toLowerCase()
+  const val = (form.value[fieldKey(field)] || '').toLowerCase()
   sugFiltered.value[field] = (sugAll.value[field] || []).filter(v => v.toLowerCase().includes(val))
 }
 function pickSug(field, val) {
-  form.value[field === 'leadTime' ? 'standard_lead_time' : field] = val
+  form.value[fieldKey(field)] = val
   activeSug.value = null
 }
 
