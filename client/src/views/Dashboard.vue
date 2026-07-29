@@ -435,6 +435,7 @@
             <span class="log-old">{{ l.old_value||'空' }}</span>
             <span class="log-arrow">→</span>
             <span class="log-new">{{ l.new_value||'空' }}</span>
+            <span v-if="l.field_name!=='currency' && l.old_value && l.new_value" class="log-pct" :class="logPctClass(l)">{{ logPctText(l) }}</span>
           </div>
         </div>
       </div>
@@ -509,6 +510,14 @@ const currencyOptions = [{text:'全部币种',value:''},{text:'人民币',value:
 const catFilterOptions = computed(() => { const cats=[...new Set([...store.metaOptions.categories||[], ...store.list.map(r=>r.category).filter(Boolean)])]; return [{text:'全部分类',value:''},...cats.map(c=>({text:c,value:c}))] })
 function fmtPrice(val,cur) { if(val==null||val==='') return '-'; return (cur==='USD'?'$':'¥')+Number(val).toFixed(4) }
 function fmtPriceWithCNY(val,cur) { if(val==null||val==='') return '-'; if(cur==='USD'){const fx=Number(localStorage.getItem('crystal_rate'))||7;return '¥'+(val*fx).toFixed(4)}return (cur==='USD'?'$':'¥')+Number(val).toFixed(4) }
+function logPct(l) {
+  if (l.field_name==='currency' || !l.old_value || !l.new_value) return null
+  const oldV = parseFloat(l.old_value), newV = parseFloat(l.new_value)
+  if (isNaN(oldV) || isNaN(newV) || oldV === 0) return null
+  return (newV - oldV) / oldV * 100
+}
+function logPctText(l) { const p = logPct(l); if (p == null) return ''; return (p > 0 ? '↑' : '↓') + Math.abs(p).toFixed(2) + '%' }
+function logPctClass(l) { const p = logPct(l); if (p == null) return ''; return p > 0 ? 'pct-up' : 'pct-down' }
 function copyText(t) { if(!t) return; navigator.clipboard?.writeText(t).then(()=>showToast('已复制')).catch(()=>{}) }
 function reload() { checkedIds.value = []; store.loadGroupedList() }
 function onSearch() { store.setFilter('page',1); reload() }
@@ -965,16 +974,16 @@ onUnmounted(() => { if (clockTimer) clearInterval(clockTimer); if (colFilterTime
 .tb-btn.danger:hover{background:#d40e1f}
 
 /* 筛选 */
-.info-row{display:flex;align-items:center;justify-content:space-between;background:#fff;padding:8px 16px;border-radius:8px;margin-bottom:10px;border:1px solid #e8e8e8}
-.filter-group{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-.filter-group :deep(.van-dropdown-menu){flex:0 0 auto}
+.info-row{display:flex;align-items:center;justify-content:space-between;background:#fff;padding:8px 16px;border-radius:8px;margin-bottom:10px;border:1px solid #e8e8e8;gap:12px}
+.filter-group{display:flex;align-items:center;gap:6px;flex:1;min-width:0;overflow-x:auto}
+.filter-group :deep(.van-dropdown-menu){display:flex;flex-shrink:0}
 .filter-group :deep(.van-dropdown-menu__item){flex:0 0 auto;min-width:68px}
 .filter-group :deep(.van-dropdown-menu__title){font-size:13px!important;padding:0 8px!important}
-.fdiv{width:1px;height:20px;background:#e8e8e8;margin:0 4px}
-.date-field{width:130px;padding:0!important;font-size:12px;border:none!important}
-.date-field :deep(input){font-size:12px!important;padding:4px 8px!important}
-.date-arrow{color:#bbb;font-size:13px;margin:0 4px}
-.reset-btn{padding:4px 12px;border-radius:4px;font-size:12px;cursor:pointer;border:1px solid #e8e8e8;background:#fafafa;color:#888;font-family:inherit}
+.fdiv{width:1px;height:20px;background:#e8e8e8;flex-shrink:0}
+.date-field{width:135px;padding:0!important;font-size:12px;border:none!important;flex-shrink:0}
+.date-field :deep(input){font-size:13px!important;padding:4px 8px!important}
+.date-arrow{color:#bbb;font-size:14px;flex-shrink:0}
+.reset-btn{padding:4px 12px;border-radius:4px;font-size:12px;cursor:pointer;border:1px solid #d9d9d9;background:#fff;color:#666;font-family:inherit;transition:all .15s;flex-shrink:0}
 .reset-btn:hover{color:var(--color-primary);border-color:var(--color-primary)}
 .stat-group{font-size:13px;color:#888;white-space:nowrap;flex-shrink:0}
 .stat-group b{color:#323233;font-weight:600}
@@ -1016,6 +1025,9 @@ onUnmounted(() => { if (clockTimer) clearInterval(clockTimer); if (colFilterTime
 .log-old{color:#e53935;text-decoration:line-through;min-width:48px;text-align:right}
 .log-arrow{color:#bbb}
 .log-new{color:#52c41a;font-weight:600;min-width:48px}
+.log-pct{font-size:10px;font-weight:600;min-width:56px}
+.log-pct.pct-up{color:#e53935}
+.log-pct.pct-down{color:#52c41a}
 /* 列筛选 */
 .col-filter{display:inline-block;color:#ccc;cursor:pointer;font-size:11px;margin-left:2px;padding:1px 3px;border-radius:2px;vertical-align:middle;position:relative;z-index:1}
 .col-filter:hover{color:var(--color-primary);background:rgba(var(--color-primary-rgb),.08)}
@@ -1208,16 +1220,15 @@ onUnmounted(() => { if (clockTimer) clearInterval(clockTimer); if (colFilterTime
   .tb-btn{padding:8px 12px;font-size:12px;flex-shrink:0}
 
   /* 筛选行 */
-  .info-row{flex-direction:column;align-items:stretch;gap:6px;padding:8px 10px}
-  .filter-group{flex-wrap:wrap;gap:4px}
-  .filter-group :deep(.van-dropdown-menu){flex:1;min-width:0}
-  .filter-group :deep(.van-dropdown-menu__title){font-size:11px!important;padding:0 6px!important}
-  .date-field{width:auto;flex:1;min-width:0}
-  .date-field input{font-size:12px!important}
+  .info-row{flex-wrap:wrap;gap:6px;padding:8px 10px}
+  .filter-group{flex-wrap:wrap;gap:4px;overflow-x:visible}
+  .filter-group :deep(.van-dropdown-menu__item){min-width:58px}
+  .filter-group :deep(.van-dropdown-menu__title){font-size:11px!important;padding:0 5px!important}
+  .date-field{width:auto;flex:1;min-width:80px}
+  .date-field :deep(input){font-size:12px!important}
   .date-arrow{display:none}
-  .stat-group{font-size:11px;text-align:left;white-space:normal}
-  .reset-btn{padding:4px 10px;font-size:11px}
   .fdiv{display:none}
+  .stat-group{font-size:11px;white-space:normal}
 
   /* 列筛选标签 */
   .col-filter-tags{gap:4px}
