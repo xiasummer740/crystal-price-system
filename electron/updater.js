@@ -92,13 +92,83 @@ export async function downloadUpdate() {
   }
 }
 
+// 通过 GitHub API 获取安装包下载 URL
+function getAssetDownloadUrl(release) {
+  const assetName = `crystal-price-system-setup-${appVersion}.exe`
+  const asset = (release.assets || []).find(a => a.name === assetName)
+  return asset?.browser_download_url || null
+}
+
+// 直连下载核心（带重试）
+async function downloadWithRetry(url, destFile, retries = 3) {
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      LOG(`downloading (attempt ${attempt}/${retries})`)
+      await new Promise((resolve, reject) => {
+        const req = https.get(url, { headers: { 'User-Agent': 'crystal-price-system' }, timeout: 300000 }, (res) => {
+          // 跟随重定向（最多 5 级）
+          if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+            req.destroy()
+            LOG(`redirect (${res.statusCode}) → ${res.headers.location}`)
+            // 递归跟随
+            return downloadWithRetry(res.headers.location, destFile, retries - attempt + 1)
+              .then(resolve).catch(reject)
+          }
+          if (res.statusCode !== 200) {
+            reject(new Error(`HTTP ${res.statusCode}`))
+            return
+          }
+          const total = parseInt(res.headers['content-length'] || '0', 10)
+          let downloaded = 0
+          let lastTime = Date.now()
+          let lastBytes = 0
+          const fileStream = createWriteStream(destFile)
+          res.pipe(fileStream)
+          res.on('data', (chunk) => {
+            downloaded += chunk.length
+            if (total > 0) {
+              const now = Date.now()
+              const elapsed = (now - lastTime) / 1000
+              let bytesPerSecond = 0
+              if (elapsed >= 1) {
+                bytesPerSecond = Math.round((downloaded - lastBytes) / elapsed)
+                lastTime = now
+                lastBytes = downloaded
+              }
+              mainWindow?.webContents.send('update:progress', {
+                percent: Math.round(downloaded / total * 100),
+                bytesPerSecond,
+                total,
+                transferred: downloaded,
+              })
+            }
+          })
+          res.on('end', () => { fileStream.end(); resolve() })
+          res.on('error', reject)
+          fileStream.on('error', reject)
+        })
+        req.on('error', reject)
+        req.on('timeout', () => { req.destroy(); reject(new Error('连接服务器超时')) })
+      })
+      return // 成功，跳出重试
+    } catch (err) {
+      LOG(`attempt ${attempt} failed: ${err.message}`)
+      if (attempt < retries) {
+        // 短暂等待后重试
+        await new Promise(r => setTimeout(r, 2000 * attempt))
+      } else {
+        throw err
+      }
+    }
+  }
+}
+
 // 直连 GitHub 下载（不依赖 autoUpdater）
 async function directDownload() {
   LOG('directDownload called')
   try {
     const { app } = _require('electron')
     const userDataPath = app.getPath('userData')
-    const downloadUrl = `https://github.com/xiasummer740/crystal-price-system/releases/download/v${appVersion}/crystal-price-system-setup-${appVersion}.exe`
     const destDir = path.join(userDataPath, '__update__')
     const destFile = path.join(destDir, `crystal-price-system-setup-${appVersion}.exe`)
 
@@ -109,65 +179,43 @@ async function directDownload() {
     // 删除旧文件
     if (existsSync(destFile)) unlinkSync(destFile)
 
-    LOG(`downloading from ${downloadUrl}`)
-
-    await new Promise((resolve, reject) => {
-      const req = https.get(downloadUrl, { headers: { 'User-Agent': 'crystal-price-system' }, timeout: 120000 }, (res) => {
-        // GitHub 返回 302 重定向到 CDN
-        if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-          LOG(`redirect to ${res.headers.location}`)
-          https.get(res.headers.location, { timeout: 120000 }, (res2) => {
-            if (res2.statusCode !== 200) {
-              reject(new Error(`HTTP ${res2.statusCode}`))
-              return
-            }
-            const total = parseInt(res2.headers['content-length'] || '0', 10)
-            let downloaded = 0
-            const fileStream = createWriteStream(destFile)
-            res2.pipe(fileStream)
-
-            res2.on('data', (chunk) => {
-              downloaded += chunk.length
-              if (total > 0) {
-                const percent = Math.round(downloaded / total * 100)
-                mainWindow?.webContents.send('update:progress', { percent, bytesPerSecond: 0, total, transferred: downloaded })
-              }
-            })
-            res2.on('end', () => {
-              fileStream.end()
-              resolve()
-            })
-            res2.on('error', reject)
-          }).on('error', reject).on('timeout', () => { reject(new Error('下载超时')) })
-        } else if (res.statusCode === 200) {
-          // 直接响应（不走重定向）
-          const total = parseInt(res.headers['content-length'] || '0', 10)
-          let downloaded = 0
-          const fileStream = createWriteStream(destFile)
-          res.pipe(fileStream)
-          res.on('data', (chunk) => {
-            downloaded += chunk.length
-            if (total > 0) {
-              mainWindow?.webContents.send('update:progress', { percent: Math.round(downloaded / total * 100), bytesPerSecond: 0, total, transferred: downloaded })
-            }
-          })
-          res.on('end', () => { fileStream.end(); resolve() })
-          res.on('error', reject)
-        } else {
-          reject(new Error(`HTTP ${res.statusCode}`))
-        }
+    // 先通过 API 获取 release 信息，拿到 CDN 直链
+    const releaseUrl = 'https://api.github.com/repos/xiasummer740/crystal-price-system/releases/latest'
+    LOG(`fetching release info from ${releaseUrl}`)
+    const releaseData = await new Promise((resolve, reject) => {
+      const req = https.get(releaseUrl, { headers: { 'User-Agent': 'crystal-price-system', Accept: 'application/json' }, timeout: 15000 }, (res) => {
+        let data = ''
+        res.on('data', chunk => data += chunk)
+        res.on('end', () => {
+          if (res.statusCode !== 200) return reject(new Error(`release API HTTP ${res.statusCode}`))
+          try { resolve(JSON.parse(data)) } catch (e) { reject(new Error('release info parse failed')) }
+        })
+        res.on('error', reject)
       })
       req.on('error', reject)
-      req.on('timeout', () => { req.destroy(); reject(new Error('连接服务器超时')) })
+      req.on('timeout', () => { req.destroy(); reject(new Error('获取版本信息超时')) })
     })
 
-    // 下载完成，记录路径并通知前端
+    // 确保 appVersion 是最新版（可能未经过 checkForUpdates）
+    const tagVersion = (releaseData.tag_name || '').replace(/^v/i, '')
+    if (tagVersion) appVersion = tagVersion
+
+    const downloadUrl = getAssetDownloadUrl(releaseData)
+    if (!downloadUrl) {
+      throw new Error(`未找到 ${appVersion} 版本的安装包，请手动下载`)
+    }
+    LOG(`browser_download_url: ${downloadUrl}`)
+
+    // 带重试的下载
+    await downloadWithRetry(downloadUrl, destFile)
+
+    // 下载完成
     directDownloadPath = destFile
     LOG(`download complete: ${destFile}`)
     mainWindow?.webContents.send('update:downloaded')
   } catch (err) {
     LOG(`directDownload error: ${err.message}`)
-    mainWindow?.webContents.send('update:error', { message: `下载失败: ${err.message}。请手动下载安装` })
+    mainWindow?.webContents.send('update:error', { message: `下载失败: ${err.message}。请手动下载安装  https://github.com/xiasummer740/crystal-price-system/releases/latest` })
   }
 }
 
