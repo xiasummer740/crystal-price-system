@@ -90,8 +90,12 @@ import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 function openExternal(url) {
   if (!url) return
-  const fullUrl = url.startsWith('http') ? url : window.location.origin + url
-  window.electronAPI?.openExternal?.(fullUrl) || window.open(fullUrl, '_blank')
+  if (url.startsWith('/api/specs/')) {
+    window.electronAPI?.openSpec?.(url)
+  } else {
+    const fullUrl = url.startsWith('http') ? url : window.location.origin + url
+    window.electronAPI?.openExternal?.(fullUrl) || window.open(fullUrl, '_blank')
+  }
 }
 
 const props = defineProps({

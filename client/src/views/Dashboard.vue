@@ -604,8 +604,12 @@ function onSpecEditDrop(e) { specEditDragOver.value=false; const file=e.dataTran
 async function onSpecEditUpload(e) { const file=e.target.files[0]; if(file) uploadSpecEditFile(file); specEditFileInput.value && (specEditFileInput.value.value='') }
 function openExternal(url) {
   if (!url) return
-  const fullUrl = url.startsWith('http') ? url : window.location.origin + url
-  window.electronAPI?.openExternal?.(fullUrl) || window.open(fullUrl, '_blank')
+  if (url.startsWith('/api/specs/')) {
+    window.electronAPI?.openSpec?.(url)
+  } else {
+    const fullUrl = url.startsWith('http') ? url : window.location.origin + url
+    window.electronAPI?.openExternal?.(fullUrl) || window.open(fullUrl, '_blank')
+  }
 }
 function decodeSpecName(url) {
   if (!url) return ''

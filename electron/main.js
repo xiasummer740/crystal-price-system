@@ -676,6 +676,16 @@ ipcMain.handle('open-map-window', () => {
 
 // 浏览器打开外部链接（供渲染进程调用）
 ipcMain.handle('open-external', (_, url) => { shell.openExternal(url) })
+// 规格书：获取本地路径并用系统默认程序打开（像双击文件夹一样）
+ipcMain.handle('open-spec', (_, specUrl) => {
+  try {
+    const filename = specUrl.replace('/api/specs/', '')
+    const decoded = decodeURIComponent(filename)
+    const filePath = path.join(process.env.DATA_DIR, '规格书', decoded)
+    log(`open-spec: ${filePath}`)
+    shell.openPath(filePath)
+  } catch (err) { log(`open-spec error: ${err.message}`) }
+})
 
 // === 自动更新 IPC（与 xnowpost 一致） ===
 ipcMain.handle('update:check', () => { checkForUpdates(); return true })

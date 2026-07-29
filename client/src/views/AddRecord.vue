@@ -189,8 +189,12 @@ onUnmounted(() => window.removeEventListener('beforeunload', onBeforeUnload))
 // 统一返回：router.push 触发 onBeforeRouteLeave 守卫检测未保存
 function openExternal(url) {
   if (!url) return
-  const fullUrl = url.startsWith('http') ? url : window.location.origin + url
-  window.electronAPI?.openExternal?.(fullUrl) || window.open(fullUrl, '_blank')
+  if (url.startsWith('/api/specs/')) {
+    window.electronAPI?.openSpec?.(url)
+  } else {
+    const fullUrl = url.startsWith('http') ? url : window.location.origin + url
+    window.electronAPI?.openExternal?.(fullUrl) || window.open(fullUrl, '_blank')
+  }
 }
 function specDisplayName(url) {
   if (!url) return ''
