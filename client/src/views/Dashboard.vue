@@ -397,6 +397,15 @@
           </div>
         </div>
         <van-field v-model="specEditForm.temperature" label="温度" readonly is-link placeholder="选择温度范围" @click="showSpecTempPicker=true" />
+        <div class="spec-zone" style="margin-top:8px" @dragenter.prevent="specEditDragOver=true" @dragover.prevent="specEditDragOver=true" @dragleave.prevent="specEditDragOver=false" @drop.prevent="onSpecEditDrop" :class="{'drag-active':specEditDragOver}">
+          <van-field v-model="specEditForm.spec_document" label="规格书" placeholder="粘贴链接 / 拖入文件 / 上传">
+            <template #button>
+              <van-button v-if="specEditForm.spec_document" size="small" type="danger" plain @click="specEditForm.spec_document=''">删除</van-button>
+              <van-button size="small" type="primary" @click="specEditFileInput?.click()">上传</van-button>
+            </template>
+          </van-field>
+          <input ref="specEditFileInput" type="file" hidden @change="onSpecEditUpload" />
+        </div>
         <div style="margin:16px 0"><van-button block round type="primary" :loading="specSaving" @click="saveSpecs">保存参数（更新全部记录）</van-button></div>
       </div>
       <van-popup v-model:show="showSpecTempPicker" position="bottom" round>
@@ -551,7 +560,9 @@ async function batchDelete() { if(!checkedIds.value.length) return; try { const 
 function openGroupEdit(item){showDetail(item)}
 // 编辑产品参数
 const showSpecEdit = ref(false); const showSpecTempPicker = ref(false); const specSaving = ref(false)
-const specEditForm = ref({material_code:'',material_name:'',material_spec:'',category:'',brand:'',dimension:'',pin_count:'',frequency:'',load_cap:'',voltage:'',mode:'',freq_tol:'',temperature:''})
+const specEditForm = ref({material_code:'',material_name:'',material_spec:'',category:'',brand:'',dimension:'',pin_count:'',frequency:'',load_cap:'',voltage:'',mode:'',freq_tol:'',temperature:'',spec_document:''})
+const specEditFileInput = ref(null)
+const specEditDragOver = ref(false)
 const specSource = ref({})
 const tempOptions = [{text:'-20/70℃',value:'-20/70℃'},{text:'-40~85℃',value:'-40~85℃'},{text:'-40/105℃',value:'-40/105℃'},{text:'-40/125℃',value:'-40/125℃'},{text:'-55/150℃',value:'-55/150℃'}]
 // 产品参数联想
@@ -582,10 +593,16 @@ function pickSpecSug(field, val) {
 function onSpecSugClickOutside(e) {
   if (!e.target.closest('.sug-wrapper')) activeSpecSug.value = null
 }
+function onSpecEditDrop(e) { specEditDragOver.value=false; const file=e.dataTransfer?.files?.[0]; if(file) uploadSpecEditFile(file) }
+async function onSpecEditUpload(e) { const file=e.target.files[0]; if(file) uploadSpecEditFile(file); specEditFileInput.value && (specEditFileInput.value.value='') }
+async function uploadSpecEditFile(file) {
+  const fd=new FormData(); fd.append('file',file)
+  try { const r=await http.post('/upload-spec',fd); specEditForm.value.spec_document=r.data.url; showToast('上传成功') } catch { showToast('上传失败') }
+}
 function editGroupSpecs() {
   const fk = Object.keys(md.value.factories)[0]; const q = md.value.factories[fk]?.[0]
   if (!q) return; specSource.value = q
-  const techs = ['material_code','material_name','material_spec','category','brand','dimension','pin_count','frequency','load_cap','voltage','mode','freq_tol','temperature']
+  const techs = ['material_code','material_name','material_spec','category','brand','dimension','pin_count','frequency','load_cap','voltage','mode','freq_tol','temperature','spec_document']
   techs.forEach(t => { specEditForm.value[t] = q[t] || '' })
   showSpecEdit.value = true
   // 加载参数字段联想列表
@@ -1145,6 +1162,8 @@ onUnmounted(() => { if (clockTimer) clearInterval(clockTimer); if (colFilterTime
 .spec-edit-wrap{padding:16px 20px 20px;overflow-y:auto;height:100%}
 .spec-edit-wrap h3{font-size:18px;font-weight:600;margin:0 0 4px}
 .spec-edit-hint{font-size:11px;color:#e6a23c;margin:0 0 12px}
+.spec-zone{border-radius:6px;transition:all .2s;border:2px solid transparent}
+.spec-zone.drag-active{border-color:var(--color-primary);background:rgba(var(--color-primary-rgb),.04)}
 /* 产品参数联想下拉 */
 .sug-wrapper{position:relative}
 .sug-drop{position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid #e8e8e8;border-radius:6px;box-shadow:0 4px 16px rgba(0,0,0,.1);z-index:999;max-height:180px;overflow-y:auto}

@@ -148,16 +148,18 @@ const specUpload = multer({
   storage: multer.diskStorage({
     destination: specDir,
     filename: (_req, file, cb) => {
-      const ext = path.extname(file.originalname)
-      let base = path.basename(file.originalname, ext)
-      // 安全防护：移除路径遍历（递归清掉嵌套 bypass）、null 字节、NTFS 保留字符
+      // 修复编码：Windows 下 busboy 可能把 UTF-8 当 Latin-1 读，导致中文乱码
+      let originalName
+      try { originalName = Buffer.from(file.originalname, 'binary').toString('utf8') } catch { originalName = file.originalname }
+      const ext = path.extname(originalName)
+      let base = path.basename(originalName, ext)
       while (base.includes('..')) base = base.replace(/\.\.+/g, '')
       base = base.replace(/[\0<>:"|?*/\\]/g, '_').trim()
       if (!base) base = 'unnamed'
       let name = base + ext
       let n = 1
       while (fs.existsSync(path.join(specDir, name))) {
-        name = `${safeBase} (${n})${ext}`
+        name = `${base} (${n})${ext}`
         n++
       }
       cb(null, name)
@@ -179,7 +181,10 @@ app.post('/api/upload-spec', (req, res) => {
     }
     if (!req.file) return res.status(400).json({ code: 1, msg: '请选择文件' })
     const url = `/api/specs/${encodeURIComponent(req.file.filename)}`
-    res.json({ code: 0, data: { url, filename: req.file.originalname } })
+    // 返回 decode 后的原始文件名给前端显示
+    let displayName
+    try { displayName = Buffer.from(file.originalname, 'binary').toString('utf8') } catch { displayName = file.originalname }
+    res.json({ code: 0, data: { url, filename: displayName } })
   })
 })
 
