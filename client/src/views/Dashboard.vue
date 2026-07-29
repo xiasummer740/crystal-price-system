@@ -67,10 +67,10 @@
       <div class="info-row">
         <div class="filter-group">
           <van-dropdown-menu active-color="var(--color-primary)">
-            <van-dropdown-item v-model="store.filters.factory" :options="factoryOptions" title="工厂" @change="reload" />
-            <van-dropdown-item v-model="store.filters.quoter" :options="quoterOptions" title="报价人" @change="reload" />
-            <van-dropdown-item v-model="store.filters.currency" :options="currencyOptions" title="币种" @change="reload" />
-            <van-dropdown-item v-model="store.filters.category" :options="catFilterOptions" title="品类" @change="reload" />
+            <van-dropdown-item v-model="store.filters.factory" :options="factoryOptions" :title="store.filters.factory || '工厂'" @change="reload" />
+            <van-dropdown-item v-model="store.filters.quoter" :options="quoterOptions" :title="store.filters.quoter || '报价人'" @change="reload" />
+            <van-dropdown-item v-model="store.filters.currency" :options="currencyOptions" :title="store.filters.currency || '币种'" @change="reload" />
+            <van-dropdown-item v-model="store.filters.category" :options="catFilterOptions" :title="store.filters.category || '品类'" @change="reload" />
           </van-dropdown-menu>
           <span class="fdiv"></span>
           <van-field v-model="store.filters.startDate" type="date" placeholder="起始日期" class="date-field" @change="reload" />
@@ -965,15 +965,18 @@ onUnmounted(() => { if (clockTimer) clearInterval(clockTimer); if (colFilterTime
 .tb-btn.danger:hover{background:#d40e1f}
 
 /* 筛选 */
-.info-row{display:flex;align-items:center;justify-content:space-between;background:#fff;padding:6px 14px;border-radius:8px;margin-bottom:10px;border:1px solid #e8e8e8}
-.filter-group{display:flex;align-items:center;gap:4px;flex-wrap:wrap}
+.info-row{display:flex;align-items:center;justify-content:space-between;background:#fff;padding:8px 16px;border-radius:8px;margin-bottom:10px;border:1px solid #e8e8e8}
+.filter-group{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.filter-group :deep(.van-dropdown-menu){flex:0 0 auto}
+.filter-group :deep(.van-dropdown-menu__item){flex:0 0 auto;min-width:68px}
+.filter-group :deep(.van-dropdown-menu__title){font-size:13px!important;padding:0 8px!important}
 .fdiv{width:1px;height:20px;background:#e8e8e8;margin:0 4px}
-.date-field{width:115px;padding:0!important;font-size:12px;border:none!important}
+.date-field{width:130px;padding:0!important;font-size:12px;border:none!important}
 .date-field :deep(input){font-size:12px!important;padding:4px 8px!important}
-.date-arrow{color:#bbb;font-size:12px;margin:0 2px}
-.reset-btn{padding:3px 10px;border-radius:4px;font-size:11px;cursor:pointer;border:1px solid #e8e8e8;background:#fafafa;color:#888;font-family:inherit}
+.date-arrow{color:#bbb;font-size:13px;margin:0 4px}
+.reset-btn{padding:4px 12px;border-radius:4px;font-size:12px;cursor:pointer;border:1px solid #e8e8e8;background:#fafafa;color:#888;font-family:inherit}
 .reset-btn:hover{color:var(--color-primary);border-color:var(--color-primary)}
-.stat-group{font-size:12px;color:#888;white-space:nowrap;flex-shrink:0}
+.stat-group{font-size:13px;color:#888;white-space:nowrap;flex-shrink:0}
 .stat-group b{color:#323233;font-weight:600}
 .stat-dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:#52c41a;margin-right:4px;vertical-align:middle}
 
