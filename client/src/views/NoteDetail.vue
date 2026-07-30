@@ -112,10 +112,10 @@
             </div>
             <!-- 文件附件 -->
             <div class="file-list" v-if="fileList.length">
-              <div v-for="(url, i) in fileList" :key="i" class="file-item" @click="downloadFile(url)" :title="'下载 ' + fileName(url)">
+              <div v-for="(url, i) in fileList" :key="i" class="file-item" @click="openFile(url)" :title="'打开 ' + fileName(url)">
                 <span class="file-item-icon">{{ fileIcon(url) }}</span>
                 <span class="file-item-name">{{ fileName(url) }}</span>
-                <span class="file-item-dl">⬇</span>
+                <span class="file-item-dl">{{ isPdfUrl(url) ? '👁' : '⬇' }}</span>
               </div>
             </div>
           </div>
@@ -363,6 +363,16 @@ const previewIdx = ref(0)
 // 判断 URL 是否为图片
 function isImageUrl(url) {
   return /\.(jpg|jpeg|png|gif|webp|bmp|svg)(\?|$)/i.test(url)
+}
+function isPdfUrl(url) {
+  return /\.pdf(\?|$)/i.test(url.split('?')[0])
+}
+function openFile(url) {
+  if (isPdfUrl(url)) {
+    window.open(url, '_blank')
+  } else {
+    downloadFile(url)
+  }
 }
 function fileIcon(url) {
   const ext = url.split('?')[0].split('.').pop()?.toLowerCase() || ''
