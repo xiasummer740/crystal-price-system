@@ -14,14 +14,40 @@ const STATUS_CONFIG = {
   '下批量': { color: '#2e7d32', order: 4 }
 }
 
+// ========== 全系统客户联想 ==========
+
+// 搜索全系统所有客户名（material_prices/notes/customers/map_customers/已有物料）
+router.get('/customers/search', (req, res) => {
+  const keyword = (req.query.keyword || '').trim()
+  if (!keyword) return res.json({ code: 0, data: [] })
+  const kw = `%${keyword}%`
+  const rows = queryAll(`
+    SELECT DISTINCT name, 0 as material_count FROM (
+      SELECT name FROM customers WHERE name != '' AND name LIKE ?
+      UNION
+      SELECT DISTINCT customer FROM notes WHERE is_deleted = 0 AND customer IS NOT NULL AND customer != '' AND customer LIKE ?
+      UNION
+      SELECT DISTINCT first_inquiry_customer FROM material_prices WHERE is_deleted = 0 AND first_inquiry_customer IS NOT NULL AND first_inquiry_customer != '' AND first_inquiry_customer LIKE ?
+      UNION
+      SELECT DISTINCT name FROM map_customers WHERE name != '' AND name LIKE ?
+      UNION
+      SELECT DISTINCT customer FROM customer_materials WHERE is_deleted = 0 AND customer IS NOT NULL AND customer != '' AND customer LIKE ?
+    ) src
+    ORDER BY name ASC
+    LIMIT 20
+  `, [kw, kw, kw, kw, kw])
+  res.json({ code: 0, data: rows })
+})
+
 // ========== CRUD ==========
 
-// 列表 + 搜索 + 分页
+// 列表 — 按客户筛选 + 搜索 + 分页
 router.get('/', (req, res) => {
-  const { page = 1, pageSize = 50, keyword, status } = req.query
+  const { page = 1, pageSize = 50, keyword, status, customer } = req.query
   const conditions = ['is_deleted = 0']
   const params = []
 
+  if (customer) { conditions.push('customer = ?'); params.push(customer) }
   if (keyword) {
     conditions.push('(customer_code LIKE ? OR jkx_code LIKE ? OR material_code LIKE ? OR material_name LIKE ? OR customer_desc LIKE ? OR remark LIKE ?)')
     const kw = `%${keyword}%`
@@ -35,11 +61,24 @@ router.get('/', (req, res) => {
 
   const rows = queryAll(`
     SELECT * FROM customer_materials ${where}
-    ORDER BY created_at DESC
+    ORDER BY updated_at DESC, created_at DESC
     LIMIT ? OFFSET ?
   `, [...params, Number(pageSize), offset])
 
   res.json({ code: 0, data: { list: rows, total, page: Number(page), pageSize: Number(pageSize) } })
+})
+
+// 获取有物料的客户列表（含物料数）
+router.get('/customers/list', (_req, res) => {
+  const rows = queryAll(`
+    SELECT customer, COUNT(*) as material_count
+    FROM customer_materials
+    WHERE is_deleted = 0 AND customer IS NOT NULL AND customer != ''
+    GROUP BY customer
+    ORDER BY material_count DESC, customer ASC
+    LIMIT 200
+  `)
+  res.json({ code: 0, data: rows })
 })
 
 // 获取状态配置（前端查颜色）
@@ -51,8 +90,9 @@ router.get('/status-config', (_req, res) => {
 
 // 导出 Excel（必须在 /:id 前注册，避免被匹配为 id）
 router.get('/export', (_req, res) => {
-  const rows = queryAll('SELECT * FROM customer_materials WHERE is_deleted = 0 ORDER BY created_at DESC')
+  const rows = queryAll('SELECT * FROM customer_materials WHERE is_deleted = 0 ORDER BY customer ASC, created_at DESC')
   const data = rows.map(r => ({
+    '客户': r.customer || '',
     '日期': r.date || '',
     '客户物料编码': r.customer_code || '',
     '晶科鑫料号': r.jkx_code || '',
@@ -69,7 +109,7 @@ router.get('/export', (_req, res) => {
   const wb = XLSX.utils.book_new()
   const ws = XLSX.utils.json_to_sheet(data)
   ws['!cols'] = [
-    { wch: 12 }, { wch: 18 }, { wch: 18 }, { wch: 12 },
+    { wch: 16 }, { wch: 12 }, { wch: 18 }, { wch: 18 }, { wch: 12 },
     { wch: 12 }, { wch: 18 }, { wch: 20 }, { wch: 14 },
     { wch: 10 }, { wch: 30 }, { wch: 30 }
   ]
@@ -103,9 +143,10 @@ router.post('/import', excelUpload.single('file'), (req, res) => {
         dateStr = String(dateRaw)
       }
       execute(`
-        INSERT INTO customer_materials (date, customer_code, jkx_code, price, cost_price, material_code, material_name, factory, status, customer_desc, remark)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO customer_materials (customer, date, customer_code, jkx_code, price, cost_price, material_code, material_name, factory, status, customer_desc, remark)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `, [
+        String(row['客户'] || ''),
         dateStr,
         String(row['客户物料编码'] || ''),
         String(row['晶科鑫料号'] || ''),
@@ -138,9 +179,10 @@ router.get('/:id', (req, res) => {
 router.post('/', (req, res) => {
   const b = req.body
   const r = execute(`
-    INSERT INTO customer_materials (date, customer_code, jkx_code, price, cost_price, material_code, material_name, factory, status, customer_desc, remark)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO customer_materials (customer, date, customer_code, jkx_code, price, cost_price, material_code, material_name, factory, status, customer_desc, remark)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `, [
+    b.customer || '',
     b.date || '',
     b.customer_code || '',
     b.jkx_code || '',
@@ -163,9 +205,10 @@ router.put('/:id', (req, res) => {
 
   const b = req.body
   execute(`
-    UPDATE customer_materials SET date=?, customer_code=?, jkx_code=?, price=?, cost_price=?, material_code=?, material_name=?, factory=?, status=?, customer_desc=?, remark=?, updated_at=datetime('now','localtime')
+    UPDATE customer_materials SET customer=?, date=?, customer_code=?, jkx_code=?, price=?, cost_price=?, material_code=?, material_name=?, factory=?, status=?, customer_desc=?, remark=?, updated_at=datetime('now','localtime')
     WHERE id=?
   `, [
+    b.customer ?? existing.customer,
     b.date ?? existing.date,
     b.customer_code ?? existing.customer_code,
     b.jkx_code ?? existing.jkx_code,

@@ -1,86 +1,142 @@
 <template>
   <transition name="page-fade">
     <div class="page-wrap">
-      <header class="page-header" :class="{standalone: isStandalone}">
+      <header class="page-header">
         <div class="header-left">
           <button class="back-btn" @click="goBack">‹</button>
           <h3>客户物料</h3>
-          <span class="result-badge" v-if="total">共 {{ total }} 条</span>
+          <span class="result-badge" v-if="selectedCustomer && total">共 {{ total }} 条</span>
+          <span class="result-badge" v-else-if="customerList.length">共 {{ customerList.length }} 个客户</span>
         </div>
         <div class="header-right">
           <button class="action-btn" @click="handleBackup" title="导出 Excel 备份">📥 备份</button>
           <button class="action-btn" @click="handleImport" title="从 Excel 导入">📤 导入</button>
-          <button class="add-btn" @click="openForm()">＋ 新增</button>
+          <button class="add-btn" :disabled="!selectedCustomer" @click="openForm()">＋ 新增</button>
           <button class="close-btn" @click="goBack" title="关闭">✕</button>
         </div>
       </header>
 
-      <div class="filter-bar">
-        <div class="search-box">
-          <input v-model="keyword" placeholder="搜索客户编码/料号/名称/描述…" @input="onSearchDebounced" class="search-input" />
-          <span v-if="keyword" class="search-clear" @click="keyword = ''; onSearch()">×</span>
+      <!-- 客户选择器 -->
+      <div class="customer-bar">
+        <div class="customer-select-wrap" :class="{ focused: showCustomerDropdown }">
+          <span class="cs-label">👤 客户</span>
+          <input ref="customerInputRef" v-model="customerQuery" placeholder="搜索或选择客户…" class="customer-input"
+            @input="onCustomerInput" @focus="showCustomerDropdown = true" @blur="onCustomerBlur" @keydown="onCustomerKeydown" />
+          <span v-if="selectedCustomer" class="cs-clear" @click="clearCustomer">×</span>
+          <span v-else class="cs-arrow">▾</span>
+          <div class="customer-dropdown" v-if="showCustomerDropdown">
+            <!-- 已有物料的客户 -->
+            <div class="cd-group" v-if="customerList.length">
+              <div class="cd-group-title">已有物料的客户</div>
+              <div v-for="c in customerList" :key="c.customer" class="cd-item"
+                :class="{ active: selectedCustomer === c.customer }"
+                @mousedown.prevent="selectCustomer(c.customer)">
+                <span class="cd-name">👤 {{ c.customer }}</span>
+                <span class="cd-count">{{ c.material_count }} 项</span>
+              </div>
+            </div>
+            <!-- 全系统搜索建议 -->
+            <div class="cd-group" v-if="systemCustomers.length">
+              <div class="cd-group-title">全系统客户</div>
+              <div v-for="c in systemCustomers" :key="c.name" class="cd-item"
+                @mousedown.prevent="selectCustomer(c.name)">
+                <span class="cd-name">👤 {{ c.name }}</span>
+                <span class="cd-hint">新建</span>
+              </div>
+            </div>
+            <div v-if="!customerList.length && !systemCustomers.length" class="cd-empty">
+              {{ customerQuery ? '无匹配客户' : '暂无客户数据' }}
+            </div>
+          </div>
         </div>
-        <div class="filter-btn" :class="{ active: statusFilter }" @click="showStatusSheet = !showStatusSheet">
+        <div class="filter-btn" v-if="selectedCustomer" :class="{ active: statusFilter }" @click="showStatusSheet = !showStatusSheet">
           {{ statusFilter || '全部状态' }} ▾
         </div>
       </div>
 
-      <!-- 表格 -->
-      <div class="table-wrap" ref="tableWrapRef">
-        <table class="mat-table">
-          <thead>
-            <tr>
-              <th class="col-date">日期</th>
-              <th class="col-code">客户编码</th>
-              <th class="col-jkx">晶科鑫料号</th>
-              <th class="col-price">报价</th>
-              <th class="col-cost">成本价</th>
-              <th class="col-mat">物料编码</th>
-              <th class="col-name">物料名称</th>
-              <th class="col-factory">工厂</th>
-              <th class="col-status">状态</th>
-              <th class="col-desc">客户描述</th>
-              <th class="col-remark">备注</th>
-              <th class="col-actions">操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-if="!loading && !list.length">
-              <td colspan="12" class="empty-row">暂无物料记录</td>
-            </tr>
-            <tr v-for="item in list" :key="item.id" class="mat-row">
-              <td class="col-date">{{ (item.date || '').slice(0, 10) }}</td>
-              <td class="col-code">{{ item.customer_code }}</td>
-              <td class="col-jkx">{{ item.jkx_code }}</td>
-              <td class="col-price">{{ item.price }}</td>
-              <td class="col-cost">{{ item.cost_price }}</td>
-              <td class="col-mat">{{ item.material_code }}</td>
-              <td class="col-name" :title="item.material_name">{{ item.material_name }}</td>
-              <td class="col-factory">{{ item.factory }}</td>
-              <td class="col-status">
-                <span class="status-tag" :style="{ background: statusColor(item.status) + '20', color: statusColor(item.status), borderColor: statusColor(item.status) }">
-                  {{ item.status }}
-                </span>
-              </td>
-              <td class="col-desc" :title="item.customer_desc">{{ item.customer_desc }}</td>
-              <td class="col-remark" :title="item.remark">{{ item.remark }}</td>
-              <td class="col-actions">
-                <button class="tbl-btn edit-btn-sm" @click="openForm(item)">✎</button>
-                <button class="tbl-btn del-btn-sm" @click="handleDelete(item)">🗑</button>
-              </td>
-            </tr>
-          </tbody>
-        </table>
+      <!-- 未选择客户：显示客户列表入口 -->
+      <div class="customer-grid" v-if="!selectedCustomer">
+        <div v-if="customerList.length">
+          <div class="grid-title">选择客户查看物料清单</div>
+          <div class="grid-list">
+            <div v-for="c in customerList" :key="c.customer" class="grid-card" @click="selectCustomer(c.customer)">
+              <div class="gc-name">👤 {{ c.customer }}</div>
+              <div class="gc-count">{{ c.material_count }} 项物料</div>
+            </div>
+          </div>
+        </div>
+        <div v-else class="empty-state">
+          <div class="empty-icon">📦</div>
+          <p class="empty-title">暂无物料</p>
+          <p class="empty-desc">在上方搜索客户名，或先从 Excel 导入</p>
+        </div>
       </div>
 
-      <!-- 分页 -->
-      <div class="pager" v-if="total > pageSize">
-        <button class="pg-btn" :disabled="page <= 1" @click="page = 1; load()">首页</button>
-        <button class="pg-btn" :disabled="page <= 1" @click="page--; load()">‹</button>
-        <span class="pg-info">{{ page }} / {{ totalPages }}</span>
-        <button class="pg-btn" :disabled="page >= totalPages" @click="page++; load()">›</button>
-        <button class="pg-btn" :disabled="page >= totalPages" @click="page = totalPages; load()">末页</button>
-      </div>
+      <!-- 已选择客户：物料表格 -->
+      <template v-else>
+        <!-- 搜索栏 -->
+        <div class="search-bar">
+          <div class="search-box">
+            <input v-model="keyword" placeholder="搜索编码/料号/名称…" @input="onSearchDebounced" class="search-input" />
+            <span v-if="keyword" class="search-clear" @click="keyword = ''; onSearch()">×</span>
+          </div>
+        </div>
+
+        <div class="table-wrap">
+          <table class="mat-table">
+            <thead>
+              <tr>
+                <th class="col-date">日期</th>
+                <th class="col-code">客户编码</th>
+                <th class="col-jkx">晶科鑫料号</th>
+                <th class="col-price">报价</th>
+                <th class="col-cost">成本价</th>
+                <th class="col-mat">物料编码</th>
+                <th class="col-name">物料名称</th>
+                <th class="col-factory">工厂</th>
+                <th class="col-status">状态</th>
+                <th class="col-desc">客户描述</th>
+                <th class="col-remark">备注</th>
+                <th class="col-actions">操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-if="!loading && !list.length">
+                <td colspan="12" class="empty-row">暂无物料记录，点击「＋ 新增」添加</td>
+              </tr>
+              <tr v-for="item in list" :key="item.id" class="mat-row">
+                <td class="col-date">{{ (item.date || '').slice(0, 10) }}</td>
+                <td class="col-code">{{ item.customer_code }}</td>
+                <td class="col-jkx">{{ item.jkx_code }}</td>
+                <td class="col-price">{{ item.price }}</td>
+                <td class="col-cost">{{ item.cost_price }}</td>
+                <td class="col-mat">{{ item.material_code }}</td>
+                <td class="col-name" :title="item.material_name">{{ item.material_name }}</td>
+                <td class="col-factory">{{ item.factory }}</td>
+                <td class="col-status">
+                  <span class="status-tag" :style="{ background: statusColor(item.status) + '20', color: statusColor(item.status), borderColor: statusColor(item.status) }">
+                    {{ item.status }}
+                  </span>
+                </td>
+                <td class="col-desc" :title="item.customer_desc">{{ item.customer_desc }}</td>
+                <td class="col-remark" :title="item.remark">{{ item.remark }}</td>
+                <td class="col-actions">
+                  <button class="tbl-btn edit-btn-sm" @click="openForm(item)">✎</button>
+                  <button class="tbl-btn del-btn-sm" @click="handleDelete(item)">🗑</button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="pager" v-if="total > pageSize">
+          <button class="pg-btn" :disabled="page <= 1" @click="page = 1; load()">首页</button>
+          <button class="pg-btn" :disabled="page <= 1" @click="page--; load()">‹</button>
+          <span class="pg-info">{{ page }} / {{ totalPages }}</span>
+          <button class="pg-btn" :disabled="page >= totalPages" @click="page++; load()">›</button>
+          <button class="pg-btn" :disabled="page >= totalPages" @click="page = totalPages; load()">末页</button>
+        </div>
+      </template>
 
       <!-- 状态选择弹窗 -->
       <van-action-sheet v-model:show="showStatusSheet" :actions="statusActions" cancel-text="取消"
@@ -90,7 +146,7 @@
       <van-overlay :show="showForm" z-index="2000">
         <div class="form-overlay" @click="showForm = false">
           <div class="form-dialog" @click.stop>
-            <h3 class="form-title">{{ editing ? '编辑物料' : '新增物料' }}</h3>
+            <h3 class="form-title">{{ editing ? '编辑物料' : '新增物料' }} <span class="form-customer">👤 {{ selectedCustomer }}</span></h3>
             <div class="form-grid">
               <div class="form-field">
                 <label>日期</label>
@@ -158,14 +214,22 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { showToast, showConfirmDialog } from 'vant'
-import { fetchMaterials, createMaterial, updateMaterial, deleteMaterial, getMaterialStatusConfig, exportMaterials, importMaterialsExcel } from '../utils/api.js'
+import { fetchMaterials, createMaterial, updateMaterial, deleteMaterial, getMaterialStatusConfig, exportMaterials, importMaterialsExcel, searchAllCustomers, fetchMaterialCustomers } from '../utils/api.js'
 
 const route = useRoute()
 const router = useRouter()
 const isStandalone = ref(route.query.standalone === '1')
+
+// 客户选择
+const selectedCustomer = ref('')
+const customerQuery = ref('')
+const showCustomerDropdown = ref(false)
+const customerList = ref([])
+const systemCustomers = ref([])
+const customerInputRef = ref(null)
 
 // 列表数据
 const list = ref([])
@@ -198,7 +262,64 @@ function onStatusSelect(item) {
 
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / pageSize)))
 
-// 搜索防抖
+// 客户选择器
+async function loadCustomerList() {
+  try {
+    const r = await fetchMaterialCustomers()
+    customerList.value = r.data || []
+  } catch {}
+}
+
+let customerSearchTimer = null
+function onCustomerInput() {
+  showCustomerDropdown.value = true
+  clearTimeout(customerSearchTimer)
+  customerSearchTimer = setTimeout(async () => {
+    const q = customerQuery.value.trim()
+    if (!q) { systemCustomers.value = []; return }
+    try {
+      const r = await searchAllCustomers(q)
+      // 去重：排除已在 customerList 中的
+      const existing = new Set(customerList.value.map(c => c.customer))
+      systemCustomers.value = (r.data || []).filter(c => !existing.has(c.name))
+    } catch {
+      systemCustomers.value = []
+    }
+  }, 300)
+}
+
+function onCustomerBlur() {
+  setTimeout(() => { showCustomerDropdown.value = false }, 200)
+}
+
+function onCustomerKeydown(e) {
+  if (e.key === 'Enter' && customerQuery.value.trim()) {
+    selectCustomer(customerQuery.value.trim())
+  }
+  if (e.key === 'Escape') showCustomerDropdown.value = false
+}
+
+function selectCustomer(name) {
+  selectedCustomer.value = name
+  customerQuery.value = name
+  showCustomerDropdown.value = false
+  systemCustomers.value = []
+  page.value = 1
+  statusFilter.value = ''
+  load()
+  // 聚焦到搜索框
+  nextTick(() => document.querySelector('.search-input')?.focus())
+}
+
+function clearCustomer() {
+  selectedCustomer.value = ''
+  customerQuery.value = ''
+  list.value = []
+  total.value = 0
+  loadCustomerList()
+}
+
+// 搜索
 let searchTimer = null
 function onSearchDebounced() {
   clearTimeout(searchTimer)
@@ -214,9 +335,10 @@ function onSearch() {
 
 // 加载列表
 async function load() {
+  if (!selectedCustomer.value) { list.value = []; total.value = 0; return }
   loading.value = true
   try {
-    const params = { page: page.value, pageSize: pageSize.value }
+    const params = { page: page.value, pageSize: pageSize.value, customer: selectedCustomer.value }
     if (keyword.value) params.keyword = keyword.value
     if (statusFilter.value) params.status = statusFilter.value
     const r = await fetchMaterials(params)
@@ -272,15 +394,17 @@ function onFormStatusSelect(item) {
 async function saveForm() {
   saving.value = true
   try {
+    const data = { ...form.value, customer: selectedCustomer.value }
     if (editing.value) {
-      await updateMaterial(editing.value, form.value)
+      await updateMaterial(editing.value, data)
       showToast('已更新')
     } else {
-      await createMaterial(form.value)
+      await createMaterial(data)
       showToast('已创建')
     }
     showForm.value = false
     load()
+    loadCustomerList()
   } catch (e) {
     showToast('保存失败: ' + e.message)
   } finally {
@@ -295,6 +419,7 @@ async function handleDelete(item) {
     await deleteMaterial(item.id)
     showToast('已删除')
     load()
+    loadCustomerList()
   } catch (e) {
     if (e !== 'cancel' && !e?.message?.includes('cancel')) showToast('删除失败: ' + e.message)
   }
@@ -334,7 +459,8 @@ function handleImport() {
     try {
       const r = await importMaterialsExcel(fd)
       showToast(r.msg || '导入成功')
-      load()
+      loadCustomerList()
+      if (selectedCustomer.value) load()
     } catch (e) {
       showToast('导入失败: ' + e.message)
     }
@@ -343,31 +469,26 @@ function handleImport() {
   input.click()
 }
 
-// 键盘事件
 function onKeydown(e) {
   if (e.key === 'Escape') {
     if (showForm.value) { showForm.value = false; return }
+    if (showCustomerDropdown.value) { showCustomerDropdown.value = false; return }
     if (isStandalone.value) { window.close(); return }
   }
 }
 
 function goBack() {
-  if (isStandalone.value) {
-    window.close()
-  } else {
-    if (window.history.length > 1) router.back()
-    else router.push('/')
-  }
+  if (isStandalone.value) { window.close() }
+  else { if (window.history.length > 1) router.back(); else router.push('/') }
 }
 
 onMounted(async () => {
   document.addEventListener('keydown', onKeydown)
-  // 加载状态颜色
   try {
     const r = await getMaterialStatusConfig()
     statusColors.value = r.data || {}
   } catch {}
-  await load()
+  await loadCustomerList()
 })
 
 onUnmounted(() => {
@@ -391,23 +512,56 @@ onUnmounted(() => {
 .action-btn:hover { border-color: var(--color-primary); color: var(--color-primary); background: #f0f8ff; }
 .add-btn { padding: 6px 14px; border-radius: 6px; border: none; background: var(--color-primary); color: #fff; font-size: 12px; cursor: pointer; text-decoration: none; white-space: nowrap; transition: background .15s; }
 .add-btn:hover { background: #1676d9; }
+.add-btn:disabled { background: #95c9f9; cursor: not-allowed; }
 .close-btn { width: 32px; height: 32px; border-radius: 50%; border: none; background: #f5f5f5; color: #999; font-size: 14px; cursor: pointer; display: flex; align-items: center; justify-content: center; margin-left: 4px; transition: all .15s; }
 .close-btn:hover { background: #ee0a24; color: #fff; }
 
-/* 筛选栏 */
-.filter-bar { display: flex; gap: 8px; padding: 8px 16px; background: #fff; border-bottom: 1px solid #f0f0f0; flex-shrink: 0; }
+/* 客户选择栏 */
+.customer-bar { display: flex; gap: 8px; padding: 8px 16px; background: #fff; border-bottom: 1px solid #f0f0f0; flex-shrink: 0; }
+.customer-select-wrap { position: relative; flex: 1; display: flex; align-items: center; gap: 6px; background: #f5f6f8; border-radius: 8px; padding: 0 10px; height: 38px; border: 1px solid transparent; transition: all .2s; }
+.customer-select-wrap.focused { border-color: var(--color-primary); background: #fff; box-shadow: 0 0 0 2px rgba(var(--color-primary-rgb),.1); }
+.cs-label { font-size: 12px; color: #888; white-space: nowrap; }
+.customer-input { flex: 1; border: none; outline: none; font-size: 13px; color: #323233; background: transparent; font-family: inherit; }
+.customer-input::placeholder { color: #bbb; }
+.cs-clear { color: #bbb; cursor: pointer; font-size: 16px; padding: 2px; }
+.cs-clear:hover { color: #666; }
+.cs-arrow { color: #bbb; font-size: 10px; }
+
+/* 客户下拉 */
+.customer-dropdown { position: absolute; top: 100%; left: 0; right: 0; z-index: 100; margin-top: 4px; background: #fff; border-radius: 8px; box-shadow: 0 6px 24px rgba(0,0,0,.12); max-height: 300px; overflow-y: auto; }
+.cd-group { border-bottom: 1px solid #f0f0f0; }
+.cd-group:last-child { border-bottom: none; }
+.cd-group-title { padding: 8px 14px 4px; font-size: 10px; color: #bbb; text-transform: uppercase; }
+.cd-item { display: flex; align-items: center; padding: 9px 14px; cursor: pointer; transition: background .1s; gap: 8px; }
+.cd-item:hover { background: rgba(var(--color-primary-rgb),.06); }
+.cd-item.active { background: rgba(var(--color-primary-rgb),.1); }
+.cd-name { flex: 1; font-size: 13px; color: #323233; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cd-count { font-size: 11px; color: #999; white-space: nowrap; }
+.cd-hint { font-size: 10px; color: var(--color-primary); white-space: nowrap; padding: 1px 6px; border-radius: 3px; background: rgba(var(--color-primary-rgb),.08); }
+.cd-empty { padding: 20px; text-align: center; color: #bbb; font-size: 13px; }
+
+.customer-grid { flex: 1; overflow-y: auto; padding: 16px; }
+.grid-title { font-size: 14px; color: #888; margin-bottom: 12px; }
+.grid-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; }
+.grid-card { background: #fff; border-radius: 10px; padding: 16px; cursor: pointer; border: 1px solid #f0f0f0; transition: all .2s; }
+.grid-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,.06); border-color: var(--color-primary); transform: translateY(-1px); }
+.gc-name { font-size: 14px; font-weight: 600; color: #323233; margin-bottom: 4px; }
+.gc-count { font-size: 11px; color: #999; }
+.filter-btn { padding: 4px 10px; border-radius: 6px; border: 1px solid #e0e0e0; font-size: 12px; color: #555; background: #fff; cursor: pointer; white-space: nowrap; user-select: none; transition: all .15s; height: 38px; display: flex; align-items: center; }
+.filter-btn:hover { border-color: var(--color-primary); color: var(--color-primary); }
+.filter-btn.active { background: rgba(var(--color-primary-rgb),.08); border-color: var(--color-primary); color: var(--color-primary); }
+
+/* 搜索栏 */
+.search-bar { display: flex; gap: 8px; padding: 8px 16px; background: #fff; border-bottom: 1px solid #f0f0f0; flex-shrink: 0; }
 .search-box { display: flex; align-items: center; flex: 1; min-width: 120px; background: #f5f6f8; border-radius: 8px; padding: 0 10px; height: 34px; }
 .search-input { flex: 1; border: none; outline: none; font-size: 12px; color: #323233; background: transparent; font-family: inherit; }
 .search-input::placeholder { color: #bbb; }
 .search-clear { color: #bbb; cursor: pointer; font-size: 14px; padding: 2px; }
 .search-clear:hover { color: #666; }
-.filter-btn { padding: 4px 10px; border-radius: 6px; border: 1px solid #e0e0e0; font-size: 12px; color: #555; background: #fff; cursor: pointer; white-space: nowrap; user-select: none; transition: all .15s; }
-.filter-btn:hover { border-color: var(--color-primary); color: var(--color-primary); }
-.filter-btn.active { background: rgba(var(--color-primary-rgb),.08); border-color: var(--color-primary); color: var(--color-primary); }
 
 /* 表格 */
 .table-wrap { flex: 1; overflow: auto; padding: 0 16px 8px; }
-.mat-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 12px; min-width: 1100px; }
+.mat-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 12px; min-width: 1080px; }
 .mat-table thead { position: sticky; top: 0; z-index: 5; }
 .mat-table th { background: #f7f8fa; color: #666; font-weight: 600; padding: 10px 8px; text-align: left; border-bottom: 1px solid #e0e0e0; white-space: nowrap; }
 .mat-table td { padding: 8px; border-bottom: 1px solid #f0f0f0; color: #323233; vertical-align: middle; }
@@ -428,7 +582,6 @@ onUnmounted(() => {
 .col-actions { width: 70px; text-align: center; }
 
 .status-tag { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; border: 1px solid; }
-
 .tbl-btn { background: none; border: none; cursor: pointer; font-size: 14px; padding: 2px 4px; transition: opacity .15s; line-height: 1; }
 .tbl-btn:hover { opacity: .7; }
 .edit-btn-sm { color: var(--color-primary); }
@@ -444,7 +597,8 @@ onUnmounted(() => {
 /* 新增/编辑弹窗 */
 .form-overlay { display: flex; align-items: center; justify-content: center; padding: 24px; }
 .form-dialog { width: 100%; max-width: 640px; background: #fff; border-radius: 12px; padding: 24px; box-shadow: 0 8px 30px rgba(0,0,0,.15); max-height: 85vh; overflow-y: auto; }
-.form-title { font-size: 17px; font-weight: 600; margin: 0 0 16px; color: #323233; }
+.form-title { font-size: 17px; font-weight: 600; margin: 0 0 16px; color: #323233; display: flex; align-items: center; gap: 8px; }
+.form-customer { font-size: 13px; color: #666; font-weight: 400; }
 .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .form-field { display: flex; flex-direction: column; gap: 4px; }
 .form-field-full { grid-column: 1 / -1; }
@@ -465,6 +619,12 @@ onUnmounted(() => {
 .form-save:hover { background: #1676d9; }
 .form-save:disabled { background: #95c9f9; cursor: not-allowed; }
 
+/* 空状态 */
+.empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; flex: 1; padding: 60px 20px; text-align: center; }
+.empty-icon { font-size: 56px; margin-bottom: 12px; }
+.empty-title { font-size: 16px; color: #323233; margin: 0 0 6px; font-weight: 500; }
+.empty-desc { font-size: 13px; color: #bbb; margin: 0; }
+
 /* 移动端适配 */
 @media (max-width: 768px) {
   .mat-table { min-width: auto; }
@@ -472,5 +632,6 @@ onUnmounted(() => {
   .col-price, .col-cost { width: 70px; }
   .form-dialog { max-width: 100%; padding: 16px; margin: 0; }
   .form-grid { grid-template-columns: 1fr; }
+  .grid-list { grid-template-columns: 1fr; }
 }
 </style>

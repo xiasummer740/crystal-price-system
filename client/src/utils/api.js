@@ -334,3 +334,9 @@ export function exportMaterials() {
 export function importMaterialsExcel(formData) {
   return http.post('/materials/import', formData)
 }
+export function searchAllCustomers(keyword) {
+  return http.get('/materials/customers/search', { params: { keyword } })
+}
+export function fetchMaterialCustomers() {
+  return http.get('/materials/customers/list')
+}

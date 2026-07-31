@@ -359,6 +359,8 @@ export async function initDb() {
   try { db.run('CREATE INDEX IF NOT EXISTS idx_materials_jkx_code ON customer_materials(jkx_code)') } catch {}
   try { db.run('CREATE INDEX IF NOT EXISTS idx_materials_status ON customer_materials(status)') } catch {}
   try { db.run('CREATE INDEX IF NOT EXISTS idx_materials_deleted ON customer_materials(is_deleted)') } catch {}
+  // 兼容旧数据库：添加客户名列
+  try { db.run("ALTER TABLE customer_materials ADD COLUMN customer TEXT DEFAULT ''") } catch {}
 
   return db
 }
