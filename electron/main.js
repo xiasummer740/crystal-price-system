@@ -741,7 +741,9 @@ ipcMain.handle('open-external', (_, url) => { shell.openExternal(url) })
 // 规格书：获取本地路径并用系统默认程序打开（像双击文件夹一样）
 ipcMain.handle('open-spec', (_, specUrl) => {
   try {
-    const filename = specUrl.replace('/api/specs/', '')
+    let filename = specUrl.replace('/api/specs/', '')
+    // 去掉 ?name= 等查询参数（前端上传时追加了显示名）
+    filename = filename.split('?')[0]
     const decoded = decodeURIComponent(filename)
     const filePath = path.join(process.env.DATA_DIR, '规格书', decoded)
     log(`open-spec: ${filePath}`)

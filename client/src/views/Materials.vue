@@ -131,7 +131,6 @@
                 <td class="cell-copy" :style="{ width: colWidths.remark + 'px' }" :title="item.remark" @click="copyText(item.remark)">{{ item.remark }}</td>
                 <td class="col-actions" :style="{ width: colWidths.actions + 'px' }">
                   <button v-if="item.spec_document" class="tbl-btn spec-btn" @click="openSpec(item.spec_document)" title="打开规格书">📄</button>
-                  <button v-else class="tbl-btn spec-btn-dim" title="无规格书">📄</button>
                   <button class="tbl-btn edit-btn-sm" @click="openForm(item)">✎</button>
                   <button class="tbl-btn del-btn-sm" @click="handleDelete(item)">🗑</button>
                 </td>
@@ -399,7 +398,7 @@ function loadColWidths() {
     const saved = JSON.parse(localStorage.getItem('materials_col_widths') || '{}')
     const widths = { ...COL_DEFAULTS }
     for (const k of Object.keys(COL_DEFAULTS)) {
-      if (saved[k] && saved[k] >= 40 && saved[k] <= 600) widths[k] = saved[k]
+      if (saved[k] && saved[k] >= 30 && saved[k] <= 2000) widths[k] = saved[k]
     }
     return widths
   } catch { return { ...COL_DEFAULTS } }
@@ -413,7 +412,7 @@ function startResize(e, key) {
   const startW = colWidths.value[key]
   const onMove = (ev) => {
     const delta = ev.clientX - startX
-    const w = Math.max(40, Math.min(600, startW + delta))
+    const w = Math.max(30, Math.min(2000, startW + delta))
     colWidths.value[key] = w
     saveColWidths()
   }
