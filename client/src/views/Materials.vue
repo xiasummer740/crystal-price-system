@@ -160,7 +160,7 @@
       <!-- 新增/编辑弹窗 -->
       <van-overlay :show="showForm" z-index="2000">
         <div class="form-overlay" @click="showForm = false">
-          <div class="form-dialog" @click.stop>
+          <div class="form-dialog" @click.stop @paste="onFormPaste">
             <h3 class="form-title">{{ editing ? '编辑物料' : '新增物料' }} <span class="form-customer">👤 {{ selectedCustomer }}</span></h3>
             <div class="form-grid">
               <div class="form-field">
@@ -187,9 +187,12 @@
                 <label>物料编码</label>
                 <input v-model="form.material_code" placeholder="物料编码" class="f-input" />
               </div>
-              <div class="form-field">
-                <label>物料名称</label>
-                <input v-model="form.material_name" placeholder="物料名称" class="f-input" />
+              <div class="form-field form-field-full">
+                <label class="f-label-with-btn">
+                  <span>物料名称</span>
+                  <button class="hl-btn" type="button" @click="wrapHighlight('material_name')" title="选中文字后点击，加粗橙色高亮">B 高亮</button>
+                </label>
+                <textarea v-model="form.material_name" placeholder="物料名称" class="f-textarea" rows="2" ref="materialNameRef"></textarea>
               </div>
               <div class="form-field">
                 <label>工厂</label>
@@ -205,8 +208,11 @@
                 </div>
               </div>
               <div class="form-field form-field-full">
-                <label>客户描述</label>
-                <textarea v-model="form.customer_desc" placeholder="客户描述" class="f-textarea" rows="2"></textarea>
+                <label class="f-label-with-btn">
+                  <span>客户描述</span>
+                  <button class="hl-btn" type="button" @click="wrapHighlight('customer_desc')" title="选中文字后点击，加粗橙色高亮">B 高亮</button>
+                </label>
+                <textarea v-model="form.customer_desc" placeholder="客户描述" class="f-textarea" rows="2" ref="customerDescRef"></textarea>
               </div>
               <div class="form-field form-field-full">
                 <label>备注</label>
@@ -239,10 +245,13 @@
                 <span class="spec-name" :title="specName(form.spec_document)">{{ specName(form.spec_document) }}</span>
                 <button class="spec-action" @click="openSpec(form.spec_document)" title="打开规格书">👁 打开</button>
                 <button class="spec-action spec-del" @click="form.spec_document = ''" title="移除规格书">✕ 移除</button>
+                <button class="spec-action" @click="triggerSpecUpload" title="替换规格书">🔄 替换</button>
               </div>
-              <button v-else class="spec-upload-btn" @click="triggerSpecUpload">＋ 上传规格书</button>
+              <div v-else class="spec-dropzone" :class="{ dragging: draggingSpec }" @click="triggerSpecUpload" @dragover.prevent="draggingSpec = true" @dragleave="draggingSpec = false" @drop.prevent="onSpecDrop" @paste.prevent="onSpecPaste">
+                <div class="spec-drop-main">＋ 上传规格书</div>
+                <div class="spec-drop-sub">点击选择 · 拖动文件到此 · 微信复制文件后可直接 Ctrl+V 粘贴</div>
+              </div>
               <input ref="specFileInputRef" type="file" accept=".pdf,.png,.jpg,.jpeg,.gif,.doc,.docx,.xlsx,.xls,.zip,.rar" hidden @change="onSpecFileChange" />
-              <p class="spec-hint">支持 PDF/图片/Office 文件，点击表格中的 📄 可打开</p>
             </div>
             <div class="form-actions">
               <button class="form-cancel" @click="showForm = false">取消</button>
@@ -437,8 +446,32 @@ function renderRich(text) {
   return html
 }
 
+// ===== 富文本高亮按钮 =====
+const materialNameRef = ref(null)
+const customerDescRef = ref(null)
+function wrapHighlight(field) {
+  const el = field === 'material_name' ? materialNameRef.value : customerDescRef.value
+  if (!el) return
+  const start = el.selectionStart ?? 0
+  const end = el.selectionEnd ?? 0
+  const val = form.value[field] || ''
+  if (start === end) {
+    // 无选中文字：插入 ** ** 光标到中间
+    form.value[field] = val.slice(0, start) + '****' + val.slice(end)
+    el.focus()
+    nextTick(() => el.setSelectionRange(start + 2, start + 2))
+  } else {
+    const selected = val.slice(start, end)
+    form.value[field] = val.slice(0, start) + '**' + selected + '**' + val.slice(end)
+    el.focus()
+    nextTick(() => el.setSelectionRange(start, end + 4))
+  }
+  showToast('已添加高亮标记')
+}
+
 // ===== 规格书 =====
 const specFileInputRef = ref(null)
+const draggingSpec = ref(false)
 function triggerSpecUpload() { specFileInputRef.value?.click() }
 function specName(url) {
   if (!url) return ''
@@ -448,8 +481,7 @@ function specName(url) {
   try { name = decodeURIComponent(name) } catch {}
   return name.replace(/^\d+-\d+-/, '').replace(/^\d{13}-/, '')
 }
-async function onSpecFileChange(e) {
-  const file = e.target.files?.[0]
+async function uploadSpecFile(file) {
   if (!file) return
   const fd = new FormData()
   fd.append('file', file)
@@ -463,7 +495,30 @@ async function onSpecFileChange(e) {
   } catch (err) {
     showToast('上传失败: ' + (err.response?.data?.msg || err.message))
   }
+}
+async function onSpecFileChange(e) {
+  const file = e.target.files?.[0]
+  if (file) await uploadSpecFile(file)
   e.target.value = ''
+}
+function onSpecDrop(e) {
+  const file = e.dataTransfer?.files?.[0]
+  if (file) uploadSpecFile(file)
+}
+function onSpecPaste(e) {
+  const items = e.clipboardData?.items
+  if (!items) return
+  for (const item of items) {
+    if (item.kind === 'file') {
+      const file = item.getAsFile()
+      if (file) { e.preventDefault(); uploadSpecFile(file); return }
+    }
+  }
+}
+// 表单弹窗内任意位置 Ctrl+V 粘贴文件 → 作为规格书
+function onFormPaste(e) {
+  if (form.value.spec_document) return // 已有规格书不自动覆盖
+  onSpecPaste(e)
 }
 function openSpec(url) {
   if (!url) return
@@ -849,6 +904,11 @@ onUnmounted(() => {
 .spec-btn { color: #8c5a1f; font-size: 15px; }
 .spec-btn-dim { color: #e0e0e0; font-size: 15px; cursor: not-allowed; }
 
+/* 高亮按钮 */
+.f-label-with-btn { display: flex; align-items: center; justify-content: space-between; }
+.hl-btn { padding: 2px 8px; border-radius: 4px; border: 1px solid #ffd591; background: #fff7e6; color: #d48806; font-size: 10px; font-weight: 600; cursor: pointer; font-family: inherit; transition: all .15s; }
+.hl-btn:hover { background: #ffe58f; }
+
 /* 规格书上传区 */
 .spec-section { margin-top: 14px; padding-top: 12px; border-top: 1px solid #f0f0f0; }
 .spec-header { display: flex; align-items: center; margin-bottom: 8px; }
@@ -859,9 +919,10 @@ onUnmounted(() => {
 .spec-action:hover { background: #e6f7ff; }
 .spec-action.spec-del { border-color: #ffa39e; color: #ff4d4f; }
 .spec-action.spec-del:hover { background: #fff1f0; }
-.spec-upload-btn { padding: 8px 16px; border: 1px dashed #91d5ff; border-radius: 6px; background: #e6f7ff; color: #1890ff; font-size: 12px; cursor: pointer; font-family: inherit; transition: all .15s; }
-.spec-upload-btn:hover { background: #bae7ff; }
-.spec-hint { font-size: 10px; color: #bbb; margin: 6px 0 0; }
+.spec-dropzone { padding: 16px 12px; border: 2px dashed #91d5ff; border-radius: 8px; background: #f0f7ff; cursor: pointer; text-align: center; transition: all .2s; }
+.spec-dropzone:hover, .spec-dropzone.dragging { background: #e6f7ff; border-color: #1890ff; }
+.spec-drop-main { font-size: 13px; font-weight: 600; color: #1890ff; margin-bottom: 4px; }
+.spec-drop-sub { font-size: 10px; color: #999; }
 
 .col-status { text-align: center; }
 .col-actions { text-align: center; }
