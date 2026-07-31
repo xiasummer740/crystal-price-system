@@ -1,6 +1,6 @@
 {
   "name": "crystal-price-system",
-  "version": "1.0.190",
+  "version": "1.0.191",
   "description": "晶振物料报价记录查询系统",
   "type": "module",
   "main": "electron/main.js",
@@ -48,6 +48,8 @@
       "!dist-exe{,/**/*}",
       "electron/**/*",
       "server/**/*",
+      "!server/**/数据库{,/**/*}",
+      "!server/**/data.db",
       "client/dist/**/*",
       "package.json",
       "dev-app-update.yml"
