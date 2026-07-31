@@ -146,10 +146,21 @@ const notesUploadDir = path.join(process.env.DATA_DIR || path.join(__dirname, '.
 if (!fs.existsSync(notesUploadDir)) fs.mkdirSync(notesUploadDir, { recursive: true })
 app.use('/api/uploads/notes', express.static(notesUploadDir))
 
+// 规格书上传
+// folder 字段：可选子目录（如 "客户物料/深圳市XX"），报价系统不传则存根目录
+// 去重：目标目录已有同名文件 → 复用已有文件，不重复存储
 const specUpload = multer({
   storage: multer.diskStorage({
-    destination: specDir,
-    filename: (_req, file, cb) => {
+    destination: (req, _file, cb) => {
+      // folder 通过 query 参数传入（multer 解析 file 时 req.body 可能尚未就绪）
+      const folder = String(req.query?.folder || '').replace(/[<>:"|?*\\]/g, '_').trim()
+      const dir = folder ? path.join(specDir, folder) : specDir
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
+      req._specDir = dir
+      req._specFolder = folder
+      cb(null, dir)
+    },
+    filename: (req, file, cb) => {
       // 修复编码：Windows 下 busboy 可能把 UTF-8 当 Latin-1 读，导致中文乱码
       let originalName
       try { originalName = Buffer.from(file.originalname, 'binary').toString('utf8') } catch { originalName = file.originalname }
@@ -158,13 +169,16 @@ const specUpload = multer({
       while (base.includes('..')) base = base.replace(/\.\.+/g, '')
       base = base.replace(/[\0<>:"|?*/\\]/g, '_').trim()
       if (!base) base = 'unnamed'
-      let name = base + ext
-      let n = 1
-      while (fs.existsSync(path.join(specDir, name))) {
-        name = `${base} (${n})${ext}`
-        n++
+      const dir = req._specDir
+      const target = path.join(dir, base + ext)
+      if (fs.existsSync(target)) {
+        // 已存在同名规格书 → 去重复用：写临时文件，handler 里删除并返回已有 URL
+        req._specDup = true
+        req._specDupPath = target
+        cb(null, `._dup_${Date.now()}_${Math.random().toString(36).slice(2, 8)}${ext}`)
+      } else {
+        cb(null, base + ext)
       }
-      cb(null, name)
     }
   }),
   limits: { fileSize: 50 * 1024 * 1024 },
@@ -182,7 +196,16 @@ app.post('/api/upload-spec', (req, res) => {
       return res.status(400).json({ code: 1, msg: err instanceof multer.MulterError ? '文件上传失败: ' + err.message : err.message })
     }
     if (!req.file) return res.status(400).json({ code: 1, msg: '请选择文件' })
-    const url = `/api/specs/${encodeURIComponent(req.file.filename)}`
+    // 去重：删除临时文件，返回已存在的规格书 URL
+    if (req._specDup && req.file.filename.startsWith('._dup_')) {
+      try { fs.unlinkSync(path.join(req._specDir, req.file.filename)) } catch {}
+      const rel = req._specFolder ? `${req._specFolder}/${path.basename(req._specDupPath)}` : path.basename(req._specDupPath)
+      let displayName
+      try { displayName = Buffer.from(req.file.originalname, 'binary').toString('utf8') } catch { displayName = req.file.originalname }
+      return res.json({ code: 0, data: { url: `/api/specs/${encodeURIComponent(rel)}`, filename: displayName, reused: true } })
+    }
+    const rel = req._specFolder ? `${req._specFolder}/${req.file.filename}` : req.file.filename
+    const url = `/api/specs/${rel.split('/').map(encodeURIComponent).join('/')}`
     // 返回 decode 后的原始文件名给前端显示
     let displayName
     try { displayName = Buffer.from(req.file.originalname, 'binary').toString('utf8') } catch { displayName = req.file.originalname }
@@ -231,6 +254,63 @@ app.get('*', (req, res) => {
 
 // 初始化数据库
 await initDb()
+
+// ===== 规格书去重清理（启动时执行一次）=====
+// 旧版本上传同名规格书会生成 "name (1).pdf"、"name (2).pdf" 等重复副本
+// 此处合并为一份：保留原始名文件，删除 (N) 副本，并更新数据库引用
+function cleanupDuplicateSpecs() {
+  if (!fs.existsSync(specDir)) return
+  const files = []
+  const walk = (dir, rel) => {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const full = path.join(dir, entry.name)
+      const r = rel ? `${rel}/${entry.name}` : entry.name
+      if (entry.isDirectory()) walk(full, r)
+      else files.push({ rel: r, full })
+    }
+  }
+  walk(specDir, '')
+
+  // 按基础名分组（去掉 " (N)" 后缀）
+  const groups = new Map()
+  for (const f of files) {
+    const base = f.rel.replace(/ \(\d+\)(?=\.[^/.]+$)/, '')
+    if (!groups.has(base)) groups.set(base, [])
+    groups.get(base).push(f)
+  }
+
+  let deleted = 0
+  for (const list of groups.values()) {
+    if (list.length <= 1) continue
+    // 保留无 " (N)" 后缀的原始文件；若全是 (N)，保留 N 最小的
+    const keep = list.find(f => !/ \(\d+\)(?=\.[^.]+$)/.test(f.rel))
+      || list.sort((a, b) => {
+        const na = Number((a.rel.match(/\((\d+)\)/) || [0, 0])[1]) || 0
+        const nb = Number((b.rel.match(/\((\d+)\)/) || [0, 0])[1]) || 0
+        return na - nb
+      })[0]
+    for (const f of list) {
+      if (f.rel === keep.rel) continue
+      try { fs.unlinkSync(f.full); deleted++ } catch {}
+      // 更新数据库引用：指向被删副本的 spec_document 改为指向保留文件
+      const oldPath = f.rel.split('/').map(encodeURIComponent).join('/')
+      const newPath = keep.rel.split('/').map(encodeURIComponent).join('/')
+      try {
+        execute(
+          "UPDATE customer_materials SET spec_document = replace(spec_document, ?, ?) WHERE spec_document LIKE ?",
+          ['/api/specs/' + oldPath, '/api/specs/' + newPath, '%' + oldPath + '%']
+        )
+      } catch {}
+    }
+  }
+  if (deleted > 0) {
+    try { saveNow() } catch {}
+    console.log(`[spec-cleanup] 清理重复规格书 ${deleted} 份，保留 ${groups.size} 组`)
+  } else {
+    console.log('[spec-cleanup] 无重复规格书')
+  }
+}
+try { cleanupDuplicateSpecs() } catch (e) { console.warn('[spec-cleanup] 清理失败:', e.message) }
 
 // 预生成导入模板到模板文件夹
 const templateDir = path.join(process.env.DATA_DIR || path.join(__dirname, '..'), '模板')

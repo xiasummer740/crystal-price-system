@@ -496,12 +496,14 @@ async function uploadSpecFile(file) {
   if (!file) return
   const fd = new FormData()
   fd.append('file', file)
+  // 按客户名分文件夹存储（与报价系统规格书分开），folder 用 query 传
+  const folder = '客户物料/' + (selectedCustomer.value || '')
   try {
-    const r = await http.post('/upload-spec', fd)
-    const { url, filename } = r.data || {}
+    const r = await http.post('/upload-spec?folder=' + encodeURIComponent(folder), fd)
+    const { url, filename, reused } = r.data || {}
     if (url) {
       form.value.spec_document = url + '?name=' + encodeURIComponent(filename || file.name)
-      showToast('规格书已上传')
+      showToast(reused ? '规格书已存在，已复用' : '规格书已上传')
     }
   } catch (err) {
     showToast('上传失败: ' + (err.response?.data?.msg || err.message))
