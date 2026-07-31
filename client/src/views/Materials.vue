@@ -91,22 +91,14 @@
           <button v-if="hasFilters" class="clear-filter-btn" @click="clearFilters" title="清除所有筛选">✕ 清除</button>
         </div>
 
-        <div class="table-wrap">
+        <div class="table-wrap" ref="tableWrapRef">
           <table class="mat-table">
             <thead>
               <tr>
-                <th class="col-date">日期</th>
-                <th class="col-code">客户编码</th>
-                <th class="col-jkx">晶科鑫料号</th>
-                <th class="col-price">报价</th>
-                <th class="col-cost">成本价</th>
-                <th class="col-mat">物料编码</th>
-                <th class="col-name">物料名称</th>
-                <th class="col-factory">工厂</th>
-                <th class="col-status">状态</th>
-                <th class="col-desc">客户描述</th>
-                <th class="col-remark">备注</th>
-                <th class="col-actions">操作</th>
+                <th v-for="col in columns" :key="col.key" class="col-th" :style="{ width: colWidths[col.key] + 'px', minWidth: colWidths[col.key] + 'px' }">
+                  {{ col.label }}
+                  <span class="col-resize" @mousedown.prevent="startResize($event, col.key)" title="拖动调整宽度"></span>
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -114,28 +106,32 @@
                 <td colspan="12" class="empty-row">暂无物料记录，点击「＋ 新增」添加</td>
               </tr>
               <tr v-for="item in list" :key="item.id" class="mat-row" :style="{ background: statusRowBg(item.status) }">
-                <td class="col-date">{{ (item.date || '').slice(0, 10) }}</td>
-                <td class="col-code">{{ item.customer_code }}</td>
-                <td class="col-jkx">{{ item.jkx_code }}</td>
-                <td class="col-price">{{ item.price }}</td>
-                <td class="col-cost">{{ item.cost_price }}</td>
-                <td class="col-mat">{{ item.material_code }}</td>
-                <td class="col-name" :title="materialNameTitle(item)">
-                  <span class="prim-name">{{ item.material_name }}</span>
+                <td class="cell-copy" :style="{ width: colWidths.date + 'px' }" @click="copyText(item.date)">{{ (item.date || '').slice(0, 10) }}</td>
+                <td class="cell-copy" :style="{ width: colWidths.customer_code + 'px' }" @click="copyText(item.customer_code)">{{ item.customer_code }}</td>
+                <td class="cell-copy" :style="{ width: colWidths.jkx_code + 'px' }" @click="copyText(item.jkx_code)">{{ item.jkx_code }}</td>
+                <td class="cell-copy" :style="{ width: colWidths.price + 'px' }" @click="copyText(item.price)">{{ item.price }}</td>
+                <td class="cell-copy" :style="{ width: colWidths.cost_price + 'px' }" @click="copyText(item.cost_price)">{{ item.cost_price }}</td>
+                <td class="cell-copy" :style="{ width: colWidths.material_code + 'px' }" @click="copyText(item.material_code)">{{ item.material_code }}</td>
+                <td class="cell-copy" :style="{ width: colWidths.material_name + 'px' }" :title="materialNameTitle(item)" @click="copyText(item.material_name)">
+                  <span class="rich-text" v-html="renderRich(item.material_name)"></span>
                   <span v-if="(item.alternates || []).length" class="alt-badge" :title="altNames(item)">备选{{ item.alternates.length }}</span>
                 </td>
-                <td class="col-factory">
+                <td class="cell-copy" :style="{ width: colWidths.factory + 'px' }" @click="copyText(item.factory)">
                   <span class="prim-name">{{ item.factory }}</span>
                   <span v-if="(item.alternates || []).length" class="alt-badge alt-factory" :title="altFactories(item)">+{{ item.alternates.length }}</span>
                 </td>
-                <td class="col-status">
+                <td class="col-status" :style="{ width: colWidths.status + 'px' }">
                   <span class="status-tag" :style="{ background: statusBg(item.status), color: statusColor(item.status), borderColor: statusColor(item.status) + '55' }">
                     {{ item.status }}
                   </span>
                 </td>
-                <td class="col-desc" :title="item.customer_desc">{{ item.customer_desc }}</td>
-                <td class="col-remark" :title="item.remark">{{ item.remark }}</td>
-                <td class="col-actions">
+                <td class="cell-copy" :style="{ width: colWidths.customer_desc + 'px' }" :title="item.customer_desc" @click="copyText(item.customer_desc)">
+                  <span class="rich-text" v-html="renderRich(item.customer_desc)"></span>
+                </td>
+                <td class="cell-copy" :style="{ width: colWidths.remark + 'px' }" :title="item.remark" @click="copyText(item.remark)">{{ item.remark }}</td>
+                <td class="col-actions" :style="{ width: colWidths.actions + 'px' }">
+                  <button v-if="item.spec_document" class="tbl-btn spec-btn" @click="openSpec(item.spec_document)" title="打开规格书">📄</button>
+                  <button v-else class="tbl-btn spec-btn-dim" title="无规格书">📄</button>
                   <button class="tbl-btn edit-btn-sm" @click="openForm(item)">✎</button>
                   <button class="tbl-btn del-btn-sm" @click="handleDelete(item)">🗑</button>
                 </td>
@@ -233,6 +229,21 @@
                 <button class="alt-del-btn" @click="removeAlternate(i)" title="删除此备选">×</button>
               </div>
             </div>
+
+            <!-- 规格书 -->
+            <div class="spec-section">
+              <div class="spec-header">
+                <label class="spec-title">📄 规格书</label>
+              </div>
+              <div v-if="form.spec_document" class="spec-current">
+                <span class="spec-name" :title="specName(form.spec_document)">{{ specName(form.spec_document) }}</span>
+                <button class="spec-action" @click="openSpec(form.spec_document)" title="打开规格书">👁 打开</button>
+                <button class="spec-action spec-del" @click="form.spec_document = ''" title="移除规格书">✕ 移除</button>
+              </div>
+              <button v-else class="spec-upload-btn" @click="triggerSpecUpload">＋ 上传规格书</button>
+              <input ref="specFileInputRef" type="file" accept=".pdf,.png,.jpg,.jpeg,.gif,.doc,.docx,.xlsx,.xls,.zip,.rar" hidden @change="onSpecFileChange" />
+              <p class="spec-hint">支持 PDF/图片/Office 文件，点击表格中的 📄 可打开</p>
+            </div>
             <div class="form-actions">
               <button class="form-cancel" @click="showForm = false">取消</button>
               <button class="form-save" :disabled="saving" @click="saveForm">{{ saving ? '保存中…' : '保存' }}</button>
@@ -252,7 +263,7 @@
 import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { showToast, showConfirmDialog } from 'vant'
-import { fetchMaterials, createMaterial, updateMaterial, deleteMaterial, getMaterialStatusConfig, exportMaterials, importMaterialsExcel, searchAllCustomers, fetchMaterialCustomers, fetchMaterialFactories } from '../utils/api.js'
+import { fetchMaterials, createMaterial, updateMaterial, deleteMaterial, getMaterialStatusConfig, exportMaterials, importMaterialsExcel, searchAllCustomers, fetchMaterialCustomers, fetchMaterialFactories, http } from '../utils/api.js'
 
 const route = useRoute()
 const router = useRouter()
@@ -351,6 +362,119 @@ function clearFilters() {
 }
 
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / pageSize)))
+
+// ===== 列定义 + 列宽记忆 =====
+const COL_DEFAULTS = {
+  date: 95, customer_code: 110, jkx_code: 175, price: 95, cost_price: 95,
+  material_code: 150, material_name: 210, factory: 80, status: 75,
+  customer_desc: 150, remark: 120, actions: 95
+}
+const columns = [
+  { key: 'date', label: '日期' },
+  { key: 'customer_code', label: '客户编码' },
+  { key: 'jkx_code', label: '晶科鑫料号' },
+  { key: 'price', label: '报价' },
+  { key: 'cost_price', label: '成本价' },
+  { key: 'material_code', label: '物料编码' },
+  { key: 'material_name', label: '物料名称' },
+  { key: 'factory', label: '工厂' },
+  { key: 'status', label: '状态' },
+  { key: 'customer_desc', label: '客户描述' },
+  { key: 'remark', label: '备注' },
+  { key: 'actions', label: '操作' }
+]
+// 从 localStorage 读取列宽（按客户维度记忆）
+const colWidths = ref(loadColWidths())
+function loadColWidths() {
+  try {
+    const saved = JSON.parse(localStorage.getItem('materials_col_widths') || '{}')
+    const widths = { ...COL_DEFAULTS }
+    for (const k of Object.keys(COL_DEFAULTS)) {
+      if (saved[k] && saved[k] >= 40 && saved[k] <= 600) widths[k] = saved[k]
+    }
+    return widths
+  } catch { return { ...COL_DEFAULTS } }
+}
+function saveColWidths() {
+  try { localStorage.setItem('materials_col_widths', JSON.stringify(colWidths.value)) } catch {}
+}
+let resizeState = null
+function startResize(e, key) {
+  const startX = e.clientX
+  const startW = colWidths.value[key]
+  const onMove = (ev) => {
+    const delta = ev.clientX - startX
+    const w = Math.max(40, Math.min(600, startW + delta))
+    colWidths.value[key] = w
+    saveColWidths()
+  }
+  const onUp = () => {
+    document.removeEventListener('mousemove', onMove)
+    document.removeEventListener('mouseup', onUp)
+    document.body.style.cursor = ''
+    document.body.style.userSelect = ''
+  }
+  document.addEventListener('mousemove', onMove)
+  document.addEventListener('mouseup', onUp)
+  document.body.style.cursor = 'col-resize'
+  document.body.style.userSelect = 'none'
+}
+
+// ===== 点击复制 =====
+function copyText(text) {
+  if (!text) return
+  navigator.clipboard?.writeText(String(text)).then(() => {
+    showToast('已复制: ' + String(text).slice(0, 20))
+  }).catch(() => {})
+}
+
+// ===== 富文本渲染（**文字** → 加粗+高亮色） =====
+function renderRich(text) {
+  if (!text) return ''
+  let html = String(text)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/\*\*(.+?)\*\*/g, '<b class="rt-hl">$1</b>')
+  return html
+}
+
+// ===== 规格书 =====
+const specFileInputRef = ref(null)
+function triggerSpecUpload() { specFileInputRef.value?.click() }
+function specName(url) {
+  if (!url) return ''
+  const nameMatch = url.match(/[?&]name=([^&]+)/)
+  if (nameMatch) { try { return decodeURIComponent(nameMatch[1]) } catch {} }
+  let name = url.split('/').pop() || ''
+  try { name = decodeURIComponent(name) } catch {}
+  return name.replace(/^\d+-\d+-/, '').replace(/^\d{13}-/, '')
+}
+async function onSpecFileChange(e) {
+  const file = e.target.files?.[0]
+  if (!file) return
+  const fd = new FormData()
+  fd.append('file', file)
+  try {
+    const r = await http.post('/upload-spec', fd)
+    const { url, filename } = r.data || {}
+    if (url) {
+      form.value.spec_document = url + '?name=' + encodeURIComponent(filename || file.name)
+      showToast('规格书已上传')
+    }
+  } catch (err) {
+    showToast('上传失败: ' + (err.response?.data?.msg || err.message))
+  }
+  e.target.value = ''
+}
+function openSpec(url) {
+  if (!url) return
+  if (url.startsWith('/api/specs/')) {
+    // 与报价模块一致：用系统默认程序打开本地文件（像双击文件夹）
+    window.electronAPI?.openSpec?.(url)
+  } else {
+    const fullUrl = url.startsWith('http') ? url : window.location.origin + url
+    window.electronAPI?.openExternal?.(fullUrl) || window.open(fullUrl, '_blank')
+  }
+}
 
 // 客户选择器
 async function loadCustomerList() {
@@ -458,7 +582,7 @@ const saving = ref(false)
 const form = ref({
   date: '', customer_code: '', jkx_code: '', price: '', cost_price: '',
   material_code: '', material_name: '', factory: '', status: '报价',
-  customer_desc: '', remark: '', alternates: []
+  customer_desc: '', remark: '', alternates: [], spec_document: ''
 })
 
 function openForm(item) {
@@ -476,11 +600,12 @@ function openForm(item) {
       status: item.status || '报价',
       customer_desc: item.customer_desc || '',
       remark: item.remark || '',
-      alternates: (item.alternates || []).map(a => ({ material_code: a.material_code || '', material_name: a.material_name || '', factory: a.factory || '', cost_price: a.cost_price || '' }))
+      alternates: (item.alternates || []).map(a => ({ material_code: a.material_code || '', material_name: a.material_name || '', factory: a.factory || '', cost_price: a.cost_price || '' })),
+      spec_document: item.spec_document || ''
     }
   } else {
     editing.value = null
-    form.value = { date: new Date().toISOString().slice(0, 10), customer_code: '', jkx_code: '', price: '', cost_price: '', material_code: '', material_name: '', factory: '', status: '报价', customer_desc: '', remark: '', alternates: [] }
+    form.value = { date: new Date().toISOString().slice(0, 10), customer_code: '', jkx_code: '', price: '', cost_price: '', material_code: '', material_name: '', factory: '', status: '报价', customer_desc: '', remark: '', alternates: [], spec_document: '' }
   }
   showForm.value = true
 }
@@ -699,25 +824,47 @@ onUnmounted(() => {
 
 /* 表格 */
 .table-wrap { flex: 1; overflow: auto; padding: 0 16px 8px; }
-.mat-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 12px; min-width: 1080px; }
+.mat-table { width: max-content; min-width: 100%; border-collapse: separate; border-spacing: 0; font-size: 12px; }
 .mat-table thead { position: sticky; top: 0; z-index: 5; }
-.mat-table th { background: #f7f8fa; color: #666; font-weight: 600; padding: 10px 8px; text-align: left; border-bottom: 1px solid #e0e0e0; white-space: nowrap; }
-.mat-table td { padding: 8px; border-bottom: 1px solid #f0f0f0; color: #323233; vertical-align: middle; }
-.mat-row:hover td { background: #f8f9ff; }
+.mat-table th { background: #f7f8fa; color: #666; font-weight: 600; padding: 10px 8px; text-align: left; border-bottom: 1px solid #e0e0e0; white-space: nowrap; position: relative; }
+.mat-table td { padding: 8px; border-bottom: 1px solid #f0f0f0; color: #323233; vertical-align: middle; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mat-row:hover td { background: rgba(0,0,0,.03); }
 .empty-row { text-align: center; color: #bbb; padding: 40px 0 !important; font-size: 14px; }
 
-.col-date { width: 90px; }
-.col-code { width: 110px; }
-.col-jkx { width: 110px; }
-.col-price { width: 80px; }
-.col-cost { width: 80px; }
-.col-mat { width: 110px; }
-.col-name { width: 130px; max-width: 130px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.col-factory { width: 80px; }
-.col-status { width: 80px; }
-.col-desc { width: 130px; max-width: 130px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.col-remark { width: 120px; max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.col-actions { width: 70px; text-align: center; }
+/* 列宽调整手柄 */
+.col-th { position: relative; }
+.col-resize { position: absolute; top: 0; right: -3px; width: 6px; height: 100%; cursor: col-resize; z-index: 10; }
+.col-resize:hover { background: rgba(var(--color-primary-rgb),.3); }
+.col-resize::after { content: ''; position: absolute; top: 25%; bottom: 25%; left: 2px; width: 2px; background: #d0d0d0; }
+.col-resize:hover::after { background: var(--color-primary); }
+
+/* 点击复制 */
+.cell-copy { cursor: pointer; user-select: none; transition: background .15s; }
+.cell-copy:hover { background: rgba(var(--color-primary-rgb),.06) !important; }
+.cell-copy:hover::after { content: '⧉'; font-size: 10px; color: var(--color-primary); margin-left: 4px; opacity: .7; }
+
+/* 富文本高亮 */
+.rich-text { pointer-events: none; }
+.rich-text :deep(.rt-hl) { color: #d4380d; font-weight: 700; background: rgba(250, 173, 20, .15); padding: 0 2px; border-radius: 2px; }
+.spec-btn { color: #8c5a1f; font-size: 15px; }
+.spec-btn-dim { color: #e0e0e0; font-size: 15px; cursor: not-allowed; }
+
+/* 规格书上传区 */
+.spec-section { margin-top: 14px; padding-top: 12px; border-top: 1px solid #f0f0f0; }
+.spec-header { display: flex; align-items: center; margin-bottom: 8px; }
+.spec-title { font-size: 13px; font-weight: 600; color: #555; }
+.spec-current { display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: #f0f7ff; border: 1px solid #bae0ff; border-radius: 6px; flex-wrap: wrap; }
+.spec-name { flex: 1; font-size: 12px; color: #555; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.spec-action { padding: 3px 10px; border-radius: 4px; border: 1px solid #91d5ff; background: #fff; color: #1890ff; font-size: 11px; cursor: pointer; font-family: inherit; transition: all .15s; }
+.spec-action:hover { background: #e6f7ff; }
+.spec-action.spec-del { border-color: #ffa39e; color: #ff4d4f; }
+.spec-action.spec-del:hover { background: #fff1f0; }
+.spec-upload-btn { padding: 8px 16px; border: 1px dashed #91d5ff; border-radius: 6px; background: #e6f7ff; color: #1890ff; font-size: 12px; cursor: pointer; font-family: inherit; transition: all .15s; }
+.spec-upload-btn:hover { background: #bae7ff; }
+.spec-hint { font-size: 10px; color: #bbb; margin: 6px 0 0; }
+
+.col-status { text-align: center; }
+.col-actions { text-align: center; }
 
 .status-tag { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; border: 1px solid; }
 .tbl-btn { background: none; border: none; cursor: pointer; font-size: 14px; padding: 2px 4px; transition: opacity .15s; line-height: 1; }
@@ -787,8 +934,6 @@ onUnmounted(() => {
 /* 移动端适配 */
 @media (max-width: 768px) {
   .mat-table { min-width: auto; }
-  .col-desc, .col-remark { display: none; }
-  .col-price, .col-cost { width: 70px; }
   .form-dialog { max-width: 100%; padding: 16px; margin: 0; }
   .form-grid { grid-template-columns: 1fr; }
   .grid-list { grid-template-columns: 1fr; }

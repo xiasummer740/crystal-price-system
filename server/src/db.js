@@ -353,6 +353,7 @@ export async function initDb() {
       customer_desc   TEXT DEFAULT '',
       remark          TEXT DEFAULT '',
       alternates      TEXT DEFAULT '[]',
+      spec_document   TEXT DEFAULT '',
       is_deleted      INTEGER DEFAULT 0
     )
   `)
@@ -364,6 +365,8 @@ export async function initDb() {
   try { db.run("ALTER TABLE customer_materials ADD COLUMN customer TEXT DEFAULT ''") } catch {}
   // 兼容旧数据库：添加备选物料/工厂列（JSON数组：[{material_name, factory}]）
   try { db.run("ALTER TABLE customer_materials ADD COLUMN alternates TEXT DEFAULT '[]'") } catch {}
+  // 兼容旧数据库：添加规格书列
+  try { db.run("ALTER TABLE customer_materials ADD COLUMN spec_document TEXT DEFAULT ''") } catch {}
 
   return db
 }

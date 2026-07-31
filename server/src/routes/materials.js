@@ -66,7 +66,7 @@ router.get('/', (req, res) => {
 
   const rows = queryAll(`
     SELECT * FROM customer_materials ${where}
-    ORDER BY updated_at DESC, created_at DESC
+    ORDER BY date DESC, updated_at DESC, id DESC
     LIMIT ? OFFSET ?
   `, [...params, Number(pageSize), offset]).map(parseAlternates)
 
@@ -123,6 +123,7 @@ router.get('/export', (_req, res) => {
       '状态': r.status || '',
       '客户描述': r.customer_desc || '',
       '备注': r.remark || '',
+      '规格书': r.spec_document || '',
       '备选物料': alternates.map(a => [a.material_code || '', a.material_name || '', a.factory || '', a.cost_price || ''].join('@')).join(' | ')
     }
   })
@@ -172,8 +173,8 @@ router.post('/import', excelUpload.single('file'), (req, res) => {
         }).filter(a => a.material_name || a.material_code || a.factory)
 
       execute(`
-        INSERT INTO customer_materials (customer, date, customer_code, jkx_code, price, cost_price, material_code, material_name, factory, status, customer_desc, remark, alternates)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO customer_materials (customer, date, customer_code, jkx_code, price, cost_price, material_code, material_name, factory, status, customer_desc, remark, alternates, spec_document)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `, [
         String(row['客户'] || ''),
         dateStr,
@@ -187,7 +188,8 @@ router.post('/import', excelUpload.single('file'), (req, res) => {
         String(row['状态'] || '报价'),
         String(row['客户描述'] || ''),
         String(row['备注'] || ''),
-        JSON.stringify(alternates)
+        JSON.stringify(alternates),
+        String(row['规格书'] || '')
       ])
       imported++
     }
@@ -219,8 +221,8 @@ router.post('/', (req, res) => {
     ? JSON.stringify(b.alternates.filter(a => a && (a.material_name || a.factory)))
     : '[]'
   const r = execute(`
-    INSERT INTO customer_materials (customer, date, customer_code, jkx_code, price, cost_price, material_code, material_name, factory, status, customer_desc, remark, alternates)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO customer_materials (customer, date, customer_code, jkx_code, price, cost_price, material_code, material_name, factory, status, customer_desc, remark, alternates, spec_document)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `, [
     b.customer || '',
     b.date || '',
@@ -234,7 +236,8 @@ router.post('/', (req, res) => {
     b.status || '报价',
     b.customer_desc || '',
     b.remark || '',
-    alternates
+    alternates,
+    b.spec_document || ''
   ])
   res.json({ code: 0, data: { id: r.lastInsertRowid } })
 })
@@ -249,7 +252,7 @@ router.put('/:id', (req, res) => {
     ? JSON.stringify(b.alternates.filter(a => a && (a.material_name || a.factory)))
     : (existing.alternates || '[]')
   execute(`
-    UPDATE customer_materials SET customer=?, date=?, customer_code=?, jkx_code=?, price=?, cost_price=?, material_code=?, material_name=?, factory=?, status=?, customer_desc=?, remark=?, alternates=?, updated_at=datetime('now','localtime')
+    UPDATE customer_materials SET customer=?, date=?, customer_code=?, jkx_code=?, price=?, cost_price=?, material_code=?, material_name=?, factory=?, status=?, customer_desc=?, remark=?, alternates=?, spec_document=?, updated_at=datetime('now','localtime')
     WHERE id=?
   `, [
     b.customer ?? existing.customer,
@@ -265,6 +268,7 @@ router.put('/:id', (req, res) => {
     b.customer_desc ?? existing.customer_desc,
     b.remark ?? existing.remark,
     alternates,
+    b.spec_document !== undefined ? b.spec_document : (existing.spec_document || ''),
     Number(req.params.id)
   ])
   res.json({ code: 0, msg: '更新成功' })
