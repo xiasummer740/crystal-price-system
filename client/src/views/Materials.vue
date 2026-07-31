@@ -92,10 +92,10 @@
         </div>
 
         <div class="table-wrap" ref="tableWrapRef">
-          <table class="mat-table">
+          <table class="mat-table" :style="{ width: totalWidth + 'px' }">
             <thead>
               <tr>
-                <th v-for="col in columns" :key="col.key" class="col-th" :style="{ width: colWidths[col.key] + 'px', minWidth: colWidths[col.key] + 'px' }">
+                <th v-for="col in columns" :key="col.key" class="col-th" :class="{ 'col-narrow': colWidths[col.key] < 20 }" :style="{ width: colWidths[col.key] + 'px', minWidth: colWidths[col.key] + 'px' }">
                   {{ col.label }}
                   <span class="col-resize" @mousedown.prevent="startResize($event, col.key)" title="拖动调整宽度"></span>
                 </th>
@@ -393,6 +393,8 @@ const columns = [
 ]
 // 从 localStorage 读取列宽（按客户维度记忆）
 const colWidths = ref(loadColWidths())
+// 表格总宽 = 所有列宽之和（table-layout:fixed 需显式总宽才能严格按列宽渲染）
+const totalWidth = computed(() => columns.reduce((sum, c) => sum + colWidths.value[c.key], 0))
 function loadColWidths() {
   try {
     const saved = JSON.parse(localStorage.getItem('materials_col_widths') || '{}')
@@ -878,9 +880,10 @@ onUnmounted(() => {
 
 /* 表格 */
 .table-wrap { flex: 1; overflow: auto; padding: 0 16px 8px; }
-.mat-table { width: max-content; min-width: 100%; border-collapse: separate; border-spacing: 0; font-size: 12px; }
+.mat-table { width: auto; border-collapse: separate; border-spacing: 0; font-size: 12px; table-layout: fixed; }
 .mat-table thead { position: sticky; top: 0; z-index: 5; }
 .mat-table th { background: #f7f8fa; color: #666; font-weight: 600; padding: 10px 8px; text-align: left; border-bottom: 1px solid #e0e0e0; white-space: nowrap; position: relative; }
+.mat-table th.col-narrow { padding: 10px 0; overflow: hidden; }
 .mat-table td { padding: 8px; border-bottom: 1px solid #f0f0f0; color: #323233; vertical-align: middle; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mat-row:hover td { background: rgba(0,0,0,.03); }
 .empty-row { text-align: center; color: #bbb; padding: 40px 0 !important; font-size: 14px; }
