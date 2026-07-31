@@ -473,6 +473,39 @@ export function exportMapCustomers() {
   return XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
 }
 
+export function exportMaterials() {
+  const rows = queryAll('SELECT * FROM customer_materials WHERE is_deleted = 0 ORDER BY customer ASC, created_at DESC')
+  const data = rows.map(r => {
+    let alternates = []
+    try { alternates = JSON.parse(r.alternates || '[]') } catch {}
+    return {
+      '客户': r.customer || '',
+      '日期': r.date || '',
+      '客户物料编码': r.customer_code || '',
+      '晶科鑫料号': r.jkx_code || '',
+      '报价': r.price || '',
+      '成本价': r.cost_price || '',
+      '物料编码': r.material_code || '',
+      '物料名称': r.material_name || '',
+      '工厂': r.factory || '',
+      '状态': r.status || '',
+      '客户描述': r.customer_desc || '',
+      '备注': r.remark || '',
+      '规格书': r.spec_document || '',
+      '备选物料': alternates.map(a => [a.material_code || '', a.material_name || '', a.factory || '', a.cost_price || ''].join('@')).join(' | ')
+    }
+  })
+  const wb = XLSX.utils.book_new()
+  const ws = XLSX.utils.json_to_sheet(data)
+  ws['!cols'] = [
+    { wch: 16 }, { wch: 12 }, { wch: 18 }, { wch: 18 }, { wch: 12 },
+    { wch: 12 }, { wch: 18 }, { wch: 20 }, { wch: 14 },
+    { wch: 10 }, { wch: 30 }, { wch: 30 }
+  ]
+  XLSX.utils.book_append_sheet(wb, ws, '客户物料')
+  return XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' })
+}
+
 export function importSamplesFromExcel(fileBuffer) {
   const wb = XLSX.read(fileBuffer, { type: 'buffer', cellDates: true })
   const ws = wb.Sheets[wb.SheetNames[0]]

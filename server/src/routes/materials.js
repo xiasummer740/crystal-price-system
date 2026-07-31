@@ -2,6 +2,8 @@ import { Router } from 'express'
 import multer from 'multer'
 import XLSX from 'xlsx'
 import { queryAll, queryOne, execute } from '../db.js'
+import { exportMaterials } from '../utils/export.js'
+import { triggerBackup } from '../utils/excelBackup.js'
 
 const router = Router()
 
@@ -18,7 +20,8 @@ const STATUS_CONFIG = {
 
 // ========== 全系统客户联想 ==========
 
-// 搜索全系统所有客户名（material_prices/notes/customers/map_customers/已有物料）
+// 搜索全系统所有客户名 + 支持物料型号/编码匹配
+// 输入客户名 → 匹配客户；输入型号/编码 → 匹配到该物料所属客户
 router.get('/customers/search', (req, res) => {
   const keyword = (req.query.keyword || '').trim()
   if (!keyword) return res.json({ code: 0, data: [] })
@@ -34,10 +37,17 @@ router.get('/customers/search', (req, res) => {
       SELECT DISTINCT name FROM map_customers WHERE name != '' AND name LIKE ?
       UNION
       SELECT DISTINCT customer FROM customer_materials WHERE is_deleted = 0 AND customer IS NOT NULL AND customer != '' AND customer LIKE ?
+      -- 物料型号/编码匹配 → 返回所属客户
+      UNION
+      SELECT DISTINCT customer FROM customer_materials WHERE is_deleted = 0 AND customer IS NOT NULL AND customer != ''
+        AND (customer_code LIKE ? OR jkx_code LIKE ? OR material_code LIKE ? OR material_name LIKE ? OR customer_desc LIKE ?)
+      UNION
+      SELECT DISTINCT first_inquiry_customer FROM material_prices WHERE is_deleted = 0 AND first_inquiry_customer IS NOT NULL AND first_inquiry_customer != ''
+        AND (material_code LIKE ? OR material_spec LIKE ? OR material_name LIKE ? OR spec_document LIKE ?)
     ) src
     ORDER BY name ASC
     LIMIT 20
-  `, [kw, kw, kw, kw, kw])
+  `, [kw, kw, kw, kw, kw, kw, kw, kw, kw, kw, kw, kw, kw])
   res.json({ code: 0, data: rows })
 })
 
@@ -106,38 +116,7 @@ router.get('/status-config', (_req, res) => {
 
 // 导出 Excel（必须在 /:id 前注册，避免被匹配为 id）
 router.get('/export', (_req, res) => {
-  const rows = queryAll('SELECT * FROM customer_materials WHERE is_deleted = 0 ORDER BY customer ASC, created_at DESC')
-  const data = rows.map(r => {
-    let alternates = []
-    try { alternates = JSON.parse(r.alternates || '[]') } catch {}
-    return {
-      '客户': r.customer || '',
-      '日期': r.date || '',
-      '客户物料编码': r.customer_code || '',
-      '晶科鑫料号': r.jkx_code || '',
-      '报价': r.price || '',
-      '成本价': r.cost_price || '',
-      '物料编码': r.material_code || '',
-      '物料名称': r.material_name || '',
-      '工厂': r.factory || '',
-      '状态': r.status || '',
-      '客户描述': r.customer_desc || '',
-      '备注': r.remark || '',
-      '规格书': r.spec_document || '',
-      '备选物料': alternates.map(a => [a.material_code || '', a.material_name || '', a.factory || '', a.cost_price || ''].join('@')).join(' | ')
-    }
-  })
-
-  const wb = XLSX.utils.book_new()
-  const ws = XLSX.utils.json_to_sheet(data)
-  ws['!cols'] = [
-    { wch: 16 }, { wch: 12 }, { wch: 18 }, { wch: 18 }, { wch: 12 },
-    { wch: 12 }, { wch: 18 }, { wch: 20 }, { wch: 14 },
-    { wch: 10 }, { wch: 30 }, { wch: 30 }
-  ]
-  XLSX.utils.book_append_sheet(wb, ws, '客户物料')
-  const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' })
-
+  const buffer = exportMaterials()
   res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
   const fn = '客户物料备份.xlsx'
   res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(fn)}"; filename*=UTF-8''${encodeURIComponent(fn)}`)
@@ -193,6 +172,7 @@ router.post('/import', excelUpload.single('file'), (req, res) => {
       ])
       imported++
     }
+    triggerBackup('materials')
     res.json({ code: 0, data: { count: imported }, msg: `成功导入 ${imported} 条记录` })
   } catch (e) {
     console.error('[materials-import]', e)
@@ -239,6 +219,7 @@ router.post('/', (req, res) => {
     alternates,
     b.spec_document || ''
   ])
+  triggerBackup('materials')
   res.json({ code: 0, data: { id: r.lastInsertRowid } })
 })
 
@@ -271,12 +252,14 @@ router.put('/:id', (req, res) => {
     b.spec_document !== undefined ? b.spec_document : (existing.spec_document || ''),
     Number(req.params.id)
   ])
+  triggerBackup('materials')
   res.json({ code: 0, msg: '更新成功' })
 })
 
 // 删除
 router.delete('/:id', (req, res) => {
   execute("UPDATE customer_materials SET is_deleted = 1, updated_at = datetime('now','localtime') WHERE id = ?", [Number(req.params.id)])
+  triggerBackup('materials')
   res.json({ code: 0, msg: '删除成功' })
 })
 

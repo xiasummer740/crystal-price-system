@@ -26,11 +26,11 @@
           <span v-else class="cs-arrow">▾</span>
           <div class="customer-dropdown" v-if="showCustomerDropdown">
             <!-- 已有物料的客户 -->
-            <div class="cd-group" v-if="customerList.length">
+            <div class="cd-group" v-if="filteredCustomerList.length">
               <div class="cd-group-title">已有物料的客户</div>
-              <div v-for="c in customerList" :key="c.customer" class="cd-item"
+              <div v-for="c in filteredCustomerList" :key="c.customer" class="cd-item"
                 :class="{ active: selectedCustomer === c.customer }"
-                @mousedown.prevent="selectCustomer(c.customer)">
+                @mousedown.prevent="selectCustomer(c.customer, customerQuery)">
                 <span class="cd-name">👤 {{ c.customer }}</span>
                 <span class="cd-count">{{ c.material_count }} 项</span>
               </div>
@@ -39,7 +39,7 @@
             <div class="cd-group" v-if="systemCustomers.length">
               <div class="cd-group-title">全系统客户</div>
               <div v-for="c in systemCustomers" :key="c.name" class="cd-item"
-                @mousedown.prevent="selectCustomer(c.name)">
+                @mousedown.prevent="selectCustomer(c.name, customerQuery)">
                 <span class="cd-name">👤 {{ c.name }}</span>
                 <span class="cd-hint">新建</span>
               </div>
@@ -145,6 +145,7 @@
           <span class="pg-info">{{ page }} / {{ totalPages }}</span>
           <button class="pg-btn" :disabled="page >= totalPages" @click="page++; load()">›</button>
           <button class="pg-btn" :disabled="page >= totalPages" @click="page = totalPages; load()">末页</button>
+          <button class="pg-btn all-btn" @click="showAll" title="一页显示全部记录">全部</button>
         </div>
       </template>
 
@@ -369,7 +370,16 @@ function clearFilters() {
   load()
 }
 
-const totalPages = computed(() => Math.max(1, Math.ceil(total.value / pageSize)))
+const totalPages = computed(() => {
+  const p = Number(pageSize.value) || 1
+  const t = Number(total.value) || 0
+  return Math.max(1, Math.ceil(t / p))
+})
+function showAll() {
+  pageSize.value = 100000
+  page.value = 1
+  load()
+}
 
 // ===== 列定义 + 列宽记忆 =====
 const COL_DEFAULTS = {
@@ -540,6 +550,13 @@ async function loadCustomerList() {
   } catch {}
 }
 
+// 有搜索词时，已有物料的客户按名称过滤
+const filteredCustomerList = computed(() => {
+  const q = customerQuery.value.trim()
+  if (!q) return customerList.value
+  return customerList.value.filter(c => c.customer.includes(q))
+})
+
 let customerSearchTimer = null
 function onCustomerInput() {
   showCustomerDropdown.value = true
@@ -549,8 +566,8 @@ function onCustomerInput() {
     if (!q) { systemCustomers.value = []; return }
     try {
       const r = await searchAllCustomers(q)
-      // 去重：排除已在 customerList 中的
-      const existing = new Set(customerList.value.map(c => c.customer))
+      // 去重：排除已按名称显示在"已有物料的客户"里的（避免重复显示）
+      const existing = new Set(filteredCustomerList.value.map(c => c.customer))
       systemCustomers.value = (r.data || []).filter(c => !existing.has(c.name))
     } catch {
       systemCustomers.value = []
@@ -569,7 +586,7 @@ function onCustomerKeydown(e) {
   if (e.key === 'Escape') showCustomerDropdown.value = false
 }
 
-function selectCustomer(name) {
+function selectCustomer(name, carryKeyword) {
   selectedCustomer.value = name
   customerQuery.value = name
   showCustomerDropdown.value = false
@@ -579,7 +596,9 @@ function selectCustomer(name) {
   factoryFilter.value = ''
   dateStart.value = ''
   dateEnd.value = ''
-  keyword.value = ''
+  // 若搜索词是物料型号而非客户名 → 作为物料筛选关键词（定位到该物料）
+  const q = (carryKeyword || '').trim()
+  keyword.value = (q && q !== name) ? q : ''
   loadFactories()
   load()
   // 聚焦到搜索框
@@ -788,6 +807,9 @@ function onKeydown(e) {
 }
 
 function goBack() {
+  // 已选中客户 → 返回客户列表（不关闭窗口）
+  if (selectedCustomer.value) { clearCustomer(); return }
+  // 客户列表页 → 非独立窗口返回上一页，独立窗口关闭
   if (isStandalone.value) { window.close() }
   else { if (window.history.length > 1) router.back(); else router.push('/') }
 }
@@ -957,6 +979,8 @@ onUnmounted(() => {
 
 /* 分页 */
 .pager { display: flex; align-items: center; justify-content: center; gap: 6px; padding: 10px 0 16px; flex-shrink: 0; }
+.all-btn { color: var(--color-primary); border-color: #91d5ff; background: #e6f7ff; }
+.all-btn:hover { background: #bae7ff; }
 .pg-btn { padding: 4px 10px; border-radius: 4px; border: 1px solid #d9d9d9; background: #fff; color: #555; font-size: 12px; cursor: pointer; font-family: inherit; transition: all .15s; min-width: 32px; text-align: center; }
 .pg-btn:hover:not(:disabled) { color: var(--color-primary); border-color: var(--color-primary); }
 .pg-btn:disabled { color: #ccc; cursor: not-allowed; background: #f5f5f5; }
