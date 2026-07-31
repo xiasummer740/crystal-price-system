@@ -312,6 +312,62 @@ function cleanupDuplicateSpecs() {
 }
 try { cleanupDuplicateSpecs() } catch (e) { console.warn('[spec-cleanup] 清理失败:', e.message) }
 
+// ===== 规格书迁移：历史客户物料规格书按客户名分文件夹 =====
+// 旧版客户物料规格书都存根目录，迁移到 规格书/客户物料/{客户名}/ 并更新引用
+// 若同一文件被报价系统引用，保留根目录副本（不破坏报价系统）
+function specFilenameFromUrl(url) {
+  if (!url) return ''
+  let p = url.replace('/api/specs/', '')
+  p = p.split('?')[0]
+  try { p = decodeURIComponent(p) } catch {}
+  // 若是子目录路径，取最后一段文件名
+  return p.split('/').pop() || ''
+}
+function migrateSpecsToCustomerFolders() {
+  // 找旧格式（根目录引用）的客户物料规格书
+  const mats = queryAll(
+    "SELECT id, customer, spec_document FROM customer_materials WHERE is_deleted = 0 AND spec_document != '' AND spec_document NOT LIKE '/api/specs/客户物料/%'"
+  )
+  if (!mats.length) { console.log('[spec-migrate] 无需要迁移的规格书'); return }
+
+  // 报价系统引用的根目录文件名（这些文件不能删除，保留根目录副本）
+  const priceRefs = new Set()
+  const prices = queryAll("SELECT spec_document FROM material_prices WHERE is_deleted = 0 AND spec_document != ''")
+  for (const p of prices) {
+    const fn = specFilenameFromUrl(p.spec_document)
+    if (fn) priceRefs.add(fn)
+  }
+
+  let moved = 0
+  for (const m of mats) {
+    const fn = specFilenameFromUrl(m.spec_document)
+    if (!fn) continue
+    const customer = (m.customer || '未命名客户').replace(/[<>:"|?*\\/]/g, '_').trim() || '未命名客户'
+    const destDir = path.join(specDir, '客户物料', customer)
+    const srcPath = path.join(specDir, fn)
+    if (!fs.existsSync(srcPath)) continue
+    if (!fs.existsSync(destDir)) fs.mkdirSync(destDir, { recursive: true })
+    const destPath = path.join(destDir, fn)
+    if (!fs.existsSync(destPath)) {
+      fs.copyFileSync(srcPath, destPath)
+    }
+    // 更新数据库引用（保留 ?name= 显示名）
+    const newPath = ['客户物料', customer, fn].map(encodeURIComponent).join('/')
+    const queryStr = m.spec_document.includes('?name=') ? m.spec_document.substring(m.spec_document.indexOf('?name=')) : ''
+    execute("UPDATE customer_materials SET spec_document = ? WHERE id = ?", ['/api/specs/' + newPath + queryStr, m.id])
+    moved++
+    // 若此文件不被报价系统引用，删除根目录副本（避免孤儿文件）
+    if (!priceRefs.has(fn)) {
+      try { fs.unlinkSync(srcPath) } catch {}
+    }
+  }
+  if (moved > 0) {
+    try { saveNow() } catch {}
+    console.log(`[spec-migrate] 已迁移 ${moved} 个客户物料规格书到客户文件夹`)
+  }
+}
+try { migrateSpecsToCustomerFolders() } catch (e) { console.warn('[spec-migrate] 迁移失败:', e.message) }
+
 // 预生成导入模板到模板文件夹
 const templateDir = path.join(process.env.DATA_DIR || path.join(__dirname, '..'), '模板')
 if (!fs.existsSync(templateDir)) fs.mkdirSync(templateDir, { recursive: true })
