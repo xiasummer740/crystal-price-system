@@ -340,3 +340,6 @@ export function searchAllCustomers(keyword) {
 export function fetchMaterialCustomers() {
   return http.get('/materials/customers/list')
 }
+export function fetchMaterialFactories(customer) {
+  return http.get('/materials/factories/list', { params: { customer } })
+}

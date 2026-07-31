@@ -49,9 +49,6 @@
             </div>
           </div>
         </div>
-        <div class="filter-btn" v-if="selectedCustomer" :class="{ active: statusFilter }" @click="showStatusSheet = !showStatusSheet">
-          {{ statusFilter || '全部状态' }} ▾
-        </div>
       </div>
 
       <!-- 未选择客户：显示客户列表入口 -->
@@ -74,12 +71,24 @@
 
       <!-- 已选择客户：物料表格 -->
       <template v-else>
-        <!-- 搜索栏 -->
-        <div class="search-bar">
+        <!-- 搜索栏 + 筛选 -->
+        <div class="filter-panel">
           <div class="search-box">
             <input v-model="keyword" placeholder="搜索编码/料号/名称…" @input="onSearchDebounced" class="search-input" />
             <span v-if="keyword" class="search-clear" @click="keyword = ''; onSearch()">×</span>
           </div>
+          <div class="filter-btn" :class="{ active: statusFilter }" @click="showStatusSheet = !showStatusSheet" title="按状态筛选">
+            {{ statusFilter || '状态' }} ▾
+          </div>
+          <div class="filter-btn" :class="{ active: factoryFilter }" @click="showFactorySheet = !showFactorySheet" title="按工厂筛选">
+            {{ factoryFilter || '工厂' }} ▾
+          </div>
+          <div class="date-filter" title="按日期范围筛选">
+            <input v-model="dateStart" type="date" class="date-input" @change="onSearch" />
+            <span class="date-sep">~</span>
+            <input v-model="dateEnd" type="date" class="date-input" @change="onSearch" />
+          </div>
+          <button v-if="hasFilters" class="clear-filter-btn" @click="clearFilters" title="清除所有筛选">✕ 清除</button>
         </div>
 
         <div class="table-wrap">
@@ -104,17 +113,23 @@
               <tr v-if="!loading && !list.length">
                 <td colspan="12" class="empty-row">暂无物料记录，点击「＋ 新增」添加</td>
               </tr>
-              <tr v-for="item in list" :key="item.id" class="mat-row">
+              <tr v-for="item in list" :key="item.id" class="mat-row" :style="{ background: statusRowBg(item.status) }">
                 <td class="col-date">{{ (item.date || '').slice(0, 10) }}</td>
                 <td class="col-code">{{ item.customer_code }}</td>
                 <td class="col-jkx">{{ item.jkx_code }}</td>
                 <td class="col-price">{{ item.price }}</td>
                 <td class="col-cost">{{ item.cost_price }}</td>
                 <td class="col-mat">{{ item.material_code }}</td>
-                <td class="col-name" :title="item.material_name">{{ item.material_name }}</td>
-                <td class="col-factory">{{ item.factory }}</td>
+                <td class="col-name" :title="materialNameTitle(item)">
+                  <span class="prim-name">{{ item.material_name }}</span>
+                  <span v-if="(item.alternates || []).length" class="alt-badge" :title="altNames(item)">备选{{ item.alternates.length }}</span>
+                </td>
+                <td class="col-factory">
+                  <span class="prim-name">{{ item.factory }}</span>
+                  <span v-if="(item.alternates || []).length" class="alt-badge alt-factory" :title="altFactories(item)">+{{ item.alternates.length }}</span>
+                </td>
                 <td class="col-status">
-                  <span class="status-tag" :style="{ background: statusColor(item.status) + '20', color: statusColor(item.status), borderColor: statusColor(item.status) }">
+                  <span class="status-tag" :style="{ background: statusBg(item.status), color: statusColor(item.status), borderColor: statusColor(item.status) + '55' }">
                     {{ item.status }}
                   </span>
                 </td>
@@ -141,6 +156,10 @@
       <!-- 状态选择弹窗 -->
       <van-action-sheet v-model:show="showStatusSheet" :actions="statusActions" cancel-text="取消"
         @select="onStatusSelect" close-on-click-action />
+
+      <!-- 工厂筛选弹窗 -->
+      <van-action-sheet v-model:show="showFactorySheet" :actions="factoryActions" cancel-text="取消"
+        @select="onFactorySelect" close-on-click-action />
 
       <!-- 新增/编辑弹窗 -->
       <van-overlay :show="showForm" z-index="2000">
@@ -183,7 +202,7 @@
               <div class="form-field">
                 <label>状态</label>
                 <div class="status-select" @click="showFormStatusSheet = true">
-                  <span class="status-tag" :style="{ background: statusColor(form.status) + '20', color: statusColor(form.status), borderColor: statusColor(form.status) }">
+                  <span class="status-tag" :style="{ background: statusBg(form.status), color: statusColor(form.status), borderColor: statusColor(form.status) + '55' }">
                     {{ form.status }}
                   </span>
                   <span class="select-arrow">▾</span>
@@ -196,6 +215,22 @@
               <div class="form-field form-field-full">
                 <label>备注</label>
                 <textarea v-model="form.remark" placeholder="备注" class="f-textarea" rows="2"></textarea>
+              </div>
+            </div>
+
+            <!-- 备选物料/工厂 -->
+            <div class="alternates-section">
+              <div class="alt-header">
+                <label class="alt-title">🔁 备选物料 / 工厂</label>
+                <button class="alt-add-btn" @click="addAlternate">＋ 添加备选</button>
+              </div>
+              <p class="alt-hint">主料缺货时临时可用的相近物料（选填）</p>
+              <div v-for="(alt, i) in form.alternates" :key="i" class="alt-row">
+                <input v-model="alt.material_code" placeholder="备选物料编码" class="f-input alt-input alt-code" />
+                <input v-model="alt.material_name" placeholder="备选物料名称" class="f-input alt-input alt-name" />
+                <input v-model="alt.factory" placeholder="备选工厂" class="f-input alt-input alt-factory-input" />
+                <input v-model="alt.cost_price" placeholder="备选成本价" class="f-input alt-input alt-price" />
+                <button class="alt-del-btn" @click="removeAlternate(i)" title="删除此备选">×</button>
               </div>
             </div>
             <div class="form-actions">
@@ -217,7 +252,7 @@
 import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { showToast, showConfirmDialog } from 'vant'
-import { fetchMaterials, createMaterial, updateMaterial, deleteMaterial, getMaterialStatusConfig, exportMaterials, importMaterialsExcel, searchAllCustomers, fetchMaterialCustomers } from '../utils/api.js'
+import { fetchMaterials, createMaterial, updateMaterial, deleteMaterial, getMaterialStatusConfig, exportMaterials, importMaterialsExcel, searchAllCustomers, fetchMaterialCustomers, fetchMaterialFactories } from '../utils/api.js'
 
 const route = useRoute()
 const router = useRouter()
@@ -239,6 +274,11 @@ const page = ref(1)
 const pageSize = ref(50)
 const keyword = ref('')
 const statusFilter = ref('')
+const factoryFilter = ref('')
+const dateStart = ref('')
+const dateEnd = ref('')
+const showFactorySheet = ref(false)
+const factoryList = ref([])
 
 // 状态配置
 const statusColors = ref({})
@@ -249,13 +289,63 @@ const statusActions = computed(() => {
   return acts
 })
 
+const factoryActions = computed(() => {
+  const acts = factoryList.value.map(f => ({ name: f, value: f }))
+  acts.unshift({ name: '全部工厂', value: '' })
+  return acts
+})
+
+// 状态标签：浅色背景 + 同色深字（保证文字可读）
 function statusColor(status) {
-  return statusColors.value[status] || '#999'
+  return statusColors.value[status]?.color || '#999'
+}
+function statusBg(status) {
+  const c = statusColor(status)
+  // 将 hex 转 18% 透明度背景
+  const r = parseInt(c.slice(1, 3), 16), g = parseInt(c.slice(3, 5), 16), b = parseInt(c.slice(5, 7), 16)
+  return `rgba(${r},${g},${b},0.15)`
+}
+// 整行背景色：按状态轻染色（约6%透明度，不影响文字可读）
+function statusRowBg(status) {
+  const c = statusColor(status)
+  const r = parseInt(c.slice(1, 3), 16), g = parseInt(c.slice(3, 5), 16), b = parseInt(c.slice(5, 7), 16)
+  return `rgba(${r},${g},${b},0.07)`
 }
 
 const showStatusSheet = ref(false)
 function onStatusSelect(item) {
   statusFilter.value = item.value
+  page.value = 1
+  load()
+}
+
+function onFactorySelect(item) {
+  factoryFilter.value = item.value
+  showFactorySheet.value = false
+  page.value = 1
+  load()
+}
+
+async function loadFactories() {
+  try {
+    const r = await fetchMaterialFactories(selectedCustomer.value)
+    factoryList.value = r.data || []
+  } catch {
+    factoryList.value = []
+  }
+}
+
+// 是否有筛选条件
+const hasFilters = computed(() =>
+  keyword.value || statusFilter.value || factoryFilter.value || dateStart.value || dateEnd.value
+)
+
+function clearFilters() {
+  keyword.value = ''
+  statusFilter.value = ''
+  factoryFilter.value = ''
+  dateStart.value = ''
+  dateEnd.value = ''
   page.value = 1
   load()
 }
@@ -306,6 +396,11 @@ function selectCustomer(name) {
   systemCustomers.value = []
   page.value = 1
   statusFilter.value = ''
+  factoryFilter.value = ''
+  dateStart.value = ''
+  dateEnd.value = ''
+  keyword.value = ''
+  loadFactories()
   load()
   // 聚焦到搜索框
   nextTick(() => document.querySelector('.search-input')?.focus())
@@ -341,6 +436,9 @@ async function load() {
     const params = { page: page.value, pageSize: pageSize.value, customer: selectedCustomer.value }
     if (keyword.value) params.keyword = keyword.value
     if (statusFilter.value) params.status = statusFilter.value
+    if (factoryFilter.value) params.factory = factoryFilter.value
+    if (dateStart.value) params.start = dateStart.value
+    if (dateEnd.value) params.end = dateEnd.value
     const r = await fetchMaterials(params)
     list.value = r.data.list || []
     total.value = r.data.total || 0
@@ -360,7 +458,7 @@ const saving = ref(false)
 const form = ref({
   date: '', customer_code: '', jkx_code: '', price: '', cost_price: '',
   material_code: '', material_name: '', factory: '', status: '报价',
-  customer_desc: '', remark: ''
+  customer_desc: '', remark: '', alternates: []
 })
 
 function openForm(item) {
@@ -377,13 +475,42 @@ function openForm(item) {
       factory: item.factory || '',
       status: item.status || '报价',
       customer_desc: item.customer_desc || '',
-      remark: item.remark || ''
+      remark: item.remark || '',
+      alternates: (item.alternates || []).map(a => ({ material_code: a.material_code || '', material_name: a.material_name || '', factory: a.factory || '', cost_price: a.cost_price || '' }))
     }
   } else {
     editing.value = null
-    form.value = { date: new Date().toISOString().slice(0, 10), customer_code: '', jkx_code: '', price: '', cost_price: '', material_code: '', material_name: '', factory: '', status: '报价', customer_desc: '', remark: '' }
+    form.value = { date: new Date().toISOString().slice(0, 10), customer_code: '', jkx_code: '', price: '', cost_price: '', material_code: '', material_name: '', factory: '', status: '报价', customer_desc: '', remark: '', alternates: [] }
   }
   showForm.value = true
+}
+
+// 备选物料/工厂
+function addAlternate() {
+  form.value.alternates.push({ material_code: '', material_name: '', factory: '', cost_price: '' })
+}
+function removeAlternate(i) {
+  form.value.alternates.splice(i, 1)
+}
+// 表格展示辅助
+function materialNameTitle(item) {
+  const alts = (item.alternates || []).filter(a => a.material_name || a.material_code)
+  if (!alts.length) return item.material_name
+  const lines = alts.map(a => {
+    const parts = []
+    if (a.material_code) parts.push(`编码:${a.material_code}`)
+    if (a.material_name) parts.push(a.material_name)
+    if (a.factory) parts.push(`@${a.factory}`)
+    if (a.cost_price) parts.push(`成本:${a.cost_price}`)
+    return `  ${parts.join(' ')}`
+  })
+  return `${item.material_name || ''}\n备选:${lines.join('\n')}`
+}
+function altNames(item) {
+  return (item.alternates || []).filter(a => a.material_name).map(a => a.material_name).join('、')
+}
+function altFactories(item) {
+  return (item.alternates || []).filter(a => a.factory).map(a => a.factory).join('、')
 }
 
 function onFormStatusSelect(item) {
@@ -395,6 +522,8 @@ async function saveForm() {
   saving.value = true
   try {
     const data = { ...form.value, customer: selectedCustomer.value }
+    // 清理空备选
+    data.alternates = data.alternates.filter(a => (a.material_name || '').trim() || (a.factory || '').trim())
     if (editing.value) {
       await updateMaterial(editing.value, data)
       showToast('已更新')
@@ -552,12 +681,21 @@ onUnmounted(() => {
 .filter-btn.active { background: rgba(var(--color-primary-rgb),.08); border-color: var(--color-primary); color: var(--color-primary); }
 
 /* 搜索栏 */
-.search-bar { display: flex; gap: 8px; padding: 8px 16px; background: #fff; border-bottom: 1px solid #f0f0f0; flex-shrink: 0; }
+.filter-panel { display: flex; gap: 8px; padding: 8px 16px; background: #fff; border-bottom: 1px solid #f0f0f0; flex-shrink: 0; align-items: center; flex-wrap: wrap; }
 .search-box { display: flex; align-items: center; flex: 1; min-width: 120px; background: #f5f6f8; border-radius: 8px; padding: 0 10px; height: 34px; }
 .search-input { flex: 1; border: none; outline: none; font-size: 12px; color: #323233; background: transparent; font-family: inherit; }
 .search-input::placeholder { color: #bbb; }
 .search-clear { color: #bbb; cursor: pointer; font-size: 14px; padding: 2px; }
 .search-clear:hover { color: #666; }
+.filter-btn { padding: 4px 10px; border-radius: 6px; border: 1px solid #e0e0e0; font-size: 12px; color: #555; background: #fff; cursor: pointer; white-space: nowrap; user-select: none; transition: all .15s; height: 34px; display: flex; align-items: center; }
+.filter-btn:hover { border-color: var(--color-primary); color: var(--color-primary); }
+.filter-btn.active { background: rgba(var(--color-primary-rgb),.08); border-color: var(--color-primary); color: var(--color-primary); }
+.date-filter { display: flex; align-items: center; gap: 4px; background: #f5f6f8; border-radius: 8px; padding: 0 8px; height: 34px; }
+.date-input { border: none; outline: none; font-size: 12px; color: #323233; background: transparent; font-family: inherit; cursor: pointer; }
+.date-input::-webkit-calendar-picker-indicator { cursor: pointer; }
+.date-sep { color: #ccc; font-size: 11px; }
+.clear-filter-btn { padding: 4px 10px; border-radius: 6px; border: 1px solid #ffcdd2; font-size: 11px; color: #e53935; background: #fff5f5; cursor: pointer; white-space: nowrap; transition: all .15s; height: 34px; }
+.clear-filter-btn:hover { background: #ffebee; }
 
 /* 表格 */
 .table-wrap { flex: 1; overflow: auto; padding: 0 16px 8px; }
@@ -586,6 +724,27 @@ onUnmounted(() => {
 .tbl-btn:hover { opacity: .7; }
 .edit-btn-sm { color: var(--color-primary); }
 .del-btn-sm { color: #ee0a24; }
+
+/* 备选徽章 */
+.prim-name { display: inline; }
+.alt-badge { display: inline-block; margin-left: 6px; padding: 1px 5px; border-radius: 3px; font-size: 10px; font-weight: 500; background: #e6f7ff; color: #1890ff; border: 1px solid #91d5ff; white-space: nowrap; cursor: help; }
+.alt-badge.alt-factory { margin-left: 4px; background: #f6ffed; color: #52c41a; border-color: #b7eb8f; }
+
+/* 备选物料编辑区 */
+.alternates-section { margin-top: 14px; padding-top: 12px; border-top: 1px solid #f0f0f0; }
+.alt-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
+.alt-title { font-size: 13px; font-weight: 600; color: #555; }
+.alt-add-btn { padding: 3px 10px; border-radius: 4px; border: 1px dashed #91d5ff; background: #e6f7ff; color: #1890ff; font-size: 11px; cursor: pointer; font-family: inherit; transition: all .15s; }
+.alt-add-btn:hover { background: #bae7ff; }
+.alt-hint { font-size: 10px; color: #bbb; margin: 0 0 8px; }
+.alt-row { display: flex; gap: 8px; margin-bottom: 8px; }
+.alt-input { flex: 1; }
+.alt-code { flex: 1.2; }
+.alt-name { flex: 2; }
+.alt-factory-input { flex: 1; }
+.alt-price { flex: 0.8; min-width: 90px; }
+.alt-del-btn { width: 32px; height: 32px; border-radius: 6px; border: none; background: #fff1f0; color: #ff4d4f; font-size: 15px; cursor: pointer; flex-shrink: 0; font-family: inherit; transition: background .15s; align-self: flex-end; }
+.alt-del-btn:hover { background: #ffccc7; }
 
 /* 分页 */
 .pager { display: flex; align-items: center; justify-content: center; gap: 6px; padding: 10px 0 16px; flex-shrink: 0; }

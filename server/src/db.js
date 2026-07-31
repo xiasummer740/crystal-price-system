@@ -352,6 +352,7 @@ export async function initDb() {
       status          TEXT DEFAULT '报价',
       customer_desc   TEXT DEFAULT '',
       remark          TEXT DEFAULT '',
+      alternates      TEXT DEFAULT '[]',
       is_deleted      INTEGER DEFAULT 0
     )
   `)
@@ -361,6 +362,8 @@ export async function initDb() {
   try { db.run('CREATE INDEX IF NOT EXISTS idx_materials_deleted ON customer_materials(is_deleted)') } catch {}
   // 兼容旧数据库：添加客户名列
   try { db.run("ALTER TABLE customer_materials ADD COLUMN customer TEXT DEFAULT ''") } catch {}
+  // 兼容旧数据库：添加备选物料/工厂列（JSON数组：[{material_name, factory}]）
+  try { db.run("ALTER TABLE customer_materials ADD COLUMN alternates TEXT DEFAULT '[]'") } catch {}
 
   return db
 }
