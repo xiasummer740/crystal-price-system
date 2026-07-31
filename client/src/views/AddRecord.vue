@@ -277,7 +277,10 @@ function onSpecDrop(e) { dragOver.value=false; const file=e.dataTransfer?.files?
 async function onSpecUpload(e) { const file=e.target.files[0]; if(file) uploadSpecFile(file); specFileInput.value.value='' }
 async function uploadSpecFile(file) {
   const fd=new FormData(); fd.append('file',file)
-  try { const r=await http.post('/upload-spec',fd); form.value.spec_document=r.data.url; showToast('上传成功') } catch { showToast('上传失败') }
+  // 报价系统规格书按品类分文件夹
+  const category = (form.value.category || '').trim()
+  const folder = '报价/' + (category || '未分类')
+  try { const r=await http.post('/upload-spec?folder=' + encodeURIComponent(folder), fd); form.value.spec_document=r.data.url; showToast('上传成功') } catch { showToast('上传失败') }
 }
 
 function onCurrencyConfirm({ selectedOptions }) { form.value.currency = selectedOptions[0].value; showCurrencyPicker.value = false }

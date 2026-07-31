@@ -84,6 +84,7 @@
       <van-tabbar-item icon="add-o" to="/add">新增</van-tabbar-item>
       <van-tabbar-item icon="desktop-o" to="/">PC后台</van-tabbar-item>
       <van-tabbar-item icon="map-marked" to="/map-addresses">🗺️ 地图</van-tabbar-item>
+      <van-tabbar-item icon="orders-o" to="/mobile-materials">📦 物料</van-tabbar-item>
     </van-tabbar>
 
     <!-- 地图 APP 选择 -->

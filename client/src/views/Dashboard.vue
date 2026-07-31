@@ -629,7 +629,10 @@ function decodeSpecName(url) {
 }
 async function uploadSpecEditFile(file) {
   const fd=new FormData(); fd.append('file',file)
-  try { const r=await http.post('/upload-spec',fd); specEditForm.value.spec_document=r.data.url; showToast('上传成功') } catch { showToast('上传失败') }
+  // 报价系统规格书按品类分文件夹
+  const category = (specEditForm.value.category || '').trim()
+  const folder = '报价/' + (category || '未分类')
+  try { const r=await http.post('/upload-spec?folder=' + encodeURIComponent(folder), fd); specEditForm.value.spec_document=r.data.url; showToast('上传成功') } catch { showToast('上传失败') }
 }
 function editGroupSpecs() {
   const fk = Object.keys(md.value.factories)[0]; const q = md.value.factories[fk]?.[0]

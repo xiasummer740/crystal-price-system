@@ -20,6 +20,7 @@ const routes = [
   { path: '/list', name: 'RecordList', component: RecordList, meta: { title: '记录列表' } },
   { path: '/detail/:id', name: 'RecordDetail', component: RecordDetail, meta: { title: '报价详情' } },
   { path: '/mobile', name: 'MobileHome', component: MobileHome, meta: { title: '报价查询' } },
+  { path: '/mobile-materials', name: 'MobileMaterials', component: () => import('../views/MobileMaterials.vue'), meta: { title: '客户物料' } },
   { path: '/trash', name: 'Trash', component: Trash, meta: { title: '回收站' } },
   { path: '/samples', name: 'Samples', component: Samples, meta: { title: '样品登记' } },
   { path: '/translator', name: 'Translator', component: Translator, meta: { title: '规格书翻译' } },

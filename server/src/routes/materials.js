@@ -1,11 +1,55 @@
 import { Router } from 'express'
 import multer from 'multer'
 import XLSX from 'xlsx'
+import fs from 'fs'
+import path from 'path'
+import { fileURLToPath } from 'url'
 import { queryAll, queryOne, execute } from '../db.js'
 import { exportMaterials } from '../utils/export.js'
 import { triggerBackup } from '../utils/excelBackup.js'
 
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const router = Router()
+
+// 规格书目录（与 index.js 一致）
+const specDir = path.join(process.env.DATA_DIR || path.join(__dirname, '..', '..'), '规格书')
+
+// ========== 客户改名：规格书文件夹整组迁移 ==========
+// 客户A改名/合并到B：迁移 规格书/客户物料/A/ → B/，并同步该客户全部物料的客户名 + 规格书引用
+function renameCustomerFolder(oldName, newName) {
+  if (!oldName || !newName || oldName === newName) return
+  const cleanOld = String(oldName).replace(/[<>:"|?*\\/]/g, '_').trim() || '未命名客户'
+  const cleanNew = String(newName).replace(/[<>:"|?*\\/]/g, '_').trim() || '未命名客户'
+  if (cleanOld === cleanNew) return
+
+  const oldDir = path.join(specDir, '客户物料', cleanOld)
+  const newDir = path.join(specDir, '客户物料', cleanNew)
+
+  // 1. 迁移文件夹内文件（同名复用，删除旧副本）
+  if (fs.existsSync(oldDir)) {
+    if (!fs.existsSync(newDir)) fs.mkdirSync(newDir, { recursive: true })
+    for (const f of fs.readdirSync(oldDir)) {
+      const sp = path.join(oldDir, f)
+      const dp = path.join(newDir, f)
+      if (fs.statSync(sp).isDirectory()) continue
+      if (!fs.existsSync(dp)) fs.renameSync(sp, dp)
+      else { try { fs.unlinkSync(sp) } catch {} }
+    }
+    // 清空后的旧文件夹删除
+    try { if (!fs.readdirSync(oldDir).length) fs.rmdirSync(oldDir) } catch {}
+  }
+
+  // 2. 同步该客户全部物料：客户名 + 规格书引用（URL 中是 encodeURIComponent 后的路径）
+  execute("UPDATE customer_materials SET customer = ? WHERE is_deleted = 0 AND customer = ?", [cleanNew, cleanOld])
+  const oldPrefix = '/api/specs/' + encodeURIComponent('客户物料') + '/' + encodeURIComponent(cleanOld)
+  const newPrefix = '/api/specs/' + encodeURIComponent('客户物料') + '/' + encodeURIComponent(cleanNew)
+  const changed = execute(
+    "UPDATE customer_materials SET spec_document = REPLACE(spec_document, ?, ?) WHERE is_deleted = 0 AND spec_document LIKE ?",
+    [oldPrefix, newPrefix, oldPrefix + '%']
+  )
+  triggerBackup('materials')
+  return { movedRows: changed?.changes ?? 0 }
+}
 
 // 状态列表（带颜色）
 // 采购进度视觉色阶：询价(冷)→规格(蓝紫)→送样(青)→散单(橙)→批量(绿)
@@ -253,7 +297,14 @@ router.put('/:id', (req, res) => {
     Number(req.params.id)
   ])
   triggerBackup('materials')
-  res.json({ code: 0, msg: '更新成功' })
+
+  // 客户改名 → 规格书文件夹整组迁移 + 同步该客户全部物料
+  let renameMsg = ''
+  if (b.customer && b.customer !== existing.customer) {
+    const info = renameCustomerFolder(existing.customer, b.customer)
+    if (info) renameMsg = `，客户「${existing.customer}」的规格书已迁移到「${b.customer}」`
+  }
+  res.json({ code: 0, msg: '更新成功' + renameMsg })
 })
 
 // 删除

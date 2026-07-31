@@ -368,6 +368,43 @@ function migrateSpecsToCustomerFolders() {
 }
 try { migrateSpecsToCustomerFolders() } catch (e) { console.warn('[spec-migrate] 迁移失败:', e.message) }
 
+// ===== 规格书迁移：报价系统规格书按品类分文件夹 =====
+// 旧版报价系统规格书存根目录，迁移到 规格书/报价/{品类}/（品类空 → 未分类）并更新引用
+function migrateQuoteSpecsToCategoryFolders() {
+  const prices = queryAll(
+    "SELECT id, category, spec_document FROM material_prices WHERE is_deleted = 0 AND spec_document != '' AND spec_document NOT LIKE '/api/specs/报价/%'"
+  )
+  if (!prices.length) { console.log('[spec-migrate-quote] 无需要迁移的报价规格书'); return }
+
+  let moved = 0
+  for (const p of prices) {
+    const fn = specFilenameFromUrl(p.spec_document)
+    if (!fn) continue
+    const category = (p.category || '').replace(/[<>:"|?*\\/]/g, '_').trim() || '未分类'
+    const destDir = path.join(specDir, '报价', category)
+    const srcPath = path.join(specDir, fn)
+    if (!fs.existsSync(srcPath)) continue
+    if (!fs.existsSync(destDir)) fs.mkdirSync(destDir, { recursive: true })
+    const destPath = path.join(destDir, fn)
+    if (fs.existsSync(destPath)) {
+      // 目标已存在 → 复用，删除根目录文件
+      try { fs.unlinkSync(srcPath) } catch {}
+    } else {
+      fs.renameSync(srcPath, destPath)
+    }
+    // 更新数据库引用（保留 ?name= 显示名）
+    const newPath = ['报价', category, fn].map(encodeURIComponent).join('/')
+    const queryStr = p.spec_document.includes('?name=') ? p.spec_document.substring(p.spec_document.indexOf('?name=')) : ''
+    execute("UPDATE material_prices SET spec_document = ? WHERE id = ?", ['/api/specs/' + newPath + queryStr, p.id])
+    moved++
+  }
+  if (moved > 0) {
+    try { saveNow() } catch {}
+    console.log(`[spec-migrate-quote] 已迁移 ${moved} 个报价规格书到品类文件夹`)
+  }
+}
+try { migrateQuoteSpecsToCategoryFolders() } catch (e) { console.warn('[spec-migrate-quote] 迁移失败:', e.message) }
+
 // 预生成导入模板到模板文件夹
 const templateDir = path.join(process.env.DATA_DIR || path.join(__dirname, '..'), '模板')
 if (!fs.existsSync(templateDir)) fs.mkdirSync(templateDir, { recursive: true })
