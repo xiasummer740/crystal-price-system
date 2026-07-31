@@ -159,7 +159,7 @@
 
       <!-- 新增/编辑弹窗 -->
       <van-overlay :show="showForm" z-index="2000">
-        <div class="form-overlay" @click="showForm = false">
+        <div class="form-overlay">
           <div class="form-dialog" @click.stop @paste="onFormPaste">
             <h3 class="form-title">{{ editing ? '编辑物料' : '新增物料' }} <span class="form-customer">👤 {{ selectedCustomer }}</span></h3>
             <div class="form-grid">
@@ -526,9 +526,13 @@ function onSpecPaste(e) {
     }
   }
 }
-// 表单弹窗内任意位置 Ctrl+V 粘贴文件 → 作为规格书
+// 表单弹窗内 Ctrl+V 粘贴：输入框内 → 正常文本粘贴；空白区 → 作为规格书上传
 function onFormPaste(e) {
-  if (form.value.spec_document) return // 已有规格书不自动覆盖
+  // 在输入框/文本域内粘贴 → 交给默认行为（Excel 复制的文本正常粘贴，不拦截为规格书）
+  const tag = (e.target?.tagName || '').toUpperCase()
+  if (tag === 'INPUT' || tag === 'TEXTAREA') return
+  // 已有规格书不自动覆盖
+  if (form.value.spec_document) return
   onSpecPaste(e)
 }
 function openSpec(url) {
