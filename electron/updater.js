@@ -7,7 +7,7 @@
 // autoInstallOnAppQuit: true — 下载完成后退出时自动安装
 
 import { createRequire } from 'module'
-import { appendFileSync, createWriteStream, unlinkSync, existsSync } from 'fs'
+import { appendFileSync, createWriteStream, unlinkSync, existsSync, statSync } from 'fs'
 import https from 'https'
 import path from 'path'
 const _require = createRequire(import.meta.url)
@@ -92,41 +92,52 @@ export async function downloadUpdate() {
   }
 }
 
-// 通过 GitHub API 获取安装包下载 URL
-function getAssetDownloadUrl(release) {
+// 通过 GitHub API 获取安装包下载信息（URL + 大小，用于断点续传校验）
+function getAssetDownloadInfo(release) {
   const assetName = `crystal-price-system-setup-${appVersion}.exe`
   const asset = (release.assets || []).find(a => a.name === assetName)
-  return asset?.browser_download_url || null
+  if (!asset?.browser_download_url) return null
+  return { url: asset.browser_download_url, size: Number(asset.size) || 0 }
 }
 
-// 直连下载核心（带重试）
-async function downloadWithRetry(url, destFile, retries = 3) {
+// 直连下载核心（带断点续传 + 重试）
+// 中断后重试会带上 Range 头从已下载位置续传，不从头再来
+async function downloadWithRetry(url, destFile, expectedSize = 0, retries = 3) {
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
       LOG(`downloading (attempt ${attempt}/${retries})`)
       await new Promise((resolve, reject) => {
-        const req = https.get(url, { headers: { 'User-Agent': 'crystal-price-system' }, timeout: 300000 }, (res) => {
-          // 跟随重定向（最多 5 级）
+        // 统计已下载的部分文件大小（用于断点续传）
+        let resumeFrom = 0
+        if (existsSync(destFile)) {
+          try { resumeFrom = statSync(destFile).size || 0 } catch { resumeFrom = 0 }
+        }
+        const headers = { 'User-Agent': 'crystal-price-system' }
+        if (resumeFrom > 0) headers['Range'] = `bytes=${resumeFrom}-`
+
+        const req = https.get(url, { headers, timeout: 600000 }, (res) => {
+          // 跟随重定向（递归会重新计算 resumeFrom，续传不受影响）
           if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
             req.destroy()
             LOG(`redirect (${res.statusCode}) → ${res.headers.location}`)
-            // 递归跟随
-            return downloadWithRetry(res.headers.location, destFile, retries - attempt + 1)
+            return downloadWithRetry(res.headers.location, destFile, expectedSize, retries - attempt + 1)
               .then(resolve).catch(reject)
           }
-          if (res.statusCode !== 200) {
+          // 206 = 服务器支持断点续传；200 = 不支持（从头重新下）
+          const supportsResume = res.statusCode === 206
+          if (res.statusCode !== 200 && res.statusCode !== 206) {
             reject(new Error(`HTTP ${res.statusCode}`))
             return
           }
-          const total = parseInt(res.headers['content-length'] || '0', 10)
-          let downloaded = 0
+          const contentRange = res.headers['content-range'] || ''
+          const fullSize = parseInt(contentRange.split('/')[1] || '0', 10) || parseInt(res.headers['content-length'] || '0', 10) || expectedSize
+          let downloaded = supportsResume ? resumeFrom : 0
           let lastTime = Date.now()
-          let lastBytes = 0
-          const fileStream = createWriteStream(destFile)
-          res.pipe(fileStream)
+          let lastBytes = downloaded
+          const fileStream = createWriteStream(destFile, { flags: supportsResume ? 'a' : 'w' })
           res.on('data', (chunk) => {
             downloaded += chunk.length
-            if (total > 0) {
+            if (fullSize > 0) {
               const now = Date.now()
               const elapsed = (now - lastTime) / 1000
               let bytesPerSecond = 0
@@ -136,25 +147,33 @@ async function downloadWithRetry(url, destFile, retries = 3) {
                 lastBytes = downloaded
               }
               mainWindow?.webContents.send('update:progress', {
-                percent: Math.round(downloaded / total * 100),
+                percent: Math.round(downloaded / fullSize * 100),
                 bytesPerSecond,
-                total,
+                total: fullSize,
                 transferred: downloaded,
               })
             }
           })
-          res.on('end', () => { fileStream.end(); resolve() })
+          res.on('end', () => {
+            fileStream.end()
+            if (expectedSize > 0 && downloaded < expectedSize) {
+              reject(new Error(`下载不完整: ${downloaded}/${expectedSize}，将续传重试`))
+            } else {
+              resolve()
+            }
+          })
           res.on('error', reject)
           fileStream.on('error', reject)
+          res.pipe(fileStream)
         })
         req.on('error', reject)
         req.on('timeout', () => { req.destroy(); reject(new Error('连接服务器超时')) })
       })
       return // 成功，跳出重试
     } catch (err) {
-      LOG(`attempt ${attempt} failed: ${err.message}`)
+      LOG(`attempt ${attempt} failed: ${err.message}（已下载部分将续传）`)
       if (attempt < retries) {
-        // 短暂等待后重试
+        // 短暂等待后重试（续传）
         await new Promise(r => setTimeout(r, 2000 * attempt))
       } else {
         throw err
@@ -200,18 +219,24 @@ async function directDownload() {
     const tagVersion = (releaseData.tag_name || '').replace(/^v/i, '')
     if (tagVersion) appVersion = tagVersion
 
-    const downloadUrl = getAssetDownloadUrl(releaseData)
-    if (!downloadUrl) {
+    const assetInfo = getAssetDownloadInfo(releaseData)
+    if (!assetInfo) {
       throw new Error(`未找到 ${appVersion} 版本的安装包，请手动下载`)
     }
-    LOG(`browser_download_url: ${downloadUrl}`)
+    LOG(`browser_download_url: ${assetInfo.url} (${assetInfo.size} bytes)`)
 
-    // 带重试的下载
-    await downloadWithRetry(downloadUrl, destFile)
+    // 带断点续传 + 重试的下载（expectedSize 用于完整性校验）
+    await downloadWithRetry(assetInfo.url, destFile, assetInfo.size)
+
+    // 最终大小校验（防止续传误判为完成）
+    const finalSize = statSync(destFile).size
+    if (assetInfo.size > 0 && finalSize !== assetInfo.size) {
+      throw new Error(`下载校验失败: ${finalSize}/${assetInfo.size}`)
+    }
 
     // 下载完成
     directDownloadPath = destFile
-    LOG(`download complete: ${destFile}`)
+    LOG(`download complete: ${destFile} (${finalSize} bytes)`)
     mainWindow?.webContents.send('update:downloaded')
   } catch (err) {
     LOG(`directDownload error: ${err.message}`)
