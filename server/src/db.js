@@ -335,6 +335,31 @@ export async function initDb() {
   // 应用设置表（Key-Value 持久化，跨升级保留）
   db.run(`CREATE TABLE IF NOT EXISTS app_settings (key TEXT PRIMARY KEY, value TEXT DEFAULT '')`)
 
+  // ====== 客户物料表 ======
+  db.run(`
+    CREATE TABLE IF NOT EXISTS customer_materials (
+      id              INTEGER PRIMARY KEY AUTOINCREMENT,
+      created_at      DATETIME DEFAULT (datetime('now','localtime')),
+      updated_at      DATETIME DEFAULT (datetime('now','localtime')),
+      date            TEXT DEFAULT '',
+      customer_code   TEXT DEFAULT '',
+      jkx_code        TEXT DEFAULT '',
+      price           TEXT DEFAULT '',
+      cost_price      TEXT DEFAULT '',
+      material_code   TEXT DEFAULT '',
+      material_name   TEXT DEFAULT '',
+      factory         TEXT DEFAULT '',
+      status          TEXT DEFAULT '报价',
+      customer_desc   TEXT DEFAULT '',
+      remark          TEXT DEFAULT '',
+      is_deleted      INTEGER DEFAULT 0
+    )
+  `)
+  try { db.run('CREATE INDEX IF NOT EXISTS idx_materials_customer_code ON customer_materials(customer_code)') } catch {}
+  try { db.run('CREATE INDEX IF NOT EXISTS idx_materials_jkx_code ON customer_materials(jkx_code)') } catch {}
+  try { db.run('CREATE INDEX IF NOT EXISTS idx_materials_status ON customer_materials(status)') } catch {}
+  try { db.run('CREATE INDEX IF NOT EXISTS idx_materials_deleted ON customer_materials(is_deleted)') } catch {}
+
   return db
 }
 

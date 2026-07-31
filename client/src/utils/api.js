@@ -308,3 +308,29 @@ export function deleteTripPoint(id) {
 export function reorderTripPoints(planId, pointIds) {
   return http.put('/map/trip-points/reorder', { plan_id: planId, point_ids: pointIds })
 }
+
+// ====== 客户物料 ======
+export function fetchMaterials(params) {
+  return http.get('/materials', { params })
+}
+export function getMaterial(id) {
+  return http.get(`/materials/${id}`)
+}
+export function createMaterial(data) {
+  return http.post('/materials', data)
+}
+export function updateMaterial(id, data) {
+  return http.put(`/materials/${id}`, data)
+}
+export function deleteMaterial(id) {
+  return http.delete(`/materials/${id}`)
+}
+export function getMaterialStatusConfig() {
+  return http.get('/materials/status-config')
+}
+export function exportMaterials() {
+  return http.get('/materials/export', { responseType: 'blob' })
+}
+export function importMaterialsExcel(formData) {
+  return http.post('/materials/import', formData)
+}

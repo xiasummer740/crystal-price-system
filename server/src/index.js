@@ -14,6 +14,7 @@ import reportsRouter from './routes/reports.js'
 import logsRouter from './routes/logs.js'
 import mapRouter from './routes/map.js'
 import performanceRouter from './routes/performance.js'
+import materialsRouter from './routes/materials.js'
 import { exportToExcel, importFromExcel, generateTemplate, generateSampleTemplate, generateNoteTemplate } from './utils/export.js'
 import { initDb, saveNow, queryAll, execute } from './db.js'
 import { triggerBackup, flushPending } from './utils/excelBackup.js'
@@ -92,6 +93,7 @@ app.use('/api/reports', reportsRouter)
 app.use('/api/logs', logsRouter)
 app.use('/api/map', mapRouter)
 app.use('/api/performance', performanceRouter)
+app.use('/api/materials', materialsRouter)
 
 // 导出 Excel
 app.get('/api/export', (req, res) => {

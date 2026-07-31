@@ -417,6 +417,11 @@ function createWindow(port) {
       openPerfWindow(serverPort)
       return { action: 'deny' }
     }
+    // 客户物料窗口
+    if (url.includes('/#/materials') && url.includes('?standalone=1')) {
+      openMaterialsWindow(serverPort)
+      return { action: 'deny' }
+    }
     // 仅允许 http/https 外部链接通过系统浏览器打开
     if (url.startsWith('http://') || url.startsWith('https://')) {
       shell.openExternal(url)
@@ -668,6 +673,63 @@ function openPerfWindow(port) {
     if (_perfSaveTimer) { clearTimeout(_perfSaveTimer); _perfSaveTimer = null }
   })
 }
+
+// 客户物料独立浮窗
+let materialsWindow = null
+let _materialsSaveTimer = null
+function saveMaterialsBounds() {
+  if (!materialsWindow || materialsWindow.isDestroyed()) return
+  try {
+    const bounds = materialsWindow.getBounds()
+    const cfg = loadFullConfig()
+    saveFullConfig({ materialsWindow: { ...cfg.materialsWindow, ...bounds } })
+  } catch (e) { log('saveMaterialsBounds error: ' + e.message) }
+}
+function openMaterialsWindow(port) {
+  if (materialsWindow && !materialsWindow.isDestroyed()) { materialsWindow.focus(); return }
+  const cfg = loadFullConfig()
+  const saved = cfg?.materialsWindow || {}
+  const mainPos = mainWindow?.getBounds()
+  materialsWindow = new BrowserWindow({
+    width: saved.width || 1100,
+    height: saved.height || 680,
+    minWidth: 800, minHeight: 480,
+    x: saved.x ?? (mainPos ? mainPos.x + 70 : undefined),
+    y: saved.y ?? (mainPos ? mainPos.y + 50 : undefined),
+    title: '客户物料',
+    frame: true,
+    icon: path.join(__dirname, '..', 'client', 'dist', 'SJK-256.png'),
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true,
+      sandbox: false,
+      preload: path.join(__dirname, 'preload.cjs')
+    }
+  })
+  materialsWindow.setMenuBarVisibility(false)
+  const debounceSave = () => {
+    if (_materialsSaveTimer) clearTimeout(_materialsSaveTimer)
+    _materialsSaveTimer = setTimeout(saveMaterialsBounds, 500)
+  }
+  materialsWindow.on('resize', debounceSave)
+  materialsWindow.on('move', debounceSave)
+  const url = `http://localhost:${port}/#/materials?standalone=1&v=${app.getVersion()}&packaged=${app.isPackaged}`
+  materialsWindow.loadURL(url)
+  materialsWindow.on('closed', () => {
+    materialsWindow = null
+    if (_materialsSaveTimer) { clearTimeout(_materialsSaveTimer); _materialsSaveTimer = null }
+  })
+}
+
+// IPC：渲染进程请求打开/关闭物料窗口
+ipcMain.handle('open-materials-window', () => {
+  openMaterialsWindow(serverPort)
+})
+ipcMain.handle('close-materials-window', () => {
+  if (materialsWindow && !materialsWindow.isDestroyed()) {
+    materialsWindow.close()
+  }
+})
 
 // IPC：渲染进程请求打开地图窗口
 ipcMain.handle('open-map-window', () => {

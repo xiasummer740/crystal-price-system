@@ -8,6 +8,7 @@
           <span class="clock-dot"></span>{{ clockTime }}
         </span>
         <button class="nav-btn hide-mobile" style="margin-right:6px;background:#fff7e6;color:#d48806;border-color:#ffe58f;cursor:pointer" @click="openNotesWin">📝 记事</button>
+        <button class="nav-btn hide-mobile" style="margin-right:6px;background:#fce4ec;color:#c62828;border-color:#f8bbd0;cursor:pointer" @click="openMaterialsWin">📦 客户物料</button>
         <button class="nav-btn hide-mobile" style="margin-right:6px;background:#e0f7fa;color:#00695c;border-color:#b2dfdb;cursor:pointer" @click="openMapWin">🗺️ 地图地址</button>
         <button class="nav-btn hide-mobile" style="margin-right:6px;background:#e8f5e9;color:#2e7d32;border-color:#c8e6c9;cursor:pointer" @click="openPerfWin">📊 绩效明细</button>
         <router-link to="/translator" class="nav-btn hide-mobile" style="margin-right:6px;background:#f0f6ff;color:#1565c0;border-color:#bbdefb">规格书翻译</router-link>
@@ -28,6 +29,7 @@
         <div class="mobile-dropdown-backdrop" @click="showMobileMenu = false"></div>
         <div class="mobile-dropdown-panel">
           <button class="nav-btn mobile-nav-item" @click="showMobileMenu = false;openNotesWin()">📝 记事</button>
+          <button class="nav-btn mobile-nav-item" @click="showMobileMenu = false;openMaterialsWin()">📦 客户物料</button>
           <button class="nav-btn mobile-nav-item" @click="showMobileMenu = false;openMapWin()">🗺️ 地图地址</button>
           <button class="nav-btn mobile-nav-item" @click="showMobileMenu = false;openPerfWin()">📊 绩效明细</button>
           <router-link to="/translator" class="nav-btn mobile-nav-item" @click="showMobileMenu = false">规格书翻译</router-link>
@@ -502,6 +504,13 @@ function openPerfWin() {
   const win = window.open('/#/performance?standalone=1', '_blank')
   if (!win || win.closed) {
     if (!isElectron) router.push('/performance')
+  }
+}
+function openMaterialsWin() {
+  const isElectron = navigator.userAgent.indexOf('Electron') !== -1
+  const win = window.open('/#/materials?standalone=1', '_blank')
+  if (!win || win.closed) {
+    if (!isElectron) router.push('/materials')
   }
 }
 const showMobileMenu = ref(false)
