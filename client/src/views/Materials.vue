@@ -398,7 +398,7 @@ function loadColWidths() {
     const saved = JSON.parse(localStorage.getItem('materials_col_widths') || '{}')
     const widths = { ...COL_DEFAULTS }
     for (const k of Object.keys(COL_DEFAULTS)) {
-      if (saved[k] && saved[k] >= 30 && saved[k] <= 2000) widths[k] = saved[k]
+      if (saved[k] && saved[k] > 0) widths[k] = saved[k]
     }
     return widths
   } catch { return { ...COL_DEFAULTS } }
@@ -406,13 +406,13 @@ function loadColWidths() {
 function saveColWidths() {
   try { localStorage.setItem('materials_col_widths', JSON.stringify(colWidths.value)) } catch {}
 }
-let resizeState = null
 function startResize(e, key) {
   const startX = e.clientX
   const startW = colWidths.value[key]
   const onMove = (ev) => {
     const delta = ev.clientX - startX
-    const w = Math.max(30, Math.min(2000, startW + delta))
+    // 完全无限制：0.1px 到任意宽度
+    const w = Math.max(0.1, startW + delta)
     colWidths.value[key] = w
     saveColWidths()
   }
@@ -895,7 +895,6 @@ onUnmounted(() => {
 /* 点击复制 */
 .cell-copy { cursor: pointer; user-select: none; transition: background .15s; }
 .cell-copy:hover { background: rgba(var(--color-primary-rgb),.06) !important; }
-.cell-copy:hover::after { content: '⧉'; font-size: 10px; color: var(--color-primary); margin-left: 4px; opacity: .7; }
 
 /* 富文本高亮 */
 .rich-text { pointer-events: none; }
@@ -962,7 +961,7 @@ onUnmounted(() => {
 
 /* 新增/编辑弹窗 */
 .form-overlay { display: flex; align-items: center; justify-content: center; padding: 24px; }
-.form-dialog { width: 100%; max-width: 640px; background: #fff; border-radius: 12px; padding: 24px; box-shadow: 0 8px 30px rgba(0,0,0,.15); max-height: 85vh; overflow-y: auto; }
+.form-dialog { width: 100%; max-width: 640px; background: #fff; border-radius: 12px; padding: 24px; box-shadow: 0 8px 30px rgba(0,0,0,.15); max-height: 85vh; resize: both; overflow: auto; min-width: 520px; min-height: 400px; }
 .form-title { font-size: 17px; font-weight: 600; margin: 0 0 16px; color: #323233; display: flex; align-items: center; gap: 8px; }
 .form-customer { font-size: 13px; color: #666; font-weight: 400; }
 .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
