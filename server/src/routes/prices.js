@@ -240,8 +240,12 @@ router.post('/batch-update-specs', (req, res) => {
   const mc = (source.material_code || '').trim()
   if (mc) {
     conditions.push('material_code = ?'); params.push(mc)
+  } else if (source.id) {
+    // 无编码：只更新当前这一条记录。不能匹配所有空编码记录——
+    // 否则会把其他无编码的不同物料全部刷成表单里的编码+参数（数据被批量改写）
+    conditions.push('id = ?'); params.push(source.id)
   } else {
-    conditions.push("(material_code IS NULL OR material_code = '')")
+    conditions.push('1 = 0')
   }
   const sets = techFields.map(f => `${f} = ?`); const vals = techFields.map(f => b[f] ?? source[f] ?? '')
   const result = execute(`UPDATE material_prices SET updated_at = datetime('now','localtime'), ${sets.join(', ')} WHERE ${conditions.join(' AND ')}`, [...vals, ...params])
