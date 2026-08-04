@@ -256,10 +256,21 @@ router.post('/batch-update-specs', (req, res) => {
 router.post('/batch-delete', (req, res) => {
   const { ids, keyword, factory, quoter, currency, category, startDate, endDate, multiFilter } = req.body || {}
   // 方式1：按ID列表
+  // 列表是"按物料分组"显示（一组一行），勾选的是分组代表记录。
+  // 只删 id 会漏掉组内其他记录（删除不干净要删好几遍）。
+  // 正确做法：按该记录的分组键(matchCols)删除整组全部记录。
   if (ids && Array.isArray(ids) && ids.length) {
+    const matchCols = ['material_code','material_name','material_spec','category','brand','dimension','pin_count','frequency','load_cap','voltage','mode','freq_tol','temperature']
     const placeholders = ids.map(() => '?').join(',')
-    execute(`UPDATE material_prices SET is_deleted = 1, updated_at = datetime('now','localtime') WHERE id IN (${placeholders})`, ids)
-    return res.json({ code: 0, msg: `已删除 ${ids.length} 条` })
+    const reps = queryAll(`SELECT id, ${matchCols.join(',')} FROM material_prices WHERE id IN (${placeholders}) AND is_deleted = 0`, ids)
+    let delCount = 0
+    for (const rep of reps) {
+      const conds = matchCols.map(c => `COALESCE(${c},'') = ?`)
+      const vals = matchCols.map(c => rep[c] ?? '')
+      const r = execute(`UPDATE material_prices SET is_deleted = 1, updated_at = datetime('now','localtime') WHERE is_deleted = 0 AND ${conds.join(' AND ')}`, vals)
+      delCount += r.changes ?? 0
+    }
+    return res.json({ code: 0, msg: `已删除 ${delCount} 条` })
   }
   // 方式2：按筛选条件
   const hasFilter = keyword || factory || quoter || currency || category || startDate || endDate || multiFilter || Object.keys(req.body).some(k => ['brand','dimension','pin_count','frequency','load_cap','voltage','mode','freq_tol','standard_lead_time','material_code','first_inquiry_customer','material_name','material_spec'].includes(k))
