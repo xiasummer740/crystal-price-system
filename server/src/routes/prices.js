@@ -30,6 +30,36 @@ function parseMultiFilter(multiStr, alias = '') {
   return { conditions, params }
 }
 
+// 新增时防冲突检测：
+// 1) 编码已存在但技术参数不一致 → 阻止（防止同一编码出现两条产品信息；不同工厂/价格的报价不受影响）
+// 2) 编码+参数+价格+工厂+报价人等完全相同 → 阻止（防止误录入重复）
+// 技术参数 = 产品身份字段（与分组视图 matchCols 一致，不含规格书附件）
+const PRODUCT_PARAMS = ['material_name','material_spec','category','brand','dimension','pin_count','frequency','load_cap','voltage','mode','freq_tol','temperature']
+// 完全重复 = 前端列表去重 key 一致（price.js loadList 用的同一字段集合）
+const FULL_DUP_FIELDS = ['material_code','material_name','material_spec','category','brand','dimension','pin_count','frequency','load_cap','voltage','mode','freq_tol','price_with_tax','price_without_tax','currency','factory_code','quoter','standard_lead_time','first_inquiry_customer','remarks']
+function findCreateConflict(b) {
+  // 与 INSERT 相同的默认值规范化：currency 默认 CNY，其余空字段为空串/空
+  const canonical = (f, v) => {
+    if (v === null || v === undefined) return f === 'currency' ? 'CNY' : ''
+    return String(v)
+  }
+  const code = canonical('material_code', b.material_code)
+  // 先按编码缩小范围（编码是索引列），剩余字段在 JS 中比较，避免 SQLite 数值/文本类型比较陷阱
+  const rows = queryAll(`SELECT * FROM material_prices WHERE is_deleted = 0 AND COALESCE(material_code,'') = ? ORDER BY created_at DESC, id DESC`, [code])
+  if (!rows.length) return null
+  // 有编码才校验参数一致性；空编码只防完全重复
+  if (code) {
+    const ref = rows[0]
+    if (PRODUCT_PARAMS.some(f => canonical(f, ref[f]) !== canonical(f, b[f]))) {
+      return { type: 'param', msg: '该物料编码已存在且技术参数不一致，请在报价弹窗点「✎ 产品参数」统一修改，或把参数改成与已有记录一致' }
+    }
+  }
+  if (rows.some(r => FULL_DUP_FIELDS.every(f => canonical(f, r[f]) === canonical(f, b[f])))) {
+    return { type: 'dup', msg: '已存在完全相同的记录（物料编码、技术参数、工厂、价格等都相同），请勿重复添加' }
+  }
+  return null
+}
+
 // GET 列表 + 搜索 + 筛选 + 分页
 router.get('/', (req, res) => {
   const { page = 1, pageSize = 50, keyword, factory, quoter, currency, category, startDate, endDate, sortBy = 'created_at', sortOrder = 'DESC', multiFilter } = req.query
@@ -204,6 +234,9 @@ router.get('/:id', (req, res) => {
 // POST 新增
 router.post('/', (req, res) => {
   const b = req.body
+  // 防误录入/防同编码两条产品信息：编码已存在且参数不一致、或记录完全重复 → 阻止
+  const conflict = findCreateConflict(b)
+  if (conflict) return res.status(400).json({ code: 1, msg: conflict.msg })
   const r = execute(`INSERT INTO material_prices (material_code,material_name,material_spec,category,brand,dimension,pin_count,frequency,load_cap,voltage,mode,freq_tol,temperature,price_with_tax,price_without_tax,currency,factory_code,quoter,standard_lead_time,min_package,spec_document,first_inquiry_customer,remarks) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
     [b.material_code||'',b.material_name||'',b.material_spec||'',b.category||'',b.brand||'',b.dimension||'',b.pin_count||'',b.frequency||'',b.load_cap||'',b.voltage||'',b.mode||'',b.freq_tol||'',b.temperature||'',b.price_with_tax??null,b.price_without_tax??null,b.currency||'CNY',b.factory_code||'',b.quoter||'',b.standard_lead_time||'',b.min_package||'',b.spec_document||'',b.first_inquiry_customer||'',b.remarks||''])
   res.json({ code: 0, data: { id: r.lastInsertRowid } })

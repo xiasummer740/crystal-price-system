@@ -207,3 +207,54 @@ describe('GET /api/prices/meta/options — 筛选选项', () => {
   })
 
 })
+
+describe('POST /api/prices — 防重复/防参数不一致拦截', () => {
+  const base = {
+    material_code: 'DUP-001',
+    material_name: '重复测试晶振',
+    material_spec: 'SMD3225',
+    category: '无源晶振',
+    brand: 'TXC',
+    dimension: '3225',
+    pin_count: '4PIN',
+    frequency: '32.768KHz',
+    load_cap: '12.5pF',
+    voltage: '3.3V',
+    mode: 'CMOS',
+    freq_tol: '20ppm',
+    temperature: '-40~85℃'
+  }
+
+  it('首条同编码记录新增成功', async () => {
+    const res = await request.post(BASE).send({ ...base, price_with_tax: 0.8, currency: 'USD', factory_code: 'TXC-01', quoter: '张三' })
+    assert.equal(res.body.code, 0, `首条应新增成功, 实际: ${res.body.msg || res.status}`)
+    testIds.push(res.body.data.id)
+  })
+
+  it('同编码不同工厂/价格 → 允许（整合进一条产品）', async () => {
+    const res = await request.post(BASE).send({ ...base, price_with_tax: 0.9, currency: 'USD', factory_code: 'TXC-02', quoter: '李四' })
+    assert.equal(res.status, 200)
+    assert.equal(res.body.code, 0, '同编码不同工厂/价格应允许新增')
+    testIds.push(res.body.data.id)
+  })
+
+  it('同编码技术参数不一致 → 拦截', async () => {
+    const res = await request.post(BASE).send({ ...base, load_cap: '20pF', price_with_tax: 1.0, factory_code: 'TXC-03', quoter: '王五' })
+    assert.equal(res.status, 400, '参数不一致应返回 400')
+    assert.ok(res.body.msg?.includes('技术参数不一致'), `应提示参数不一致, 实际: ${res.body.msg}`)
+  })
+
+  it('完全相同的记录 → 拦截', async () => {
+    const res = await request.post(BASE).send({ ...base, price_with_tax: 0.8, currency: 'USD', factory_code: 'TXC-01', quoter: '张三' })
+    assert.equal(res.status, 400, '完全重复应返回 400')
+    assert.ok(res.body.msg?.includes('完全相同的记录'), `应提示完全重复, 实际: ${res.body.msg}`)
+  })
+
+  it('空编码完全重复 → 拦截', async () => {
+    await request.post(BASE).send({ material_name: '空编码重复测试' })
+    const res = await request.post(BASE).send({ material_name: '空编码重复测试' })
+    assert.equal(res.status, 400, '空编码完全重复应拦截')
+    assert.ok(res.body.msg?.includes('完全相同的记录'))
+  })
+
+})
