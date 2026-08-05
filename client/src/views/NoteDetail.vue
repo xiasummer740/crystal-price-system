@@ -48,7 +48,7 @@
                 {{ {1:'🔴 高',2:'🟡 中',3:'🔵 低'}[note.priority || 2] }}
               </span>
               <span class="meta-item status-badge" :class="note.status">
-                {{ {todo:'待办',in_progress:'进行中',done:'已完成',follow_up:'跟进后续'}[note.status] || '待办' }}
+                {{ {todo:'待办',done:'已完成',follow_up:'跟进后续'}[note.status] || '待办' }}
               </span>
               <span class="meta-item date-item">📅 {{ (note.updated_at || note.created_at || '').slice(0, 10) }}</span>
             </div>
@@ -75,7 +75,7 @@
                   <div class="tl-meta">
                     <span class="tl-time">📅 {{ u.time?.slice(0, 16) }}</span>
                     <span v-if="u.status !== (displayTimeline[i+1]?.status || note.status)" class="tl-status" :class="u.status">
-                      {{ {todo:'待办',in_progress:'进行中',done:'已完成',follow_up:'跟进后续'}[u.status] || '' }}
+                      {{ {todo:'待办',done:'已完成',follow_up:'跟进后续'}[u.status] || '' }}
                     </span>
                     <button class="tl-edit-btn" @click.stop="editTimelineEntry(u._idx)" title="编辑此条记录">✏️</button>
                   </div>
@@ -593,7 +593,6 @@ async function copyCurrentImage() {
 .priority-badge.p2 { background: #fff8e1; color: #f57f17; }
 .priority-badge.p3 { background: #e8f4fd; color: #1565c0; }
 .status-badge.todo { background: #fff7e6; color: #d46b08; border: 1px solid #ffd591; box-shadow: 0 0 8px rgba(212,107,8,.25); animation: glow-orange 2s ease-in-out infinite; }
-.status-badge.in_progress { background: #e6f7ff; color: #1890ff; border: 1px solid #91d5ff; box-shadow: 0 0 8px rgba(24,144,255,.25); animation: glow-blue 2s ease-in-out infinite; }
 .status-badge.done { background: #f6ffed; color: #389e0d; border: 1px solid #b7eb8f; box-shadow: 0 0 8px rgba(56,158,13,.25); animation: glow-green 2s ease-in-out infinite; }
 .status-badge.follow_up { background: #fff3e0; color: #e65100; border: 1px solid #ffcc80; box-shadow: 0 0 8px rgba(230,81,0,.25); animation: glow-orange 2s ease-in-out infinite; }
 @keyframes glow-orange { 0%,100% { box-shadow: 0 0 6px rgba(212,107,8,.25); } 50% { box-shadow: 0 0 14px rgba(212,107,8,.45); } }
@@ -619,7 +618,6 @@ async function copyCurrentImage() {
 .tl-time { font-size: 12px; color: #999; }
 .tl-status { font-size: 10px; padding: 1px 6px; border-radius: 3px; }
 .tl-status.todo { background: #fff7e6; color: #d46b08; }
-.tl-status.in_progress { background: #e6f7ff; color: #1890ff; }
 .tl-status.done { background: #f6ffed; color: #389e0d; }
 .tl-status.follow_up { background: #fff3e0; color: #e65100; }
 .tl-content { font-size: 13px; color: #555; line-height: 1.6; padding: 6px 10px; background: #f9fafb; border-radius: 6px; word-break: break-word; }

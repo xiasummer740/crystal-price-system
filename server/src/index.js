@@ -312,6 +312,17 @@ function cleanupDuplicateSpecs() {
 }
 try { cleanupDuplicateSpecs() } catch (e) { console.warn('[spec-cleanup] 清理失败:', e.message) }
 
+// ===== 记事迁移：去掉「进行中」状态，已有进行中归到待办 =====
+// v1.0.208 起全局移除 in_progress，升级后一次性迁移历史数据
+function migrateNotesDropInProgress() {
+  const r = execute(`UPDATE notes SET status = 'todo' WHERE status = 'in_progress' AND is_deleted = 0`)
+  if (r.changes > 0) {
+    try { saveNow() } catch {}
+    console.log(`[notes-migrate] 已将 ${r.changes} 条「进行中」记事归到「待办」`)
+  }
+}
+try { migrateNotesDropInProgress() } catch (e) { console.warn('[notes-migrate] 迁移失败:', e.message) }
+
 // ===== 规格书迁移：历史客户物料规格书按客户名分文件夹 =====
 // 旧版客户物料规格书都存根目录，迁移到 规格书/客户物料/{客户名}/ 并更新引用
 // 若同一文件被报价系统引用，保留根目录副本（不破坏报价系统）

@@ -38,7 +38,6 @@
         <div class="stat-row">
           <div class="stat-card total"><span class="stat-num">{{ report.total }}</span>总计</div>
           <div class="stat-card done"><span class="stat-num">{{ report.byStatus.done || 0 }}</span>已完成</div>
-          <div class="stat-card doing"><span class="stat-num">{{ report.byStatus.in_progress || 0 }}</span>进行中</div>
           <div class="stat-card todo"><span class="stat-num">{{ report.byStatus.todo || 0 }}</span>待办</div>
           <button class="report-btn" @click="showReport = true; generateReport()">📄 一键报告</button>
         </div>
@@ -64,7 +63,7 @@
                 <div class="item-body">
                   <div class="item-meta">
                     <span class="item-status" :class="'s-' + item.status">
-                      {{ {todo:'📋 待办',in_progress:'🔄 进行中',done:'✅ 已完成',follow_up:'🔄 跟进后续'}[item.status] || '📋' }}
+                      {{ {todo:'📋 待办',done:'✅ 已完成',follow_up:'🔄 跟进后续'}[item.status] || '📋' }}
                     </span>
                     <span class="item-date">{{ (item.created_at||'').slice(5, 10) }}</span>
                   </div>
@@ -170,7 +169,7 @@ const showReport = ref(false)
 const reportText = ref('')
 const currentTabLabel = computed(() => tabs.find(t => t.key === range.value)?.label || range.value)
 
-const statusText = { todo: '待办', in_progress: '进行中', done: '已完成', follow_up: '跟进后续' }
+const statusText = { todo: '待办', done: '已完成', follow_up: '跟进后续' }
 
 function generateReport() {
   const r = report.value
@@ -182,7 +181,6 @@ function generateReport() {
   lines.push(`【${currentTabLabel.value}报告】${period}`)
   const parts = []
   if (r.byStatus.done) parts.push(`已完成 ${r.byStatus.done}`)
-  if (r.byStatus.in_progress) parts.push(`进行中 ${r.byStatus.in_progress}`)
   if (r.byStatus.todo) parts.push(`待办 ${r.byStatus.todo}`)
   if (r.byStatus.follow_up) parts.push(`跟进 ${r.byStatus.follow_up}`)
   lines.push(`总计 ${r.total} 条 | ${parts.join('、')}`)
@@ -296,7 +294,6 @@ async function copyReport() {
 .item-meta{display:flex;align-items:center;gap:8px;margin-bottom:4px}
 .item-status{font-size:11px;padding:1px 6px;border-radius:3px;background:#f0f0f0;color:#666;white-space:nowrap}
 .item-status.s-todo{background:#fff7e6;color:#d46b08}
-.item-status.s-in_progress{background:#e6f7ff;color:#1890ff}
 .item-status.s-done{background:#f6ffed;color:#389e0d}
 .item-status.s-follow_up{background:#fff3e0;color:#e65100}
 .item-date{font-size:11px;color:#999}

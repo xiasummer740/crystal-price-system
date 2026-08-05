@@ -188,7 +188,7 @@ router.get('/', (req, res) => {
     LEFT JOIN note_categories c ON n.category_id = c.id AND c.is_deleted = 0
     ${where}
     ORDER BY n.is_pinned DESC,
-      CASE n.status WHEN 'todo' THEN 0 WHEN 'in_progress' THEN 1 WHEN 'done' THEN 2 WHEN 'follow_up' THEN 3 ELSE 4 END,
+      CASE n.status WHEN 'todo' THEN 0 WHEN 'done' THEN 1 WHEN 'follow_up' THEN 2 ELSE 3 END,
       n.updated_at DESC
     LIMIT ? OFFSET ?
   `, [...params, Number(pageSize), offset])

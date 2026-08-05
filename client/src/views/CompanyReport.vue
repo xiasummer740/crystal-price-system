@@ -32,7 +32,6 @@
         <div class="summary-stats">
           <div class="stat-item"><span class="stat-num">{{ notes.length }}</span>总计</div>
           <div class="stat-item"><span class="stat-num done">{{ doneCount }}</span>已完成</div>
-          <div class="stat-item"><span class="stat-num doing">{{ progressCount }}</span>进行中</div>
           <div class="stat-item"><span class="stat-num todo">{{ todoCount }}</span>待办</div>
         </div>
 
@@ -48,7 +47,7 @@
             <div class="note-head">
               <div class="note-title-row">
                 <span class="note-status" :class="note.status">
-                  {{ {todo:'📋',in_progress:'🔄',done:'✅',follow_up:'🔄'}[note.status] || '📋' }}
+                  {{ {todo:'📋',done:'✅',follow_up:'🔄'}[note.status] || '📋' }}
                 </span>
                 <strong class="note-title" v-if="note.title">{{ note.title }}</strong>
                 <span v-else class="note-title no-title">(无标题)</span>
@@ -170,7 +169,6 @@ const rangeLabel = computed(() => {
 })
 
 const doneCount = computed(() => notes.value.filter(n => n.status === 'done').length)
-const progressCount = computed(() => notes.value.filter(n => n.status === 'in_progress').length)
 const todoCount = computed(() => notes.value.filter(n => n.status === 'todo' || !n.status).length)
 
 const groupedByCategory = computed(() => {

@@ -177,7 +177,7 @@ export function exportNotes(query = {}) {
     ${where}
     ORDER BY n.updated_at DESC
   `, params)
-  const statusMap = { todo: '待办', in_progress: '进行中', done: '已完成' }
+  const statusMap = { todo: '待办', done: '已完成', follow_up: '跟进后续' }
   const priorityMap = { 1: '高', 2: '中', 3: '低' }
   const headers = ['编号','标题','内容','客户','分类','优先级','状态','提醒时间','已提醒','是否置顶','创建时间','更新时间']
   const data = rows.map(r => [
@@ -216,7 +216,7 @@ export async function exportNotesPackage(query = {}) {
     ${where}
     ORDER BY n.updated_at DESC
   `, params)
-  const statusMap = { todo: '待办', in_progress: '进行中', done: '已完成' }
+  const statusMap = { todo: '待办', done: '已完成', follow_up: '跟进后续' }
   const priorityMap = { 1: '高', 2: '中', 3: '低' }
   const headers = ['编号','标题','内容','客户','分类','优先级','状态','提醒时间','已提醒','是否置顶','创建时间','更新时间','图片文件名']
   const data = rows.map(r => {
@@ -262,7 +262,7 @@ export async function exportNotesPackage(query = {}) {
 }
 
 export function generateNoteTemplate() {
-  const headers = ['标题','内容','客户','分类(类型名)','优先级(高/中/低)','状态(待办/进行中/已完成)','提醒时间(YYYY-MM-DD HH:mm)']
+  const headers = ['标题','内容','客户','分类(类型名)','优先级(高/中/低)','状态(待办/已完成)','提醒时间(YYYY-MM-DD HH:mm)']
   const wb = XLSX.utils.book_new()
   const ws = XLSX.utils.aoa_to_sheet([headers])
   ws['!cols'] = headers.map(h => ({ wch: h.length * 1.5 + 4 }))
@@ -340,8 +340,8 @@ export async function importNotesFromZip(fileBuffer, notesUploadDir) {
         return 2
       })(),
       status: (() => {
-        const v = String(col(r, '状态', '状态(待办/进行中/已完成)', 'status'))
-        if (/进行|in_progress/.test(v)) return 'in_progress'
+        const v = String(col(r, '状态', '状态(待办/已完成)', 'status'))
+        if (/进行|in_progress/.test(v)) return 'todo' // 已去掉「进行中」，导入的进行中归到待办
         if (/完成|done/.test(v)) return 'done'
         return 'todo'
       })(),

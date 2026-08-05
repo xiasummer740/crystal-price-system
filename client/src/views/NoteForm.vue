@@ -158,7 +158,7 @@ const reminderTime = ref('')
 const reminderLabel = ref('')
 
 const priorityLabel = computed(() => ({ 1: '🔴 高', 2: '🟡 中', 3: '🔵 低' })[form.priority] || '中')
-const statusLabel = computed(() => ({ todo: '待办', in_progress: '进行中', done: '已完成', follow_up: '跟进后续' })[form.status] || '待办')
+const statusLabel = computed(() => ({ todo: '待办', done: '已完成', follow_up: '跟进后续' })[form.status] || '待办')
 const categoryLabel = computed(() => {
   const c = categories.value.find(c => c.id === form.category_id)
   return c ? c.name : '未分类'
@@ -171,7 +171,6 @@ const priorityActions = [
 ]
 const statusActions = [
   { name: '待办', value: 'todo' },
-  { name: '进行中', value: 'in_progress' },
   { name: '已完成', value: 'done' },
   { name: '跟进后续', value: 'follow_up' }
 ]

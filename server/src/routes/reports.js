@@ -98,7 +98,7 @@ router.get('/', async (req, res) => {
 
     // 统计
     const total = notes.length
-    const byStatus = { todo: 0, in_progress: 0, done: 0 }
+    const byStatus = { todo: 0, done: 0 }
     const customerMap = {}
 
     for (const note of notes) {
@@ -131,7 +131,7 @@ router.get('/', async (req, res) => {
     const highlights = []
     const doneCount = byStatus.done || 0
     if (doneCount > 0) highlights.push(`完成 ${doneCount} 项`)
-    const pendingCount = byStatus.todo + byStatus.in_progress
+    const pendingCount = byStatus.todo
     if (pendingCount > 0) highlights.push(`待跟进 ${pendingCount} 项`)
     const customerCount = byCustomer.length
     if (customerCount > 0) highlights.push(`涉及 ${customerCount} 个客户`)
