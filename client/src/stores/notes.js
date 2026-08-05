@@ -18,7 +18,7 @@ export const useNotesStore = defineStore('notes', {
       priority: '',
       reminder: ''
     },
-    viewMode: 'card' // card | kanban
+    viewMode: 'kanban' // card | kanban，默认看板视图方便看进度
   }),
 
   actions: {
