@@ -129,8 +129,8 @@
             <input ref="specFileInput" type="file" hidden @change="onSpecUpload" />
           </div>
           <van-field v-model="form.first_inquiry_customer" label="初次询价客户" placeholder="如：某某科技" />
-          <div class="remark-zone" @dragover.prevent @drop.prevent="onRemarkDrop">
-            <van-field v-model="form.remarks" label="备注" placeholder="其他备注（可粘贴图片/文件记录报价原始记录）" type="textarea" rows="2" autosize @paste="onRemarkPaste" />
+          <div class="remark-zone" @dragover.prevent @drop.prevent="onRemarkDrop" @paste="onRemarkPaste">
+            <van-field v-model="form.remarks" label="备注" placeholder="其他备注（可粘贴图片/文件记录报价原始记录）" type="textarea" rows="2" autosize />
             <div v-if="(form.remark_images||[]).length" class="rimg-grid">
               <div v-for="(url,i) in form.remark_images" :key="i" class="rimg-item">
                 <template v-if="isRImg(url)">
