@@ -85,6 +85,14 @@ export function deletePrice(id) {
   return http.delete(`/prices/${id}`)
 }
 
+// 报价备注图片/文件上传与删除
+export function uploadPriceImages(formData) {
+  return http.post('/prices/upload', formData)
+}
+export function deletePriceImage(filename) {
+  return http.delete(`/prices/upload/${encodeURIComponent(filename)}`)
+}
+
 export function getMetaOptions() {
   return http.get('/prices/meta/options')
 }

@@ -146,6 +146,11 @@ const notesUploadDir = path.join(process.env.DATA_DIR || path.join(__dirname, '.
 if (!fs.existsSync(notesUploadDir)) fs.mkdirSync(notesUploadDir, { recursive: true })
 app.use('/api/uploads/notes', express.static(notesUploadDir))
 
+// 报价备注图片上传（微信粘贴图片/文件，记录报价原始记录）
+const pricesUploadDir = path.join(process.env.DATA_DIR || path.join(__dirname, '..'), '报价图片库')
+if (!fs.existsSync(pricesUploadDir)) fs.mkdirSync(pricesUploadDir, { recursive: true })
+app.use('/api/uploads/prices', express.static(pricesUploadDir))
+
 // 规格书上传
 // folder 字段：可选子目录（如 "客户物料/深圳市XX"），报价系统不传则存根目录
 // 去重：目标目录已有同名文件 → 复用已有文件，不重复存储

@@ -67,6 +67,8 @@ export async function initDb() {
   try { db.run('ALTER TABLE material_prices ADD COLUMN min_package TEXT') } catch {}
   // 兼容旧数据库：添加温度列
   try { db.run('ALTER TABLE material_prices ADD COLUMN temperature TEXT') } catch {}
+  // 兼容旧数据库：添加备注图片列（JSON 数组：报价备注里粘贴的图片/文件 URL 列表）
+  try { db.run("ALTER TABLE material_prices ADD COLUMN remark_images TEXT DEFAULT '[]'") } catch {}
 
   // 兼容旧数据库：重命名采购员为报价人
   try { db.run('ALTER TABLE material_prices RENAME COLUMN purchaser TO quoter') } catch {}

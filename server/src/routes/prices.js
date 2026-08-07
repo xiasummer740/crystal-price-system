@@ -1,7 +1,48 @@
 import { Router } from 'express'
+import multer from 'multer'
+import path from 'path'
+import fs from 'fs'
+import { fileURLToPath } from 'url'
 import { queryAll, queryOne, execute } from '../db.js'
 
 const router = Router()
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
+
+// ========== 报价备注图片/文件上传 ==========
+const pricesUploadDir = path.join(process.env.DATA_DIR || path.join(__dirname, '..', '..'), '报价图片库')
+if (!fs.existsSync(pricesUploadDir)) fs.mkdirSync(pricesUploadDir, { recursive: true })
+
+const fileUpload = multer({
+  storage: multer.diskStorage({
+    destination: pricesUploadDir,
+    filename: (_req, file, cb) => {
+      const ext = path.extname(file.originalname) || ''
+      const base = path.basename(file.originalname, ext)
+      const safeBase = base.replace(/[<>:"/\\|?*]/g, '_').slice(0, 80)
+      cb(null, Date.now() + '-' + Math.random().toString(36).slice(2, 8) + '-' + safeBase + ext)
+    }
+  }),
+  limits: { fileSize: 50 * 1024 * 1024 } // 50MB
+})
+
+// 备注附件上传
+router.post('/upload', fileUpload.array('files', 9), (req, res) => {
+  if (!req.files || !req.files.length) return res.status(400).json({ code: 1, msg: '请选择文件' })
+  const urls = req.files.map(f => `/api/uploads/prices/${encodeURIComponent(f.filename)}`)
+  res.json({ code: 0, data: urls })
+})
+
+// 删除已上传的备注附件
+router.delete('/upload/:filename', (req, res) => {
+  let filename = decodeURIComponent(req.params.filename)
+  if (filename.includes('/') || filename.includes('\\') || filename === '' || filename === '.') {
+    return res.status(400).json({ code: 1, msg: '非法的文件名' })
+  }
+  const filePath = path.join(pricesUploadDir, filename)
+  if (!fs.existsSync(filePath)) return res.status(404).json({ code: 1, msg: '文件不存在' })
+  try { fs.unlinkSync(filePath); res.json({ code: 0, msg: '已删除' }) }
+  catch (e) { res.status(500).json({ code: 1, msg: '删除失败' }) }
+})
 
 // 组合筛选解析
 function parseMultiFilter(multiStr, alias = '') {
@@ -237,8 +278,8 @@ router.post('/', (req, res) => {
   // 防误录入/防同编码两条产品信息：编码已存在且参数不一致、或记录完全重复 → 阻止
   const conflict = findCreateConflict(b)
   if (conflict) return res.status(400).json({ code: 1, msg: conflict.msg })
-  const r = execute(`INSERT INTO material_prices (material_code,material_name,material_spec,category,brand,dimension,pin_count,frequency,load_cap,voltage,mode,freq_tol,temperature,price_with_tax,price_without_tax,currency,factory_code,quoter,standard_lead_time,min_package,spec_document,first_inquiry_customer,remarks) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-    [b.material_code||'',b.material_name||'',b.material_spec||'',b.category||'',b.brand||'',b.dimension||'',b.pin_count||'',b.frequency||'',b.load_cap||'',b.voltage||'',b.mode||'',b.freq_tol||'',b.temperature||'',b.price_with_tax??null,b.price_without_tax??null,b.currency||'CNY',b.factory_code||'',b.quoter||'',b.standard_lead_time||'',b.min_package||'',b.spec_document||'',b.first_inquiry_customer||'',b.remarks||''])
+  const r = execute(`INSERT INTO material_prices (material_code,material_name,material_spec,category,brand,dimension,pin_count,frequency,load_cap,voltage,mode,freq_tol,temperature,price_with_tax,price_without_tax,currency,factory_code,quoter,standard_lead_time,min_package,spec_document,first_inquiry_customer,remarks,remark_images) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    [b.material_code||'',b.material_name||'',b.material_spec||'',b.category||'',b.brand||'',b.dimension||'',b.pin_count||'',b.frequency||'',b.load_cap||'',b.voltage||'',b.mode||'',b.freq_tol||'',b.temperature||'',b.price_with_tax??null,b.price_without_tax??null,b.currency||'CNY',b.factory_code||'',b.quoter||'',b.standard_lead_time||'',b.min_package||'',b.spec_document||'',b.first_inquiry_customer||'',b.remarks||'',Array.isArray(b.remark_images)?JSON.stringify(b.remark_images):'[]'])
   res.json({ code: 0, data: { id: r.lastInsertRowid } })
 })
 
@@ -246,9 +287,12 @@ router.post('/', (req, res) => {
 router.put('/:id', (req, res) => {
   const existing = queryOne('SELECT * FROM material_prices WHERE id = ? AND is_deleted = 0', [Number(req.params.id)])
   if (!existing) return res.status(404).json({ code: 1, msg: '记录不存在' })
-  const fields = ['material_code','material_name','material_spec','category','brand','dimension','pin_count','frequency','load_cap','voltage','mode','freq_tol','temperature','price_with_tax','price_without_tax','currency','factory_code','quoter','standard_lead_time','min_package','spec_document','first_inquiry_customer','remarks']
+  const fields = ['material_code','material_name','material_spec','category','brand','dimension','pin_count','frequency','load_cap','voltage','mode','freq_tol','temperature','price_with_tax','price_without_tax','currency','factory_code','quoter','standard_lead_time','min_package','spec_document','first_inquiry_customer','remarks','remark_images']
   const sets = fields.map(f => `${f} = ?`)
-  const values = fields.map(f => req.body[f] ?? existing[f])
+  const values = fields.map(f => {
+    if (f === 'remark_images') return Array.isArray(req.body[f]) ? JSON.stringify(req.body[f]) : (existing[f] || '[]')
+    return req.body[f] ?? existing[f]
+  })
   execute(`UPDATE material_prices SET updated_at = datetime('now','localtime'), ${sets.join(', ')} WHERE id = ?`, [...values, Number(req.params.id)])
   // 记录价格/币种变更日志
   const logFields = ['price_with_tax','price_without_tax','currency']

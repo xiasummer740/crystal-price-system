@@ -39,6 +39,23 @@
         <van-cell title="备注" :label="detail.remarks||''" />
       </van-cell-group>
 
+      <van-cell-group v-if="detail.remarkImages && detail.remarkImages.length" inset title="备注图片/文件">
+        <div class="rimg-grid">
+          <div v-for="(url,i) in detail.remarkImages" :key="i" class="rimg-item">
+            <template v-if="isRImg(url)">
+              <img :src="url" @click="rPreview=i; showRPreview=true" loading="lazy" />
+            </template>
+            <template v-else>
+              <div class="rfile" @click="openRFile(url)">
+                <span class="rfile-icon">{{ rFileIcon(url) }}</span>
+                <span class="rfile-name">{{ rFileName(url) }}</span>
+              </div>
+            </template>
+          </div>
+        </div>
+      </van-cell-group>
+      <van-image-preview v-model:show="showRPreview" :images="detail.remarkImages || []" :start-position="rPreview" @change="rPreview = $event" />
+
       <div style="margin:24px 16px;display:flex;flex-direction:column;gap:10px">
         <button class="detail-btn primary" @click="router.push('/edit/'+detail.id)">编辑报价</button>
         <button class="detail-btn outline" @click="viewAllQuotes">查看此物料所有报价</button>
@@ -69,10 +86,44 @@ const router = useRouter()
 const store = usePriceStore()
 const detail = ref(null)
 
+const showRPreview = ref(false)
+const rPreview = ref(0)
+function isRImg(url) {
+  return /\.(jpg|jpeg|png|gif|webp|bmp|svg)(\?|$)/i.test(url)
+}
+function rFileIcon(url) {
+  const ext = url.split('?')[0].split('.').pop()?.toLowerCase() || ''
+  if (['pdf'].includes(ext)) return '📄'
+  if (['doc','docx'].includes(ext)) return '📝'
+  if (['xls','xlsx','csv'].includes(ext)) return '📊'
+  if (['zip','rar','7z'].includes(ext)) return '📦'
+  if (['txt','json','xml','md'].includes(ext)) return '📃'
+  return '📎'
+}
+function rFileName(url) {
+  const nameMatch = url.match(/[?&]name=([^&]+)/)
+  if (nameMatch) { try { return decodeURIComponent(nameMatch[1]) } catch {} }
+  const p = url.split('?')[0].split('/').pop()
+  try { return decodeURIComponent(p) } catch { return p }
+}
+function openRFile(url) {
+  const name = rFileName(url)
+  fetch(url).then(r => r.blob()).then(blob => {
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(blob)
+    a.download = name
+    a.click()
+    URL.revokeObjectURL(a.href)
+  }).catch(() => window.open(url, '_blank'))
+}
+
 function fmtP(val,cur) { return (cur==='USD'?'$':'¥')+Number(val).toFixed(4) }
 function viewAllQuotes() { if(detail.value) { store.setFilter('keyword', detail.value.material_code||''); store.setFilter('page', 1); router.push('/') } }
 async function handleDelete() { try { await showConfirmDialog({title:'确认删除',message:`删除物料「${detail.value.material_code}」的报价？`}); await store.remove(detail.value.id); showToast('已删除'); router.push('/') } catch{} }
-onMounted(async ()=>{ detail.value = await store.loadDetail(route.params.id) })
+onMounted(async ()=>{
+  detail.value = await store.loadDetail(route.params.id)
+  try { const a = JSON.parse(detail.value.remark_images || '[]'); detail.value.remarkImages = Array.isArray(a) ? a : [] } catch { detail.value.remarkImages = [] }
+})
 </script>
 
 <style scoped>
@@ -83,6 +134,14 @@ onMounted(async ()=>{ detail.value = await store.loadDetail(route.params.id) })
 .detail-btn.primary{background:var(--color-primary);color:#fff}
 .detail-btn.outline{background:transparent;color:var(--color-primary);border:1px solid var(--color-primary)}
 .detail-btn.danger{background:transparent;color:#ee0a24;border:1px solid #ee0a24}
+
+/* ===== 备注图片/文件 ===== */
+.rimg-grid { display: flex; flex-wrap: wrap; gap: 8px; padding: 10px 16px; }
+.rimg-item { position: relative; width: 72px; height: 72px; border-radius: 8px; overflow: hidden; border: 1px solid #eee; background: #fafafa; }
+.rimg-item img { width: 100%; height: 100%; object-fit: cover; cursor: pointer; }
+.rimg-item .rfile { width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; color: #666; }
+.rimg-item .rfile-icon { font-size: 22px; }
+.rimg-item .rfile-name { font-size: 9px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 2px; }
 
 /* ===== 移动端适配 ===== */
 @media (max-width: 768px) {

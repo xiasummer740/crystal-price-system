@@ -129,8 +129,30 @@
             <input ref="specFileInput" type="file" hidden @change="onSpecUpload" />
           </div>
           <van-field v-model="form.first_inquiry_customer" label="初次询价客户" placeholder="如：某某科技" />
-          <van-field v-model="form.remarks" label="备注" placeholder="其他备注" type="textarea" rows="2" autosize />
+          <div class="remark-zone" @dragover.prevent @drop.prevent="onRemarkDrop">
+            <van-field v-model="form.remarks" label="备注" placeholder="其他备注（可粘贴图片/文件记录报价原始记录）" type="textarea" rows="2" autosize @paste="onRemarkPaste" />
+            <div v-if="(form.remark_images||[]).length" class="rimg-grid">
+              <div v-for="(url,i) in form.remark_images" :key="i" class="rimg-item">
+                <template v-if="isRImg(url)">
+                  <img :src="url" @click="rPreview=i; showRPreview=true" loading="lazy" />
+                </template>
+                <template v-else>
+                  <div class="rfile" @click="openRFile(url)">
+                    <span class="rfile-icon">{{ rFileIcon(url) }}</span>
+                    <span class="rfile-name">{{ rFileName(url) }}</span>
+                  </div>
+                </template>
+                <button type="button" class="rimg-del" @click="removeRImg(i)" title="删除">×</button>
+              </div>
+            </div>
+            <div v-if="(form.remark_images||[]).length < 9" class="rimg-add-row">
+              <button type="button" class="rimg-add" @click="remarkFileInput?.click()">＋ 上传图片/文件</button>
+              <span class="rimg-hint">微信 Ctrl+V 粘贴，最多 9 个</span>
+            </div>
+            <input ref="remarkFileInput" type="file" multiple hidden @change="onRemarkFileChange" />
+          </div>
         </van-cell-group>
+        <van-image-preview v-model:show="showRPreview" :images="(form.remark_images||[])" :start-position="rPreview" @change="rPreview = $event" />
 
         <div style="margin:20px 16px;display:flex;flex-direction:column;gap:10px">
           <van-button round block type="primary" native-type="submit" :loading="submitting">{{ isEdit ? '保存修改' : '提交记录' }}</van-button>
@@ -150,7 +172,7 @@ import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter, onBeforeRouteLeave } from 'vue-router'
 import { usePriceStore } from '../stores/price.js'
 import { showToast, showLoadingToast, closeToast, showConfirmDialog } from 'vant'
-import { http } from '../utils/api.js'
+import { http, uploadPriceImages, deletePriceImage } from '../utils/api.js'
 
 const route = useRoute()
 const router = useRouter()
@@ -168,7 +190,7 @@ const form = ref({
   brand:'', dimension:'', pin_count:'', frequency:'', load_cap:'', voltage:'', mode:'', freq_tol:'', temperature:'',
   price_with_tax:null, price_without_tax:null, currency:'CNY',
   factory_code:'', quoter:'', standard_lead_time:'', min_package:'', spec_document:'',
-  first_inquiry_customer:'', remarks:''
+  first_inquiry_customer:'', remarks:'', remark_images:[]
 })
 
 // ===== 未保存检测 =====
@@ -283,6 +305,89 @@ async function uploadSpecFile(file) {
   try { const r=await http.post('/upload-spec?folder=' + encodeURIComponent(folder), fd); form.value.spec_document=r.data.url; showToast('上传成功') } catch { showToast('上传失败') }
 }
 
+// ===== 备注图片/文件（微信粘贴报价原始记录，多张可选删除） =====
+const remarkFileInput = ref(null)
+const showRPreview = ref(false)
+const rPreview = ref(0)
+function isRImg(url) {
+  return /\.(jpg|jpeg|png|gif|webp|bmp|svg)(\?|$)/i.test(url)
+}
+function rFileIcon(url) {
+  const ext = url.split('?')[0].split('.').pop()?.toLowerCase() || ''
+  if (['pdf'].includes(ext)) return '📄'
+  if (['doc','docx'].includes(ext)) return '📝'
+  if (['xls','xlsx','csv'].includes(ext)) return '📊'
+  if (['zip','rar','7z'].includes(ext)) return '📦'
+  if (['txt','json','xml','md'].includes(ext)) return '📃'
+  return '📎'
+}
+function rFileName(url) {
+  const nameMatch = url.match(/[?&]name=([^&]+)/)
+  if (nameMatch) { try { return decodeURIComponent(nameMatch[1]) } catch {} }
+  const p = url.split('?')[0].split('/').pop()
+  try { return decodeURIComponent(p) } catch { return p }
+}
+function openRFile(url) {
+  const name = rFileName(url)
+  fetch(url).then(r => r.blob()).then(blob => {
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(blob)
+    a.download = name
+    a.click()
+    URL.revokeObjectURL(a.href)
+  }).catch(() => window.open(url, '_blank'))
+}
+async function uploadRImages(files) {
+  const remaining = 9 - (form.value.remark_images || []).length
+  if (remaining <= 0) { showToast('最多上传9个文件'); return }
+  const toUpload = Array.from(files).slice(0, remaining)
+  const fd = new FormData()
+  const origNames = toUpload.map(f => f.name)
+  for (const f of toUpload) fd.append('files', f)
+  try {
+    const r = await uploadPriceImages(fd)
+    const urls = r.data || []
+    const enriched = urls.map((url, i) => url + '?name=' + encodeURIComponent(origNames[i]))
+    form.value.remark_images.push(...enriched)
+    showToast(`已上传 ${urls.length} 个文件`)
+  } catch (e) {
+    showToast('上传失败: ' + (e.response?.data?.msg || e.message))
+  }
+}
+async function onRemarkDrop(e) {
+  const files = e.dataTransfer?.files
+  if (!files?.length) return
+  await uploadRImages(files)
+}
+async function onRemarkPaste(e) {
+  const items = e.clipboardData?.items
+  if (!items) return
+  const files = []
+  for (const item of items) {
+    if (item.type?.startsWith('image/') || item.kind === 'file') {
+      const file = item.getAsFile()
+      if (file) files.push(file)
+    }
+  }
+  if (!files.length) return
+  e.preventDefault()
+  showToast(`检测到 ${files.length} 个文件，上传中…`)
+  await uploadRImages(files)
+}
+async function onRemarkFileChange(e) {
+  const files = e.target.files
+  if (files?.length) await uploadRImages(files)
+  remarkFileInput.value.value = ''
+}
+async function removeRImg(i) {
+  const url = form.value.remark_images[i]
+  if (url) {
+    const filename = url.split('?')[0].split('/').pop()
+    deletePriceImage(filename).catch(() => {})
+  }
+  form.value.remark_images.splice(i, 1)
+}
+
 function onCurrencyConfirm({ selectedOptions }) { form.value.currency = selectedOptions[0].value; showCurrencyPicker.value = false }
 function onTempConfirm({ selectedOptions }) { form.value.temperature = selectedOptions[0].value; showTempPicker.value = false }
 // 自动计算含税↔未税
@@ -305,7 +410,8 @@ async function loadFormData() {
         currency:data.currency, factory_code:data.factory_code||'',
         quoter:data.quoter||'', standard_lead_time:data.standard_lead_time||'', min_package:data.min_package||'',
         spec_document:data.spec_document||'', first_inquiry_customer:data.first_inquiry_customer||'',
-        remarks:data.remarks||''
+        remarks:data.remarks||'',
+        remark_images:(() => { try { const a = JSON.parse(data.remark_images || '[]'); return Array.isArray(a) ? a : [] } catch { return [] } })()
       }
     } finally { closeToast() }
   } else {
@@ -360,4 +466,18 @@ async function onSubmitNew() {
 .spec-link{color:var(--color-primary);text-decoration:none;font-size:12px}
 .spec-link:hover{text-decoration:underline}
 .spec-placeholder{color:#bbb;font-size:12px}
+/* ===== 备注图片/文件 ===== */
+.remark-zone { padding: 0 16px 12px; }
+.remark-zone :deep(.van-cell-group--inset) { margin: 0; }
+.rimg-grid { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.rimg-item { position: relative; width: 72px; height: 72px; border-radius: 8px; overflow: hidden; border: 1px solid #eee; background: #fafafa; }
+.rimg-item img { width: 100%; height: 100%; object-fit: cover; cursor: pointer; }
+.rimg-item .rfile { width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; color: #666; }
+.rimg-item .rfile-icon { font-size: 22px; }
+.rimg-item .rfile-name { font-size: 9px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 2px; }
+.rimg-del { position: absolute; top: 2px; right: 2px; width: 18px; height: 18px; border-radius: 50%; background: rgba(0,0,0,.55); color: #fff; border: none; font-size: 12px; line-height: 18px; text-align: center; cursor: pointer; padding: 0; }
+.rimg-add-row { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+.rimg-add { padding: 6px 14px; border: 1px dashed #c8c9cc; border-radius: 6px; background: #fff; color: var(--color-primary); font-size: 12px; cursor: pointer; }
+.rimg-add:hover { border-color: var(--color-primary); }
+.rimg-hint { font-size: 10px; color: #bbb; }
 </style>
