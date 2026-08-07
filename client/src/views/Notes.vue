@@ -245,8 +245,8 @@ const hasActiveFilter = computed(() =>
 
 const kanbanCols = [
   { key: 'todo', label: '待办', color: '#757575' },
-  { key: 'done', label: '已完成', color: '#2e7d32' },
-  { key: 'follow_up', label: '跟进后续', color: '#e65100' }
+  { key: 'follow_up', label: '跟进后续', color: '#e65100' },
+  { key: 'done', label: '已完成', color: '#2e7d32' }
 ]
 
 const grouped = computed(() => {

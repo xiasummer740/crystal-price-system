@@ -238,9 +238,32 @@ router.get('/:id', (req, res) => {
   res.json({ code: 0, data: parseAlternates(row) })
 })
 
+// 防重复：同客户下，客户物料编码/晶科鑫料号已存在则拦截（不同客户可以有相同料号）
+function findMaterialDuplicate(b, excludeId = null) {
+  const customer = String(b.customer || '').trim()
+  const ccode = String(b.customer_code || '').trim()
+  const jcode = String(b.jkx_code || '').trim()
+  if (!customer || (!ccode && !jcode)) return null
+  const base = ['is_deleted = 0', 'customer = ?']
+  const baseParams = [customer]
+  if (excludeId) { base.push('id != ?'); baseParams.push(excludeId) }
+  if (ccode) {
+    const row = queryOne(`SELECT * FROM customer_materials WHERE ${[...base, 'customer_code = ?'].join(' AND ')} LIMIT 1`, [...baseParams, ccode])
+    if (row) return { msg: `该客户下「客户物料编码 ${ccode}」已存在，不能重复添加` }
+  }
+  if (jcode) {
+    const row = queryOne(`SELECT * FROM customer_materials WHERE ${[...base, 'jkx_code = ?'].join(' AND ')} LIMIT 1`, [...baseParams, jcode])
+    if (row) return { msg: `该客户下「晶科鑫料号 ${jcode}」已存在，不能重复添加` }
+  }
+  return null
+}
+
 // 新增
 router.post('/', (req, res) => {
   const b = req.body
+  // 同客户内客户物料编码/晶科鑫料号重复 → 拦截
+  const dup = findMaterialDuplicate(b)
+  if (dup) return res.status(400).json({ code: 1, msg: dup.msg })
   const alternates = Array.isArray(b.alternates)
     ? JSON.stringify(b.alternates.filter(a => a && (a.material_name || a.factory)))
     : '[]'
@@ -273,6 +296,13 @@ router.put('/:id', (req, res) => {
   if (!existing) return res.status(404).json({ code: 1, msg: '记录不存在' })
 
   const b = req.body
+  // 编辑时同样校验：改了编码撞上同客户已有编码 → 拦截（排除自身；缺省字段用原值）
+  const dup = findMaterialDuplicate({
+    customer: b.customer ?? existing.customer,
+    customer_code: b.customer_code ?? existing.customer_code,
+    jkx_code: b.jkx_code ?? existing.jkx_code
+  }, Number(req.params.id))
+  if (dup) return res.status(400).json({ code: 1, msg: dup.msg })
   const alternates = Array.isArray(b.alternates)
     ? JSON.stringify(b.alternates.filter(a => a && (a.material_name || a.factory)))
     : (existing.alternates || '[]')
