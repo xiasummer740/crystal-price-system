@@ -54,7 +54,7 @@
           </div>
         </div>
       </van-cell-group>
-      <van-image-preview v-model:show="showRPreview" :images="detail.remarkImages || []" :start-position="rPreview" @change="rPreview = $event" />
+      <van-image-preview v-model:show="showRPreview" :images="detail.remarkImages || []" :start-position="rPreview" closeable close-on-click-overlay @change="rPreview = $event" />
 
       <div style="margin:24px 16px;display:flex;flex-direction:column;gap:10px">
         <button class="detail-btn primary" @click="router.push('/edit/'+detail.id)">编辑报价</button>

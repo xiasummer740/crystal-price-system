@@ -152,7 +152,7 @@
             <input ref="remarkFileInput" type="file" multiple hidden @change="onRemarkFileChange" />
           </div>
         </van-cell-group>
-        <van-image-preview v-model:show="showRPreview" :images="(form.remark_images||[])" :start-position="rPreview" @change="rPreview = $event" />
+        <van-image-preview v-model:show="showRPreview" :images="(form.remark_images||[])" :start-position="rPreview" closeable close-on-click-overlay @change="rPreview = $event" />
 
         <div style="margin:20px 16px;display:flex;flex-direction:column;gap:10px">
           <van-button round block type="primary" native-type="submit" :loading="submitting">{{ isEdit ? '保存修改' : '提交记录' }}</van-button>

@@ -61,6 +61,7 @@
             <td class="ellip" :title="item.remarks">{{ item.remarks||'-' }}</td>
             <td class="act-col">
               <a v-if="item.spec_document" class="spec-link" :href="item.spec_document" target="_blank" @click.prevent="openExternal(item.spec_document)">📄</a>
+              <a v-if="rimgCount(item)" class="rimg-link" title="备注图片" @click.stop="previewRImgs(item)">📷<em v-if="rimgCount(item)>1">{{ rimgCount(item) }}</em></a>
               <span v-if="item.record_count>1 && item.factory_count>0" class="group-badge" @click.stop="$emit('showDetail', item)">{{ item.factory_count||0 }}厂 {{ item.record_count||0 }}条</span>
               <router-link v-if="item.record_count<=1" :to="'/edit/'+item.id" class="row-btn edit" @click.stop>改</router-link>
               <button v-if="item.record_count>1" class="row-btn edit" @click.stop="$emit('groupEdit', item)">改</button>
@@ -70,6 +71,7 @@
         </tbody>
       </table>
     </div>
+    <van-image-preview v-model:show="showRPreview" :images="previewImgs" :start-position="previewIdx" closeable close-on-click-overlay @change="previewIdx = $event" />
     <div class="pager-bar">
       <div class="pager" v-if="total > pageSize">
         <button class="pg-btn" :disabled="page<=1" @click="$emit('pageChange', 1)">首页</button>
@@ -123,6 +125,20 @@ function toggleCheck(id) {
   idx >= 0 ? ids.splice(idx, 1) : ids.push(id)
   emit('update:checkedIds', ids)
 }
+
+// 备注图片预览（主列表 📷 标识）
+const showRPreview = ref(false)
+const previewImgs = ref([])
+const previewIdx = ref(0)
+function parseRImgs(str) {
+  try { const a = JSON.parse(str || '[]'); return Array.isArray(a) ? a : [] } catch { return [] }
+}
+function rimgCount(item) { return item && item.remark_images ? parseRImgs(item.remark_images).length : 0 }
+function previewRImgs(item) {
+  previewImgs.value = parseRImgs(item.remark_images)
+  previewIdx.value = 0
+  if (previewImgs.value.length) showRPreview.value = true
+}
 const shellRef = ref(null)
 const tableRef = ref(null)
 let resizeCol = -1
@@ -155,6 +171,9 @@ function openColFilter(col, label) { emit('openColFilter', col, label) }
 .row-btn.del{color:#ee0a24;border-color:#ee0a24}.row-btn.del:hover{background:#fff0f0}
 .group-badge{display:inline-block;padding:2px 6px;border-radius:4px;font-size:10px;cursor:pointer;background:#fff3e0;color:#e65100;border:1px solid #ffcc80;white-space:nowrap}
 .group-badge:hover{background:#ffe0b2}
+.rimg-link{display:inline-block;text-decoration:none;cursor:pointer;font-size:12px;line-height:1;position:relative;padding:2px}
+.rimg-link em{position:absolute;top:-4px;right:-6px;background:#ee0a24;color:#fff;font-size:8px;font-style:normal;border-radius:8px;padding:0 3px;line-height:12px}
+.rimg-link:hover{opacity:.7}
 .col-filter{display:inline-block;color:#ccc;cursor:pointer;font-size:11px;margin-left:2px;padding:1px 3px;border-radius:2px;vertical-align:middle;position:relative;z-index:1}
 .col-filter:hover{color:var(--color-primary);background:rgba(var(--color-primary-rgb),.08)}
 .pager-bar{display:flex;justify-content:center;align-items:center;gap:16px;padding:12px 0 4px;white-space:nowrap}

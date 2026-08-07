@@ -439,7 +439,8 @@
             <td><span class="ctag" :class="q.currency==='USD'?'u':'c'">{{ q.currency }}</span></td>
             <td>{{ q.standard_lead_time||'-' }}</td><td class="muted">{{ q.min_package ? q.min_package+'pcs' : '-' }}</td><td>{{ q.quoter||'-' }}</td>
             <td class="ellip" :title="q.first_inquiry_customer">{{ q.first_inquiry_customer||'-' }}</td><td class="ellip" :title="q.remarks">{{ q.remarks||'-' }}</td>
-            <td @click.stop style="display:flex;gap:2px;flex-wrap:wrap">
+            <td @click.stop style="display:flex;gap:2px;flex-wrap:wrap;align-items:center">
+              <button v-if="q.rimg && q.rimg.length" class="row-btn rimgs" style="font-size:9px" @click.stop="previewPopupR(q)" title="备注图片">📷{{ q.rimg.length }}</button>
               <router-link :to="'/edit/'+q.id" class="row-btn edit" style="font-size:9px">改</router-link>
               <button class="row-btn del" style="font-size:9px" @click.stop="deletePopupRecord(q)">删</button>
             </td>
@@ -458,6 +459,9 @@
         </div>
       </div>
     </van-popup>
+
+    <!-- 报价备注图片预览 -->
+    <van-image-preview v-model:show="popRShow" :images="popRImgs" :start-position="popRIdx" closeable close-on-click-overlay @change="popRIdx = $event" />
   </div>
 
 </template>
@@ -654,7 +658,47 @@ async function saveSpecs() {
 function onSpecTempConfirm({selectedOptions}) { specEditForm.value.temperature = selectedOptions[0].value; showSpecTempPicker.value = false }
 function goDetail(id){showPopup.value=false;router.push('/detail/'+id)}
 function quickAddFromPopup(){showPopup.value=false;const fk=Object.keys(md.value.factories)[0];const q=md.value.factories[fk]?.[0];if(q){router.push({path:'/add',query:{code:q.material_code||'',name:q.material_name||'',spec:q.material_spec||'',cat:q.category||'',brand:q.brand||'',dim:q.dimension||'',pin:q.pin_count||'',freq:q.frequency||'',load:q.load_cap||'',volt:q.voltage||'',mode:q.mode||'',ftol:q.freq_tol||''}})}}
-async function showDetail(item){try{const code=item.material_code||'_empty_';const tfs=['material_name','material_spec','category','brand','dimension','pin_count','frequency','load_cap','voltage','mode','freq_tol'];const qs=new URLSearchParams();tfs.forEach(t=>{if(item[t])qs.set(t,item[t])});const qstr=qs.toString();const [r, lr] = await Promise.all([http.get(`/prices/by-material/${encodeURIComponent(code)}${qstr?'?'+qstr:''}`), http.get(`/prices/price-logs/${encodeURIComponent(code)}`).catch(()=>({data:[]}))]);const d=r.data;for(const f of Object.keys(d.factories)){const seen=new Set();d.factories[f]=d.factories[f].filter(q=>{const k=q.price_with_tax+'|'+q.price_without_tax+'|'+q.currency+'|'+q.factory_code+'|'+q.quoter+'|'+q.standard_lead_time+'|'+q.first_inquiry_customer+'|'+(q.remarks||'');if(seen.has(k))return false;seen.add(k);return true});d.factories[f].sort((a,b)=>(a.price_with_tax??a.price_without_tax??999999)-(b.price_with_tax??b.price_without_tax??999999))}d.total=Object.values(d.factories).reduce((s,a)=>s+a.length,0);d.logs=lr.data||[];md.value=d;showPopup.value=true}catch(e){showToast('加载失败: '+(e.response?.data?.msg||e.message||'网络错误'))}}
+// 备注图片预览（弹窗每行 📷 标识）
+const popRShow = ref(false)
+const popRImgs = ref([])
+const popRIdx = ref(0)
+function parseRImgs(str) {
+  try { const a = JSON.parse(str || '[]'); return Array.isArray(a) ? a : [] } catch { return [] }
+}
+function previewPopupR(q) {
+  popRImgs.value = q.rimg || parseRImgs(q.remark_images)
+  popRIdx.value = 0
+  if (popRImgs.value.length) popRShow.value = true
+}
+async function showDetail(item){
+  try{
+    const code=item.material_code||'_empty_'
+    const tfs=['material_name','material_spec','category','brand','dimension','pin_count','frequency','load_cap','voltage','mode','freq_tol']
+    const qs=new URLSearchParams()
+    tfs.forEach(t=>{if(item[t])qs.set(t,item[t])})
+    const qstr=qs.toString()
+    const [r, lr] = await Promise.all([
+      http.get(`/prices/by-material/${encodeURIComponent(code)}${qstr?'?'+qstr:''}`),
+      http.get(`/prices/price-logs/${encodeURIComponent(code)}`).catch(()=>({data:[]}))
+    ])
+    const d=r.data
+    for(const f of Object.keys(d.factories)){
+      const seen=new Set()
+      d.factories[f]=d.factories[f].filter(q=>{
+        const k=q.price_with_tax+'|'+q.price_without_tax+'|'+q.currency+'|'+q.factory_code+'|'+q.quoter+'|'+q.standard_lead_time+'|'+q.first_inquiry_customer+'|'+(q.remarks||'')
+        if(seen.has(k))return false
+        seen.add(k)
+        return true
+      })
+      d.factories[f].sort((a,b)=>(a.price_with_tax??a.price_without_tax??999999)-(b.price_with_tax??b.price_without_tax??999999))
+      d.factories[f].forEach(q=>{ q.rimg = parseRImgs(q.remark_images) })
+    }
+    d.total=Object.values(d.factories).reduce((s,a)=>s+a.length,0)
+    d.logs=lr.data||[]
+    md.value=d
+    showPopup.value=true
+  }catch(e){showToast('加载失败: '+(e.response?.data?.msg||e.message||'网络错误'))}
+}
 async function handleExport(){exporting.value=true;try{const p=new URLSearchParams();const f=store.filters;if(f.keyword)p.set('keyword',f.keyword);if(f.factory)p.set('factory',f.factory);if(f.quoter)p.set('quoter',f.quoter);if(f.currency)p.set('currency',f.currency);if(f.category)p.set('category',f.category);if(f.startDate)p.set('startDate',f.startDate);if(f.endDate)p.set('endDate',f.endDate);for(const [k,v] of Object.entries(store.columnFilters)) p.set(k,v);window.open('/api/export?'+p.toString(),'_blank');showToast('导出成功')}catch(e){showToast('导出失败')}finally{exporting.value=false}}
 function handleImport(){fileInput.value?.click()}
 async function onFileChange(e){const f=e.target.files[0];if(!f)return;const d=new FormData();d.append('file',f);try{const r=await importExcel(d);showToast(r.msg||'导入成功');reload()}catch(e){showToast('导入失败:'+e.message)};fileInput.value.value=''}
@@ -1304,6 +1348,8 @@ onUnmounted(() => { if (clockTimer) clearInterval(clockTimer); if (colFilterTime
   .fh{font-size:12px;padding:4px 8px;flex-wrap:wrap}
   .pop-code{font-size:12px}
   .row-btn{padding:3px 6px;font-size:10px!important}
+  .row-btn.rimgs{color:#795548;border:1px solid #bcaaa4;background:#fff}
+  .row-btn.rimgs:hover{background:#efebe9}
 
   /* 报价计算器 */
   .calc-wrap{padding:16px}
