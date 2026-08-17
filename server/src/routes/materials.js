@@ -14,6 +14,42 @@ const router = Router()
 // 规格书目录（与 index.js 一致）
 const specDir = path.join(process.env.DATA_DIR || path.join(__dirname, '..', '..'), '规格书')
 
+// ========== 客户物料备注图片/文件上传（微信粘贴报价原始记录） ==========
+const materialsUploadDir = path.join(process.env.DATA_DIR || path.join(__dirname, '..', '..'), '客户物料图片库')
+if (!fs.existsSync(materialsUploadDir)) fs.mkdirSync(materialsUploadDir, { recursive: true })
+
+const materialFileUpload = multer({
+  storage: multer.diskStorage({
+    destination: materialsUploadDir,
+    filename: (_req, file, cb) => {
+      const ext = path.extname(file.originalname) || ''
+      const base = path.basename(file.originalname, ext)
+      const safeBase = base.replace(/[<>:"/\\|?*]/g, '_').slice(0, 80)
+      cb(null, Date.now() + '-' + Math.random().toString(36).slice(2, 8) + '-' + safeBase + ext)
+    }
+  }),
+  limits: { fileSize: 50 * 1024 * 1024 } // 50MB
+})
+
+// 备注附件上传
+router.post('/upload', materialFileUpload.array('files', 9), (req, res) => {
+  if (!req.files || !req.files.length) return res.status(400).json({ code: 1, msg: '请选择文件' })
+  const urls = req.files.map(f => `/api/uploads/materials/${encodeURIComponent(f.filename)}`)
+  res.json({ code: 0, data: urls })
+})
+
+// 删除已上传的备注附件
+router.delete('/upload/:filename', (req, res) => {
+  let filename = decodeURIComponent(req.params.filename)
+  if (filename.includes('/') || filename.includes('\\') || filename === '' || filename === '.') {
+    return res.status(400).json({ code: 1, msg: '非法的文件名' })
+  }
+  const filePath = path.join(materialsUploadDir, filename)
+  if (!fs.existsSync(filePath)) return res.status(404).json({ code: 1, msg: '文件不存在' })
+  try { fs.unlinkSync(filePath); res.json({ code: 0, msg: '已删除' }) }
+  catch (e) { res.status(500).json({ code: 1, msg: '删除失败' }) }
+})
+
 // ========== 客户改名：规格书文件夹整组迁移 ==========
 // 客户A改名/合并到B：迁移 规格书/客户物料/A/ → B/，并同步该客户全部物料的客户名 + 规格书引用
 function renameCustomerFolder(oldName, newName) {
@@ -224,10 +260,11 @@ router.post('/import', excelUpload.single('file'), (req, res) => {
   }
 })
 
-// 解析备选物料 JSON
+// 解析备选物料 + 备注图片 JSON
 function parseAlternates(row) {
   if (!row) return row
   try { row.alternates = JSON.parse(row.alternates || '[]') } catch { row.alternates = [] }
+  try { row.remark_images = JSON.parse(row.remark_images || '[]') } catch { row.remark_images = [] }
   return row
 }
 
@@ -267,9 +304,10 @@ router.post('/', (req, res) => {
   const alternates = Array.isArray(b.alternates)
     ? JSON.stringify(b.alternates.filter(a => a && (a.material_name || a.factory)))
     : '[]'
+  const remarkImages = Array.isArray(b.remark_images) ? JSON.stringify(b.remark_images) : '[]'
   const r = execute(`
-    INSERT INTO customer_materials (customer, date, customer_code, jkx_code, price, cost_price, material_code, material_name, factory, status, customer_desc, remark, alternates, spec_document)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO customer_materials (customer, date, customer_code, jkx_code, price, cost_price, material_code, material_name, factory, status, customer_desc, remark, alternates, spec_document, remark_images)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `, [
     b.customer || '',
     b.date || '',
@@ -284,7 +322,8 @@ router.post('/', (req, res) => {
     b.customer_desc || '',
     b.remark || '',
     alternates,
-    b.spec_document || ''
+    b.spec_document || '',
+    remarkImages
   ])
   triggerBackup('materials')
   res.json({ code: 0, data: { id: r.lastInsertRowid } })
@@ -306,8 +345,9 @@ router.put('/:id', (req, res) => {
   const alternates = Array.isArray(b.alternates)
     ? JSON.stringify(b.alternates.filter(a => a && (a.material_name || a.factory)))
     : (existing.alternates || '[]')
+  const remarkImages = Array.isArray(b.remark_images) ? JSON.stringify(b.remark_images) : (existing.remark_images || '[]')
   execute(`
-    UPDATE customer_materials SET customer=?, date=?, customer_code=?, jkx_code=?, price=?, cost_price=?, material_code=?, material_name=?, factory=?, status=?, customer_desc=?, remark=?, alternates=?, spec_document=?, updated_at=datetime('now','localtime')
+    UPDATE customer_materials SET customer=?, date=?, customer_code=?, jkx_code=?, price=?, cost_price=?, material_code=?, material_name=?, factory=?, status=?, customer_desc=?, remark=?, alternates=?, spec_document=?, remark_images=?, updated_at=datetime('now','localtime')
     WHERE id=?
   `, [
     b.customer ?? existing.customer,
@@ -324,6 +364,7 @@ router.put('/:id', (req, res) => {
     b.remark ?? existing.remark,
     alternates,
     b.spec_document !== undefined ? b.spec_document : (existing.spec_document || ''),
+    remarkImages,
     Number(req.params.id)
   ])
   triggerBackup('materials')

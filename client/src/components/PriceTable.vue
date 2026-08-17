@@ -90,6 +90,7 @@
 <script setup>
 import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
+import { showToast } from 'vant'
 function openExternal(url) {
   if (!url) return
   if (url.startsWith('/api/specs/')) {
@@ -115,7 +116,7 @@ const groupColors = ['#ffffff','#f4f7fb','#faf8f3','#f3f8f4','#f9f4f8']
 function rowBg(code) { if(!code) return '#fff'; let h=0; for(let i=0;i<code.length;i++) h=((h<<5)-h)+code.charCodeAt(i)|0; return groupColors[Math.abs(h)%5] }
 function fmtPrice(val, cur) { if(val==null||val==='') return '-'; return (cur==='USD'?'$':'¥')+Number(val).toFixed(4) }
 function fmtPriceWithCNY(val, cur) { if(val==null||val==='') return '-'; if(cur==='USD'){const fx=Number(localStorage.getItem('crystal_rate'))||7;return '¥'+(val*fx).toFixed(4)}return (cur==='USD'?'$':'¥')+Number(val).toFixed(4) }
-function copyText(t) { if(t) navigator.clipboard.writeText(String(t)).catch(()=>{}) }
+function copyText(t) { if (t) navigator.clipboard.writeText(String(t)).then(() => showToast('已复制')).catch(() => {}) }
 
 const allChecked = computed(() => props.list.length>0 && props.checkedIds.length===props.list.length)
 function toggleAll(e) { emit('update:checkedIds', e.target.checked ? props.list.map(r=>r.id) : []) }

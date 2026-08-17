@@ -93,6 +93,14 @@ export function deletePriceImage(filename) {
   return http.delete(`/prices/upload/${encodeURIComponent(filename)}`)
 }
 
+// 客户物料备注图片/文件上传与删除
+export function uploadMaterialImages(formData) {
+  return http.post('/materials/upload', formData)
+}
+export function deleteMaterialImage(filename) {
+  return http.delete(`/materials/upload/${encodeURIComponent(filename)}`)
+}
+
 export function getMetaOptions() {
   return http.get('/prices/meta/options')
 }

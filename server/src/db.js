@@ -369,6 +369,8 @@ export async function initDb() {
   try { db.run("ALTER TABLE customer_materials ADD COLUMN alternates TEXT DEFAULT '[]'") } catch {}
   // 兼容旧数据库：添加规格书列
   try { db.run("ALTER TABLE customer_materials ADD COLUMN spec_document TEXT DEFAULT ''") } catch {}
+  // 兼容旧数据库：添加备注图片/文件列（JSON数组，微信粘贴报价原始记录）
+  try { db.run("ALTER TABLE customer_materials ADD COLUMN remark_images TEXT DEFAULT '[]'") } catch {}
 
   return db
 }

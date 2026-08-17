@@ -131,6 +131,7 @@
                 <td class="cell-copy" :style="{ width: colWidths.remark + 'px' }" :title="item.remark" @click="copyText(item.remark)">{{ item.remark }}</td>
                 <td class="col-actions" :style="{ width: colWidths.actions + 'px' }">
                   <button v-if="item.spec_document" class="tbl-btn spec-btn" @click="openSpec(item.spec_document)" title="打开规格书">📄</button>
+                  <button v-if="rimgCount(item)" class="tbl-btn spec-btn rimgs-btn" @click="previewRImgs(item)" title="备注图片">📷{{ rimgCount(item) > 1 ? rimgCount(item) : '' }}</button>
                   <button class="tbl-btn edit-btn-sm" @click="openForm(item)">✎</button>
                   <button class="tbl-btn del-btn-sm" @click="handleDelete(item)">🗑</button>
                 </td>
@@ -216,7 +217,29 @@
               </div>
               <div class="form-field form-field-full">
                 <label>备注</label>
-                <textarea v-model="form.remark" placeholder="备注" class="f-textarea" rows="2"></textarea>
+                <div class="remark-zone" @dragover.prevent @drop.prevent="onRemarkDrop" @paste="onRemarkPaste">
+                  <textarea v-model="form.remark" placeholder="备注（微信截图可直接 Ctrl+V 粘贴）" class="f-textarea" rows="2"></textarea>
+                  <div v-if="(form.remark_images||[]).length" class="rimg-grid">
+                    <div v-for="(url,i) in form.remark_images" :key="i" class="rimg-item">
+                      <template v-if="isRImg(url)">
+                        <img :src="url" @click="rPreview=i; showRPreview=true" loading="lazy" />
+                      </template>
+                      <template v-else>
+                        <div class="rfile" @click="openRFile(url)">
+                          <span class="rfile-icon">{{ rFileIcon(url) }}</span>
+                          <span class="rfile-name">{{ rFileName(url) }}</span>
+                        </div>
+                      </template>
+                      <button type="button" class="rimg-del" @click="removeRImg(i)" title="删除">×</button>
+                    </div>
+                  </div>
+                  <div v-if="(form.remark_images||[]).length < 9" class="rimg-add-row">
+                    <button type="button" class="rimg-add" @click="remarkFileInput?.click()">＋ 上传图片/文件</button>
+                    <span class="rimg-hint">微信 Ctrl+V 粘贴，最多 9 个</span>
+                  </div>
+                  <input ref="remarkFileInput" type="file" multiple hidden @change="onRemarkFileChange" />
+                </div>
+                <van-image-preview v-model:show="showRPreview" :images="(form.remark_images||[])" :start-position="rPreview" closeable close-on-click-overlay @change="rPreview = $event" />
               </div>
             </div>
 
@@ -264,6 +287,9 @@
       <!-- 表单内的状态选择 -->
       <van-action-sheet v-model:show="showFormStatusSheet" :actions="statusActions" cancel-text="取消"
         @select="onFormStatusSelect" close-on-click-action />
+
+      <!-- 主列表备注图片预览 -->
+      <van-image-preview v-model:show="showListPreview" :images="listPreviewImgs" :start-position="listPreviewIdx" closeable close-on-click-overlay @change="listPreviewIdx = $event" />
     </div>
   </transition>
 </template>
@@ -272,7 +298,7 @@
 import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { showToast, showConfirmDialog } from 'vant'
-import { fetchMaterials, createMaterial, updateMaterial, deleteMaterial, getMaterialStatusConfig, exportMaterials, importMaterialsExcel, searchAllCustomers, fetchMaterialCustomers, fetchMaterialFactories, http } from '../utils/api.js'
+import { fetchMaterials, createMaterial, updateMaterial, deleteMaterial, getMaterialStatusConfig, exportMaterials, importMaterialsExcel, searchAllCustomers, fetchMaterialCustomers, fetchMaterialFactories, uploadMaterialImages, deleteMaterialImage, http } from '../utils/api.js'
 
 const route = useRoute()
 const router = useRouter()
@@ -537,6 +563,100 @@ function onFormPaste(e) {
   if (form.value.spec_document) return
   onSpecPaste(e)
 }
+// ===== 备注图片/文件（微信粘贴报价原始记录，多张可选删除） =====
+const remarkFileInput = ref(null)
+const showRPreview = ref(false)
+const rPreview = ref(0)
+function isRImg(url) {
+  return /\.(jpg|jpeg|png|gif|webp|bmp|svg)(\?|$)/i.test(url)
+}
+function rFileIcon(url) {
+  const ext = url.split('?')[0].split('.').pop()?.toLowerCase() || ''
+  if (['pdf'].includes(ext)) return '📄'
+  if (['doc','docx'].includes(ext)) return '📝'
+  if (['xls','xlsx','csv'].includes(ext)) return '📊'
+  if (['zip','rar','7z'].includes(ext)) return '📦'
+  if (['txt','json','xml','md'].includes(ext)) return '📃'
+  return '📎'
+}
+function rFileName(url) {
+  const nameMatch = url.match(/[?&]name=([^&]+)/)
+  if (nameMatch) { try { return decodeURIComponent(nameMatch[1]) } catch {} }
+  const p = url.split('?')[0].split('/').pop()
+  try { return decodeURIComponent(p) } catch { return p }
+}
+function openRFile(url) {
+  const name = rFileName(url)
+  fetch(url).then(r => r.blob()).then(blob => {
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(blob)
+    a.download = name
+    a.click()
+    URL.revokeObjectURL(a.href)
+  }).catch(() => window.open(url, '_blank'))
+}
+async function uploadRImages(files) {
+  const remaining = 9 - (form.value.remark_images || []).length
+  if (remaining <= 0) { showToast('最多上传9个文件'); return }
+  const toUpload = Array.from(files).slice(0, remaining)
+  const fd = new FormData()
+  const origNames = toUpload.map(f => f.name)
+  for (const f of toUpload) fd.append('files', f)
+  try {
+    const r = await uploadMaterialImages(fd)
+    const urls = r.data || []
+    const enriched = urls.map((url, i) => url + '?name=' + encodeURIComponent(origNames[i]))
+    form.value.remark_images.push(...enriched)
+    showToast(`已上传 ${urls.length} 个文件`)
+  } catch (e) {
+    showToast('上传失败: ' + (e.response?.data?.msg || e.message))
+  }
+}
+async function onRemarkDrop(e) {
+  const files = e.dataTransfer?.files
+  if (!files?.length) return
+  await uploadRImages(files)
+}
+async function onRemarkPaste(e) {
+  const items = e.clipboardData?.items
+  if (!items) return
+  const files = []
+  for (const item of items) {
+    if (item.type?.startsWith('image/') || item.kind === 'file') {
+      const file = item.getAsFile()
+      if (file) files.push(file)
+    }
+  }
+  if (!files.length) return
+  e.preventDefault()
+  showToast(`检测到 ${files.length} 个文件，上传中…`)
+  await uploadRImages(files)
+}
+async function onRemarkFileChange(e) {
+  const files = e.target.files
+  if (files?.length) await uploadRImages(files)
+  remarkFileInput.value.value = ''
+}
+async function removeRImg(i) {
+  const url = form.value.remark_images[i]
+  if (url) {
+    const filename = url.split('?')[0].split('/').pop()
+    deleteMaterialImage(filename).catch(() => {})
+  }
+  form.value.remark_images.splice(i, 1)
+}
+
+// 主列表备注图片预览
+const showListPreview = ref(false)
+const listPreviewImgs = ref([])
+const listPreviewIdx = ref(0)
+function rimgCount(item) { return (item.remark_images || []).length }
+function previewRImgs(item) {
+  listPreviewImgs.value = item.remark_images || []
+  listPreviewIdx.value = 0
+  if (listPreviewImgs.value.length) showListPreview.value = true
+}
+
 function openSpec(url) {
   if (!url) return
   if (url.startsWith('/api/specs/')) {
@@ -663,7 +783,7 @@ const saving = ref(false)
 const form = ref({
   date: '', customer_code: '', jkx_code: '', price: '', cost_price: '',
   material_code: '', material_name: '', factory: '', status: '报价',
-  customer_desc: '', remark: '', alternates: [], spec_document: ''
+  customer_desc: '', remark: '', alternates: [], spec_document: '', remark_images: []
 })
 
 function openForm(item) {
@@ -682,11 +802,12 @@ function openForm(item) {
       customer_desc: item.customer_desc || '',
       remark: item.remark || '',
       alternates: (item.alternates || []).map(a => ({ material_code: a.material_code || '', material_name: a.material_name || '', factory: a.factory || '', cost_price: a.cost_price || '' })),
-      spec_document: item.spec_document || ''
+      spec_document: item.spec_document || '',
+      remark_images: (item.remark_images || []).slice()
     }
   } else {
     editing.value = null
-    form.value = { date: new Date().toISOString().slice(0, 10), customer_code: '', jkx_code: '', price: '', cost_price: '', material_code: '', material_name: '', factory: '', status: '报价', customer_desc: '', remark: '', alternates: [], spec_document: '' }
+    form.value = { date: new Date().toISOString().slice(0, 10), customer_code: '', jkx_code: '', price: '', cost_price: '', material_code: '', material_name: '', factory: '', status: '报价', customer_desc: '', remark: '', alternates: [], spec_document: '', remark_images: [] }
   }
   showForm.value = true
 }
@@ -931,6 +1052,7 @@ onUnmounted(() => {
 .rich-text { pointer-events: none; }
 .rich-text :deep(.rt-hl) { color: #d4380d; font-weight: 700; background: rgba(250, 173, 20, .15); padding: 0 2px; border-radius: 2px; }
 .spec-btn { color: #8c5a1f; font-size: 15px; }
+.rimgs-btn { color: #1a6fb0; font-size: 13px; }
 .spec-btn-dim { color: #e0e0e0; font-size: 15px; cursor: not-allowed; }
 
 /* 高亮按钮 */
@@ -1007,6 +1129,20 @@ onUnmounted(() => {
 .f-textarea { padding: 8px 10px; border: 1px solid #e0e0e0; border-radius: 6px; font-size: 13px; color: #323233; outline: none; font-family: inherit; resize: vertical; transition: border-color .2s; }
 .f-textarea:focus { border-color: var(--color-primary); }
 .f-textarea::placeholder { color: #ccc; }
+
+/* ===== 备注图片/文件（微信粘贴报价原始记录） ===== */
+.remark-zone { width: 100%; }
+.rimg-grid { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.rimg-item { position: relative; width: 64px; height: 64px; border-radius: 8px; overflow: hidden; border: 1px solid #eee; background: #fafafa; }
+.rimg-item img { width: 100%; height: 100%; object-fit: cover; cursor: pointer; }
+.rimg-item .rfile { width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; color: #666; }
+.rimg-item .rfile-icon { font-size: 20px; }
+.rimg-item .rfile-name { font-size: 9px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 2px; }
+.rimg-del { position: absolute; top: 2px; right: 2px; width: 18px; height: 18px; border-radius: 50%; background: rgba(0,0,0,.55); color: #fff; border: none; font-size: 12px; line-height: 18px; text-align: center; cursor: pointer; padding: 0; }
+.rimg-add-row { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+.rimg-add { padding: 6px 14px; border: 1px dashed #c8c9cc; border-radius: 6px; background: #fff; color: var(--color-primary); font-size: 12px; cursor: pointer; }
+.rimg-add:hover { border-color: var(--color-primary); }
+.rimg-hint { font-size: 10px; color: #bbb; }
 .status-select { position: relative; display: flex; align-items: center; justify-content: space-between; padding: 6px 10px; border: 1px solid #e0e0e0; border-radius: 6px; cursor: pointer; transition: border-color .2s; min-height: 34px; }
 .status-select:hover { border-color: var(--color-primary); }
 .select-arrow { color: #bbb; font-size: 12px; margin-left: 6px; }
