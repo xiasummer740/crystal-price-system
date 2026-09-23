@@ -327,6 +327,11 @@ async function startServer() {
   log(`DATA_DIR: ${dataDir}`)
 
   log('Starting server import...')
+  // 必须在 import 之前设：index.js 靠它判断自己是不是被 Electron 托管。
+  // 不设的话 index.js 会自己 listen(3266)，和下面的 startServer() 抢端口 ——
+  // 轻则每次启动都 EADDRINUSE 退到 3267（多起一个端口），
+  // 重则 3266 被别的进程占用时 index.js 抛未捕获异常，应用卡死在闪屏、主窗口不出现。
+  process.env.ELECTRON_MODE = 'true'
   let expressApp
   try {
     const mod = await import('../server/src/index.js')

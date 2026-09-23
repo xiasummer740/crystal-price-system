@@ -128,6 +128,7 @@ router.delete("/customers/:id", (req, res) => {
   const id = Number(req.params.id);
   execute("DELETE FROM map_addresses WHERE customer_id = ?", [id]);
   execute("DELETE FROM map_purchasers WHERE customer_id = ?", [id]);
+  execute("DELETE FROM map_sites WHERE customer_id = ?", [id]);
   execute("DELETE FROM map_customers WHERE id = ?", [id]);
   res.json({ code: 0, msg: "删除成功" });
 });
