@@ -20,7 +20,8 @@ $RepoOwner = 'xiasummer740'
 $RepoName  = 'crystal-price-system'
 $DistDir   = Join-Path $RepoRoot 'dist-exe'
 
-Clear-Host
+# 无终端环境（CI / 被脚本调用）下 Clear-Host 会抛「句柄无效」，吞掉即可
+try { Clear-Host } catch {}
 Write-Host ''
 Write-Host ' ============================================================' -ForegroundColor Cyan
 Write-Host ''
