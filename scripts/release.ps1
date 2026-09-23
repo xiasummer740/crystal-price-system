@@ -9,6 +9,16 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+
+# PowerShell 7.3+ 会把原生命令写往 stderr 的内容、以及非零退出码，都当成错误记录，
+# 再交给 $ErrorActionPreference 处置 —— 于是 'Stop' 会让 git / npm 这类
+# 「正常往 stderr 写进度或警告」的命令直接中断整个发布流程。
+# 关掉这个行为，各命令的成败一律由各自的 $LASTEXITCODE 判断。
+# 变量在 7.3 以下不存在，Test-Path 兜住。
+if (Test-Path variable:PSNativeCommandUseErrorActionPreference) {
+    $PSNativeCommandUseErrorActionPreference = $false
+}
+
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $Host.UI.RawUI.WindowTitle = '晶振系统 - 一键发布'
 
@@ -97,10 +107,19 @@ Write-Host '[2/5] 构建前端 + 打包 exe (约 2-4 分钟)...' -ForegroundColo
 Write-Host '  正在运行 npm run package...'
 
 $sw = [System.Diagnostics.Stopwatch]::StartNew()
+# npm / electron-builder 会把进度和警告写到 stderr。在 $ErrorActionPreference='Stop' 下，
+# PowerShell 把原生命令的 stderr 也当成终止错误，会让这一行直接中断整个脚本。
+# 实测（2026-09-23）：v1.0.215 打包其实成功了，脚本却停在 [2/5]，
+# 版本号已 bump 而未回滚、未提交、未发版，留下「已 bump 未发版」的半路状态。
+# 局部降为 Continue 只包住这一行，成败一律看退出码。
+$prevEAP = $ErrorActionPreference
+$ErrorActionPreference = 'Continue'
 $buildResult = & npm run package 2>&1
+$buildExit = $LASTEXITCODE
+$ErrorActionPreference = $prevEAP
 $sw.Stop()
 
-if ($LASTEXITCODE -ne 0) {
+if ($buildExit -ne 0) {
     Write-Host "  [错误] 构建失败！($($sw.Elapsed.TotalSeconds)s)" -ForegroundColor Red
     Write-Host "  $buildResult"
     # 回滚版本号
@@ -194,14 +213,22 @@ Write-Host "  [OK] 推送到远端完成" -ForegroundColor Green
 Write-Host ''
 Write-Host '[5/5] 创建 GitHub Release + 上传安装包...' -ForegroundColor Cyan
 
-# 获取 GitHub Token
-$credInput = "protocol=https`nhost=github.com`n"
-$credOutput = $credInput | git credential fill 2>&1
-$token = ($credOutput | Select-String 'password=(.+)' | ForEach-Object { $_.Matches.Groups[1].Value })
+# 获取 GitHub Token。
+# 不要用 `git credential fill`：本脚本由 `powershell -File` 启动 = Windows PowerShell 5.1，
+# 它把字符串喂进原生命令 stdin 的方式有问题，实测恒报
+# "fatal: refusing to work with credential missing protocol field"。
+# 三种写法（原样 / 末尾补空行 / 改成数组逐行喂）在 5.1 下全部失败，同代码在 PS 7.x 下才正常。
+# 实测（2026-09-23）：v1.0.215 因此停在 [5/5] —— tag 已推送，Release 却没建出来。
+# gh CLI 自带登录态，取 token 一行搞定。
+$prevEAP = $ErrorActionPreference
+$ErrorActionPreference = 'Continue'
+$ghToken = & gh auth token 2>$null
+$ErrorActionPreference = $prevEAP
+$token = if ($LASTEXITCODE -eq 0 -and $ghToken) { ($ghToken | Out-String).Trim() } else { '' }
 
 if (-not $token) {
     Write-Host '  [错误] 无法获取 GitHub Token' -ForegroundColor Red
-    Write-Host "  请手动上传 dist-exe\ 中的 exe 文件" -ForegroundColor Yellow
+    Write-Host '  请先执行 gh auth login 登录 GitHub，或手动上传 dist-exe\ 中的文件' -ForegroundColor Yellow
     Write-Host "  https://github.com/$RepoOwner/$RepoName/releases/new" -ForegroundColor Yellow
     exit 1
 }
