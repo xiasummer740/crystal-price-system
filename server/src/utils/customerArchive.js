@@ -198,8 +198,11 @@ export function insideRoot(abs) {
 export function filenameFromUrl(url) {
   if (!url) return ''
   const clean = String(url).split('?')[0]
-  const last = clean.split('/').filter(Boolean).pop() || ''
-  try { return decodeURIComponent(last) } catch { return last }
+  // 先解码再切段，与 resolveUrl 同理：否则 %2F 解码后会变出新层级，
+  // 「末段」拿到的其实是整段路径，调用方把它当文件名拼进目标目录 → 多套两层目录
+  let decoded = clean
+  try { decoded = decodeURIComponent(clean) } catch { /* 解不开就用原串切 */ }
+  return decoded.split('/').filter(Boolean).pop() || ''
 }
 
 /** URL 里附带的显示名（?name=xxx），没有则回落到末段文件名 */
