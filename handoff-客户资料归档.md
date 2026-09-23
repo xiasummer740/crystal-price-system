@@ -1,7 +1,8 @@
-# 接力文档 · 客户资料归档（进行中，未发版）
+# 接力文档 · 客户资料归档（接线完成，未发版）
 
-> 上一版 v1.0.214 已发布 · 本功能目标版本 v1.0.215（未发）
+> 上一版 v1.0.214 已发布 · 本功能目标版本 **v1.0.215（未发）**
 > 完整方案 / 影响面分析 / 搬家映射表 → 见 `PROGRESS.md` 的「当前工作」一节（权威源，本文件不重复抄）
+> 最近更新：2026-09-23（接线 + 全链路验证完成，尚未发版）
 
 ---
 
@@ -10,67 +11,55 @@
 数据目录下的文件**按客户归档**，加一个「📁 客户目录」按钮直接打开某客户文件夹；
 另一台电脑装完软件要**自动整理**已有全部内容。
 
-## 当前状态（2026-09-23）
+## 当前状态（2026-09-23 更新）
 
 | 阶段 | 状态 |
 |------|------|
 | 方案定稿（祥哥确认） | ✅ |
 | 影响面分析（映射表 + 8 个接触点） | ✅ 见 PROGRESS.md |
-| **地基模块已写** | ✅ 两个新文件，**没接线** |
-| **业务接线** | ❌ **0 行** |
-| 沙箱实跑 / 幂等验证 | ❌ 没跑过 |
-| 测试 | ❌ 没有 |
+| 地基模块（`customerArchive.js` / `archiveSync.js`） | ✅ 已提交 |
+| 后端接线 | ✅ 已提交 `4277779` |
+| 前端接线 | ✅ 已提交 `4277779` |
+| 沙箱实跑 / 幂等验证 | ✅ 全过，见下 |
+| 接口端到端 / 浏览器验证 / 单测 | ✅ 35 / 9 / 70 |
+| **「📁 客户目录」按钮** | ❌ **仍未实现**（此前只在文档里有，代码里没有） |
+| 发版 | ❌ 未发，等祥哥拍板 |
 
-### 已写好的地基（未提交、未接线）
+## 验证证据（沙箱跑，**没碰过生产目录**）
 
-| 文件 | 行数 | 作用 |
-|------|------|------|
-| `server/src/utils/customerArchive.js` | 318 | 路径助手：`DIR`/`LEGACY` 常量、URL ↔ 磁盘路径互转、`safeSegment`、`safeFilename`、`rehomeFiles()` |
-| `server/src/utils/archiveSync.js` | 487 | 搬迁引擎：`syncArchive()`（备份→复制→改库落盘→确认后才删源→写报告）+ `verifyReferences()` 自检 |
-| `server/src/utils/export.js` | +4/−2 | `exportMaterials(customer)` 加了按客户筛选 |
+沙箱数据目录：`G:\Temp\cp-clean`（从 `G:\Temp\crystal-realdata\晶振报价管理系统` 拷的干净副本）
 
-**诚实口径**：这三个文件 `node --check` 全过，但 **`syncArchive()` 一次都没执行过，没有任何调用方，没有测试**。
-「语法过 ≠ 能跑」——离能交差还差整条接线 + 沙箱实跑。
+- **四项硬指标全过**（独立复验脚本 `G:\Temp\archive-verify.mjs`，自己实现一套 URL→磁盘解析，不复用被测代码）：
+  396 条 DB 引用 0 断链 / 478 个归档文件 0 无主 / 0 条引用仍指旧目录 /
+  **国润聚源 73 条规格书引用 0 缺失 —— 生产上的 21 条 404 修好了**
+- **幂等**：连跑两次，磁盘逐字节一致（仅每轮的报告文件因时间戳不同），DB 引用完全一致
+- **接口端到端 35/35**（`G:\Temp\e2e-api.mjs`）：静态取件、路径解析、越界拦截、
+  上传落位、同客户同名去重复用、按 URL 删除、裸文件名被拒
+- **浏览器 9/9**（headless Chromium，新增 `e2e/archive.spec.cjs` 作为回归覆盖）
+- **后端单测 70/70**
 
-## 接力第一步：把这些线接上
+## 与原方案的两处偏离（都是踩过坑才改的，别改回去）
 
-按顺序，每步都有明确落点（详见 PROGRESS.md「影响面分析」表）：
+1. **规格书上传用显式的 `?customer=` / `?category=` 参数**，没有按方案原样让前端传 folder 路径。
+   原因：客户名里带 `/` 会把路径段切碎；而且路径规则一旦有第二处实现，
+   迟早跟 `resolveUrl` 漂移 —— 这次的 404 就是「写入一套规则、读取另一套」造出来的。
+2. **`open-spec` 改问服务端要路径**（新接口 `GET /api/file-path`），没有按方案在主进程里
+   再实现一遍前缀解析。原因同上：路径规则（含越界防护）只保留一处。
 
-1. `server/src/index.js` 挂新 static：`/api/cust`（根=`客户管理/`）、`/api/quote-specs`、`/api/quote-images`；**旧 4 条路由保留只读兜底**
-2. `server/src/index.js:339-427` **删掉** `migrateSpecsToCustomerFolders` / `migrateQuoteSpecsToCategoryFolders`（被新迁移取代）
-3. `specUpload`（`index.js:162-224`）folder 语义改为「相对 DATA_DIR 的路径」；`routes/materials.js`、`routes/notes.js`、`routes/prices.js` 三处上传同步改
-4. `index.js` 启动时调 `syncArchive()`
-5. 前端 6 处 `url.startsWith('/api/specs/')` 加新前缀；`electron/main.js` 建新子目录 + `open-spec` 按 URL 前缀解析
-6. 沙箱实跑 + 连跑两次验幂等
+## 交给祥哥拍板的两件事
 
-## 🔴 必须防的坑（都是真实踩出来的）
+1. **「📁 客户目录」按钮** —— 这是可交付项之一，还没做。属于新增前端 UI，
+   按规矩要先给你看预览确认再动。
+2. **发不发 v1.0.215** —— 后端/前端接线与验证都过了，但上面那个按钮还缺。
 
-- **`migrateSpecsToCustomerFolders()` 靠「根目录还有没有源文件」决定要不要修** → 文件已经搬走了就永远跳过，**自己造成的错位永远修不回来**。生产机上 21 条国润聚源规格书 404 就是这么来的。新迁移必须能修自己的历史错误。
-- **DB 里的路径是 percent-encoded**（`/api/specs/%E5%AE%A2...`）→ `LIKE '/api/specs/客户物料/%'` **永远匹配不上**，这种护栏等于没有。
-- **`material_prices` 没有 customer 列**，只有 `first_inquiry_customer`，且全是简称（`国润`、`高起乐、`），**能和完整客户名对上的 0 条** → 「报价记录.xlsx」只能放在 `客户管理/` 外面，这不是偏好是唯一解。
-- **`notes` 表没有 `date` 列** → 日期只能取 `created_at`。同一天同一客户多条记事的：5 处 → 一天一个 `记事.txt`，内部按时间分节。
-- **重名客户 sanitize 后撞车**（`A/B` 与 `A_B`）→ 迁移前检测，命中就**停下问祥哥**，不自动合并。
-- **孤儿文件**（记事图片库里 29 张没主）**不动**，留原地并在报告里列数 —— 不猜、不乱归户。
+## 下次开工注意
 
-## 验收标准（硬指标，缺一条不算完）
-
-搬完后逐条自检：
-1. DB 里每个文件引用都能解析到磁盘上**真实存在**的文件（0 断链）
-2. 磁盘上每个归档文件都**有主**（被 DB 引用），或**在报告里被明确列为孤儿**
-3. **连跑两次结果一致**（幂等）
-
-## 环境事实（别搞错）
-
-| 项 | 值 |
-|----|----|
-| **生产数据目录** | `G:\Users\Documents\晶振报价管理系统`（534 文件 / 169.8MB）—— 判定依据是 `%APPDATA%\crystal-price-system\user-config.json` 的 `dataDir` |
-| **摸底副本（沙箱用这个）** | `G:\Temp\crystal-realdata` |
-| **原始 rar** | `D:\xwechat_files\wxid_un7rfl04uj4a22_e31e\msg\file\2026-09\晶振报价管理系统.rar`（RAR5；Windows 自带 `tar -xf` 就能解，不用 7z） |
-| **开发库** | `server\数据库\data.db`（8-17 那份 232KB，**没被动过**） |
-| 真实库现状 | 客户 109 · `material_prices` 514（未删 71）· `price_logs` 828 · `customer_materials` 282 · `notes` 71 |
-
-⚠️ **别拿 G 盘生产目录当试验场** —— 先在 `G:\Temp\crystal-realdata` 跑通再说。
-
----
-
-相关记忆：[[handoff-crystal-price-archive]] [[crystal-price-data-location]] [[browser-verify-rule]] [[verify-fresh-session-cache-mask]]
+- ⚠️ **别拿 `G:\Users\Documents\晶振报价管理系统` 试**：`syncArchive()` 会真删源文件
+  （虽然是「先复制、核对大小、DB 落盘后才删源」）。一律先用 `G:\Temp` 下的副本。
+- ⚠️ **3266 端口上常驻着祥哥的生产程序**（`E:\software\crystal-price-system\晶振报价管理系统.exe`，
+  指向真实数据目录）。跑任何「会写库」的测试前先确认端口，别打上去。
+  安全做法：沙箱服务换个端口（如 3277），把 e2e 的 `BASE` 改掉再跑。
+- 遗留未接线：`rehomeFiles()`（上传附件后改客户名再保存 → 附件会留在旧客户目录）。
+  属预存代码，按「预存死代码不动」暂时保留。
+- `querySuffixOf` / `isEmptyDir` / `uniqueNameIn` / `displayNameOf` / `isArchivedUrl`
+  目前也无引用，同属预存代码。
