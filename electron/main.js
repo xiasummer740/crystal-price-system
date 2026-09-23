@@ -757,6 +757,18 @@ ipcMain.handle('open-spec', async (_, specUrl) => {
   } catch (err) { log(`open-spec error: ${err.message}`) }
 })
 
+// 「📁 客户目录」：问服务端要该客户的归档目录路径（走同一套 customerDirAbs），再用资源管理器打开
+ipcMain.handle('open-customer-folder', async (_, customer) => {
+  try {
+    const r = await fetch(`http://127.0.0.1:${serverPort}/api/customer-folder?customer=${encodeURIComponent(customer || '')}`)
+    const j = await r.json()
+    if (j.code !== 0) return log(`open-customer-folder 失败: ${j.msg}`)
+    log(`open-customer-folder: ${j.data.path}`)
+    const err = await shell.openPath(j.data.path)
+    if (err) log(`open-customer-folder openPath: ${err}`)
+  } catch (err) { log(`open-customer-folder error: ${err.message}`) }
+})
+
 // === 自动更新 IPC（与 xnowpost 一致） ===
 ipcMain.handle('update:check', () => { checkForUpdates(); return true })
 ipcMain.handle('update:download', () => { downloadUpdate() })

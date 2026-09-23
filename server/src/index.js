@@ -180,6 +180,18 @@ app.get('/api/file-path', (req, res) => {
   res.json({ code: 0, data: { path: hit.abs } })
 })
 
+// 桌面端「📁 客户目录」用：客户名 → 该客户的归档总目录（不存在就建好再返回）。
+// 与上传/搬迁共用 A.customerDirAbs —— 按钮打开的必须就是文件真正待的地方，
+// 否则又是一个「写的是一处、找的是另一处」。
+app.get('/api/customer-folder', (req, res) => {
+  const customer = String(req.query?.customer || '').trim()
+  try {
+    res.json({ code: 0, data: { path: A.ensureDir(A.customerDirAbs(customer)), folder: A.customerFolder(customer) } })
+  } catch (e) {
+    res.status(500).json({ code: 1, msg: '定位客户目录失败: ' + e.message })
+  }
+})
+
 // 规格书上传
 // 落位由「原始客户名 / 品类名」决定（query 传，multer 的 destination 里 req.body 可能尚未就绪）：
 //   customer=深圳市XX  → 客户管理/深圳市XX/规格书/     （客户物料规格书）

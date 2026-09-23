@@ -11,6 +11,9 @@
         <div class="header-right">
           <button class="action-btn" @click="handleBackup" title="导出 Excel 备份">📥 备份</button>
           <button class="action-btn" @click="handleImport" title="从 Excel 导入">📤 导入</button>
+          <!-- 只在桌面端显示：手机浏览器没有「打开文件夹」这回事 -->
+          <button v-if="isElectron" class="action-btn" :disabled="!selectedCustomer" @click="openCustomerDir"
+            title="在资源管理器里打开该客户的资料文件夹（规格书 / 物料图片 / 记事）">📁 客户目录</button>
           <button class="add-btn" :disabled="!selectedCustomer" @click="openForm()">＋ 新增</button>
           <button class="close-btn" @click="goBack" title="关闭">✕</button>
         </div>
@@ -330,6 +333,8 @@ import { fetchMaterials, createMaterial, updateMaterial, deleteMaterial, getMate
 const route = useRoute()
 const router = useRouter()
 const isStandalone = ref(route.query.standalone === '1')
+// 桌面端才有的能力（打开资源管理器）；手机浏览器里没有「文件夹」这回事
+const isElectron = ref(!!window.electronAPI)
 
 // 客户选择
 const selectedCustomer = ref('')
@@ -1022,6 +1027,18 @@ function handleImport() {
   input.click()
 }
 
+// 「📁 客户目录」：让主进程去问服务端要路径再打开。
+// 前端不拼路径 —— 归档目录规则只在 customerArchive.js 一处，两处各写一套早晚对不上。
+async function openCustomerDir() {
+  const customer = selectedCustomer.value
+  if (!customer) return
+  if (!window.electronAPI?.openCustomerFolder) {
+    showToast('仅桌面版支持打开文件夹')
+    return
+  }
+  await window.electronAPI.openCustomerFolder(customer)
+}
+
 function onKeydown(e) {
   if (e.key === 'Escape') {
     if (showForm.value) { showForm.value = false; return }
@@ -1066,6 +1083,7 @@ onUnmounted(() => {
 .result-badge { font-size: 11px; color: #999; background: #f5f6f8; padding: 2px 8px; border-radius: 10px; }
 .action-btn { padding: 4px 10px; border-radius: 6px; border: 1px solid #e0e0e0; background: #fff; font-size: 11px; cursor: pointer; white-space: nowrap; transition: all .15s; color: #555; }
 .action-btn:hover { border-color: var(--color-primary); color: var(--color-primary); background: #f0f8ff; }
+.action-btn:disabled { color: #c8c9cc; cursor: not-allowed; background: #fafafa; border-color: #ebedf0; }
 .add-btn { padding: 6px 14px; border-radius: 6px; border: none; background: var(--color-primary); color: #fff; font-size: 12px; cursor: pointer; text-decoration: none; white-space: nowrap; transition: background .15s; }
 .add-btn:hover { background: #1676d9; }
 .add-btn:disabled { background: #95c9f9; cursor: not-allowed; }
