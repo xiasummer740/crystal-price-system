@@ -161,6 +161,61 @@ describe('GET /api/materials — 排序', () => {
   })
 })
 
+describe('GET /api/materials — 排序边界（非数字 / 空值 / 状态业务序）', () => {
+  const C2 = '排序边界客户'
+  const SEED2 = [
+    // 报价带货币符号、成本价带千分位：都得按数值排，不能被悄悄折成 0
+    { customer_code: 'N-1', material_name: 'BBB', price: '￥100', cost_price: '1,000', status: '送样', date: '2026-01-01' },
+    // 物料名称为空：升序时不能挤到第一屏
+    { customer_code: 'N-2', material_name: '', price: '9', cost_price: '50', status: '报价', date: '2026-01-02' },
+    // 压根不是数字：只能沉底，不能 CAST 成 0（否则会排到 9 前面）
+    { customer_code: 'N-3', material_name: 'AAA', price: '面议', cost_price: '1.5~2', status: '下批量', date: '2026-01-03' },
+    { customer_code: 'N-4', material_name: 'CCC', price: '', cost_price: '', status: '下散单', date: '2026-01-04' }
+  ]
+
+  before(async () => {
+    for (const s of SEED2) {
+      const res = await request.post(BASE).send({ customer: C2, ...s })
+      assert.equal(res.body.code, 0, `种子数据应写入成功: ${res.body.msg || res.status}`)
+      testIds.push(res.body.data.id)
+    }
+  })
+
+  const codes = (res) => res.body.data.list.map(r => r.customer_code).join(',')
+  // 沉底的两条之间谁先谁后由 id 定，跟被测逻辑无关 —— 断言时排序后比较，只看「是不是这两个」
+  const bottom2 = (res) => res.body.data.list.slice(2).map(r => r.customer_code).sort()
+
+  it('报价「￥100」按 100 排（不是按 0，否则会排到「9」前面）', async () => {
+    const res = await request.get(BASE).query({ customer: C2, sort: 'price', order: 'asc' })
+    assert.equal(codes(res).split(',').slice(0, 2).join(','), 'N-2,N-1', '9 在前、￥100 随后')
+  })
+
+  it('成本价「1,000」按 1000 排（不是按 1）', async () => {
+    const res = await request.get(BASE).query({ customer: C2, sort: 'cost_price', order: 'asc' })
+    assert.equal(codes(res).split(',').slice(0, 2).join(','), 'N-2,N-1', '50 在前、1,000 随后')
+  })
+
+  it('不是数字的报价（「面议」）升降序都沉底，不会被当成 0', async () => {
+    for (const order of ['asc', 'desc']) {
+      const res = await request.get(BASE).query({ customer: C2, sort: 'price', order })
+      assert.deepEqual(bottom2(res), ['N-3', 'N-4'], `${order}: 「面议」和空报价应在最后两名`)
+    }
+  })
+
+  it('空物料名称升序时沉底（不再挤满第一屏，与数值列同一策略）', async () => {
+    const res = await request.get(BASE).query({ customer: C2, sort: 'material_name', order: 'asc' })
+    assert.equal(res.body.data.list[0].customer_code, 'N-3', 'AAA 应排最前')
+    assert.equal(res.body.data.list.at(-1).customer_code, 'N-2', '空名称应排最后')
+  })
+
+  it('状态列按业务流转顺序排，不是按汉字编码', async () => {
+    const res = await request.get(BASE).query({ customer: C2, sort: 'status', order: 'asc' })
+    // 业务序：报价0 → 送样2 → 下散单3 → 下批量4
+    // 若按汉字编码则是 下批量(N-3) → 下散单(N-4) → 报价(N-2) → 送样(N-1)，与本断言完全不同
+    assert.equal(codes(res), 'N-2,N-1,N-4,N-3')
+  })
+})
+
 describe('PUT /api/materials/:id — 编辑防重复', () => {
   it('编辑改编码撞上同客户已有编码 → 拦截', async () => {
     const res = await request.put(`${BASE}/${testIds[0]}`).send({ customer_code: 'CUS-002' })

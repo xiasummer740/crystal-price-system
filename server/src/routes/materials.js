@@ -139,6 +139,35 @@ const SORTABLE_COLS = new Set([
   'material_code', 'material_name', 'factory', 'status', 'customer_desc', 'remark'
 ])
 
+// —— 排序列表达式 ——
+// 三类列各有各的坑。统一原则：取不到「有意义的值」就返回 NULL，由 ORDER BY 的 NULLS LAST 沉底。
+// 沉底是「看得见的」——用户能看出这条没参与排序；折成 0 是「看不见的」——排错了也毫无提示。
+
+// ① 普通文本列：空串当没值。否则升序时一屏全是空备注/空名称，看着像排序坏了。
+const EMPTY_AS_NULL = (col) => `NULLIF(TRIM(${col}), '')`
+
+// ② 报价/成本价：库里存的是 TEXT，直接 ORDER BY 是字符串序（"100" < "9"）。
+//    先剥掉货币符号/千分位/全角空格，再确认「长得像数字」才 CAST。
+//    不像数字的（"面议"、"1.5~2"）绝不能 CAST —— SQLite 会静默折成 0，
+//    那会让「￥100」排到「9」前面，用户根本看不出排错了。
+const PRICE_VALUE = (col) => {
+  const n = `REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(TRIM(${col}), '￥', ''), '¥', ''), '元', ''), ',', ''), '　', '')`
+  return `CASE WHEN ${n} GLOB '*[0-9]*' AND ${n} NOT GLOB '*[^0-9.]*' THEN CAST(${n} AS REAL) END`
+}
+
+// ③ 状态列：按业务流转顺序（报价→规格书→送样→下散单→下批量），不是按汉字编码 ——
+//    后者排出来跟生命周期/颜色阶完全无关，用户点了会以为是 bug。顺序取自上面的 STATUS_CONFIG。
+const STATUS_VALUE = `CASE TRIM(status) ${
+  Object.entries(STATUS_CONFIG).map(([k, v]) => `WHEN '${k}' THEN ${v.order}`).join(' ')
+} ELSE 99 END`
+
+const NUMERIC_SORT_COLS = new Set(['price', 'cost_price'])
+function sortExprOf(col) {
+  if (NUMERIC_SORT_COLS.has(col)) return PRICE_VALUE(col)
+  if (col === 'status') return STATUS_VALUE
+  return EMPTY_AS_NULL(col)
+}
+
 // 列表 — 按客户筛选 + 搜索 + 状态/工厂/日期筛选 + 排序 + 分页
 router.get('/', (req, res) => {
   const { page = 1, pageSize = 50, keyword, status, customer, factory, start, end, sort, order } = req.query
@@ -161,15 +190,10 @@ router.get('/', (req, res) => {
   const offset = (Number(page) - 1) * Number(pageSize)
 
   // 未指定排序时保持原行为；指定了才按白名单列排序（sort/order 都经校验，不可注入）
-  // 报价/成本价在库里是 TEXT，直接排会按字符串比（"100" < "9"），必须先转数值；
-  // 没报价的记录转出来是 NULL，「升序」时会全挤到最前，看着像排序坏了 → 统一 NULLS LAST 沉底
-  const NUMERIC_SORT_COLS = new Set(['price', 'cost_price'])
-  const isNumericSort = NUMERIC_SORT_COLS.has(sort)
-  const sortExpr = isNumericSort ? `CAST(NULLIF(TRIM(${sort}), '') AS REAL)` : sort
+  // 每个表达式都可能产出 NULL（空值/不是数字），一律 NULLS LAST 沉底；
   // 注意 NULLS LAST 是排序方向的子句，必须写在 ASC/DESC 后面，不能跟在表达式后面
-  const nullsClause = isNumericSort ? ' NULLS LAST' : ''
   const orderBy = SORTABLE_COLS.has(sort)
-    ? `${sortExpr} ${String(order).toLowerCase() === 'asc' ? 'ASC' : 'DESC'}${nullsClause}, id DESC`
+    ? `${sortExprOf(sort)} ${String(order).toLowerCase() === 'asc' ? 'ASC' : 'DESC'} NULLS LAST, id DESC`
     : 'date DESC, updated_at DESC, id DESC'
 
   const rows = queryAll(`

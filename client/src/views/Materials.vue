@@ -164,13 +164,16 @@
         @select="onFactorySelect" close-on-click-action />
 
       <!-- 列设置：每列文字对齐方式 -->
-      <van-popup v-model:show="showColSettings" position="right" :style="{ width: '300px', height: '100%' }">
+      <van-popup v-model:show="showColSettings" position="right" :style="{ width: '340px', height: '100%' }">
         <div class="colset">
           <div class="colset-head">
             <span class="colset-title">⚙ 列设置</span>
-            <button class="colset-reset" @click="resetColAligns">对齐恢复默认</button>
+            <div class="colset-actions">
+              <button class="colset-reset" @click="resetColAligns">对齐恢复默认</button>
+              <button class="colset-reset" @click="resetColWidths">列宽恢复默认</button>
+            </div>
           </div>
-          <div class="colset-tip">选每列文字的对齐方式，自动记住。列宽可直接拖动表头右边缘调整。</div>
+          <div class="colset-tip">选每列文字的对齐方式，自动记住。列宽可直接拖动表头右边缘调整，拖得太窄了点「列宽恢复默认」。</div>
           <div class="colset-row" v-for="col in columns" :key="col.key">
             <span class="colset-name">{{ col.label }}</span>
             <div class="align-group">
@@ -467,6 +470,12 @@ function loadColWidths() {
 }
 function saveColWidths() {
   try { localStorage.setItem('materials_col_widths', JSON.stringify(colWidths.value)) } catch {}
+}
+// 列宽能拖到任意小（0.1px）。一旦窄于 20px，表头会 .col-narrow{overflow:hidden}
+// 把右边缘那个 6px 的拖拽把手裁掉 —— 就再也抓不回来了。给一条退路。
+function resetColWidths() {
+  colWidths.value = { ...COL_DEFAULTS }
+  saveColWidths()
 }
 
 // ===== 列对齐记忆 =====
@@ -1142,6 +1151,7 @@ onUnmounted(() => {
 .colset { padding: 16px; height: 100%; overflow: auto; box-sizing: border-box; }
 .colset-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
 .colset-title { font-size: 15px; font-weight: 600; color: #323233; }
+.colset-actions { display: flex; gap: 6px; }
 .colset-reset { padding: 3px 10px; border-radius: 4px; border: 1px solid #d9d9d9; background: #fff; color: #666; font-size: 11px; cursor: pointer; font-family: inherit; }
 .colset-reset:hover { border-color: var(--color-primary); color: var(--color-primary); }
 .colset-tip { font-size: 11px; color: #999; line-height: 1.5; margin-bottom: 12px; }
