@@ -161,11 +161,15 @@ router.get('/', (req, res) => {
   const offset = (Number(page) - 1) * Number(pageSize)
 
   // 未指定排序时保持原行为；指定了才按白名单列排序（sort/order 都经校验，不可注入）
-  // 报价/成本价在库里是 TEXT，直接排会按字符串比（"100" < "9"），必须先转数值
+  // 报价/成本价在库里是 TEXT，直接排会按字符串比（"100" < "9"），必须先转数值；
+  // 没报价的记录转出来是 NULL，「升序」时会全挤到最前，看着像排序坏了 → 统一 NULLS LAST 沉底
   const NUMERIC_SORT_COLS = new Set(['price', 'cost_price'])
-  const sortExpr = NUMERIC_SORT_COLS.has(sort) ? `CAST(NULLIF(TRIM(${sort}), '') AS REAL)` : sort
+  const isNumericSort = NUMERIC_SORT_COLS.has(sort)
+  const sortExpr = isNumericSort ? `CAST(NULLIF(TRIM(${sort}), '') AS REAL)` : sort
+  // 注意 NULLS LAST 是排序方向的子句，必须写在 ASC/DESC 后面，不能跟在表达式后面
+  const nullsClause = isNumericSort ? ' NULLS LAST' : ''
   const orderBy = SORTABLE_COLS.has(sort)
-    ? `${sortExpr} ${String(order).toLowerCase() === 'asc' ? 'ASC' : 'DESC'}, id DESC`
+    ? `${sortExpr} ${String(order).toLowerCase() === 'asc' ? 'ASC' : 'DESC'}${nullsClause}, id DESC`
     : 'date DESC, updated_at DESC, id DESC'
 
   const rows = queryAll(`

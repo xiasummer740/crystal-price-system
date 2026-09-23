@@ -91,7 +91,9 @@ describe('GET /api/materials — 排序', () => {
   const SEED = [
     { customer_code: 'S-1', jkx_code: 'J-1', material_name: 'BBB', price: '9', cost_price: '300', factory: 'A厂', status: '报价', date: '2026-03-01' },
     { customer_code: 'S-2', jkx_code: 'J-2', material_name: 'AAA', price: '100', cost_price: '20', factory: 'B厂', status: '送样', date: '2026-01-01' },
-    { customer_code: 'S-3', jkx_code: 'J-3', material_name: 'CCC', price: '50', cost_price: '1', factory: 'C厂', status: '下批量', date: '2026-02-01' }
+    { customer_code: 'S-3', jkx_code: 'J-3', material_name: 'CCC', price: '50', cost_price: '1', factory: 'C厂', status: '下批量', date: '2026-02-01' },
+    // 没报价的记录：price 为空串，排序时不能被当成 0 挤到最前
+    { customer_code: 'S-4', jkx_code: 'J-4', material_name: 'DDD', price: '', cost_price: '', factory: 'D厂', status: '报价', date: '2026-04-01' }
   ]
 
   before(async () => {
@@ -102,43 +104,54 @@ describe('GET /api/materials — 排序', () => {
     }
   })
 
+  // 断言统一用 customer_code 的排列顺序，比断言数值更能说明"到底按哪一列排的"
+  const codes = (res) => res.body.data.list.map(r => r.customer_code).join(',')
+
   it('不传 sort → 保持默认（日期倒序）', async () => {
     const res = await request.get(BASE).query({ customer: C })
-    assert.equal(res.body.data.list.map(r => r.customer_code).join(','), 'S-1,S-3,S-2')
+    assert.equal(codes(res), 'S-4,S-1,S-3,S-2')
   })
 
   it('sort=price&order=asc → 按报价数值升序（不是字符串序）', async () => {
     const res = await request.get(BASE).query({ customer: C, sort: 'price', order: 'asc' })
     // 字符串序会排成 "100","50","9"；数值序才是 9,50,100
-    assert.equal(res.body.data.list.map(r => r.price).join(','), '9,50,100')
+    assert.equal(codes(res), 'S-1,S-3,S-2,S-4')
   })
 
   it('sort=price&order=desc → 按报价数值降序', async () => {
     const res = await request.get(BASE).query({ customer: C, sort: 'price', order: 'desc' })
-    assert.equal(res.body.data.list.map(r => r.price).join(','), '100,50,9')
+    assert.equal(codes(res), 'S-2,S-3,S-1,S-4')
+  })
+
+  it('空报价在升序/降序里都沉底（不因方向翻转而跑到最前）', async () => {
+    const asc = await request.get(BASE).query({ customer: C, sort: 'cost_price', order: 'asc' })
+    const desc = await request.get(BASE).query({ customer: C, sort: 'cost_price', order: 'desc' })
+    // S-4 成本价为空串，转数值后是 NULL；不加 NULLS LAST 的话升序会把它顶到第一位
+    assert.equal(asc.body.data.list.at(-1).customer_code, 'S-4', '升序时空成本价应在最后')
+    assert.equal(desc.body.data.list.at(-1).customer_code, 'S-4', '降序时空成本价也应在最后')
   })
 
   it('sort=material_name&order=asc → 按物料名称升序', async () => {
     const res = await request.get(BASE).query({ customer: C, sort: 'material_name', order: 'asc' })
-    assert.equal(res.body.data.list.map(r => r.material_name).join(','), 'AAA,BBB,CCC')
+    assert.equal(codes(res), 'S-2,S-1,S-3,S-4')
   })
 
   it('sort=date&order=asc → 按日期升序', async () => {
     const res = await request.get(BASE).query({ customer: C, sort: 'date', order: 'asc' })
-    assert.equal(res.body.data.list.map(r => r.date).join(','), '2026-01-01,2026-02-01,2026-03-01')
+    assert.equal(codes(res), 'S-2,S-3,S-1,S-4')
   })
 
   it('缺 order 参数 → 默认降序', async () => {
     const res = await request.get(BASE).query({ customer: C, sort: 'price' })
-    assert.equal(res.body.data.list.map(r => r.price).join(','), '100,50,9')
+    assert.equal(codes(res), 'S-2,S-3,S-1,S-4')
   })
 
   it('非法 sort 字段 → 退回默认排序，且不破坏表（防注入）', async () => {
     const res = await request.get(BASE).query({ customer: C, sort: 'id; DROP TABLE customer_materials' })
     assert.equal(res.status, 200, '非法排序字段不应 500')
-    assert.equal(res.body.data.list.map(r => r.customer_code).join(','), 'S-1,S-3,S-2', '应退回默认日期倒序')
+    assert.equal(codes(res), 'S-4,S-1,S-3,S-2', '应退回默认日期倒序')
     const again = await request.get(BASE).query({ customer: C })
-    assert.equal(again.body.data.total, 3, '表应完好无损')
+    assert.equal(again.body.data.total, 4, '表应完好无损')
   })
 
   it('排序与筛选可叠加', async () => {
