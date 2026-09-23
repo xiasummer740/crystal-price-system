@@ -277,7 +277,7 @@
               <input ref="specFileInputRef" type="file" accept=".pdf,.png,.jpg,.jpeg,.gif,.doc,.docx,.xlsx,.xls,.zip,.rar" hidden @change="onSpecFileChange" />
             </div>
             <div class="form-actions">
-              <button class="form-cancel" @click="showForm = false">取消</button>
+              <button class="form-cancel" @click="cancelForm">取消</button>
               <button class="form-save" :disabled="saving" @click="saveForm">{{ saving ? '保存中…' : '保存' }}</button>
             </div>
           </div>
@@ -637,13 +637,21 @@ async function onRemarkFileChange(e) {
   if (files?.length) await uploadRImages(files)
   remarkFileInput.value.value = ''
 }
-async function removeRImg(i) {
+// 删除备注图片：只登记「待删」，等保存成功才真正删磁盘文件。
+// 立即删会导致「删图后点取消」→ DB 仍引用已删文件 → 列表 📷 点开是裂图
+const pendingImgDeletes = ref([])
+function removeRImg(i) {
   const url = form.value.remark_images[i]
-  if (url) {
-    const filename = url.split('?')[0].split('/').pop()
-    deleteMaterialImage(filename).catch(() => {})
-  }
+  if (url) pendingImgDeletes.value.push(url.split('?')[0].split('/').pop())
   form.value.remark_images.splice(i, 1)
+}
+function flushPendingImgDeletes() {
+  for (const filename of pendingImgDeletes.value) deleteMaterialImage(filename).catch(() => {})
+  pendingImgDeletes.value = []
+}
+function cancelForm() {
+  pendingImgDeletes.value = [] // 取消：待删清空，磁盘文件一个都不动
+  showForm.value = false
 }
 
 // 主列表备注图片预览
@@ -809,6 +817,7 @@ function openForm(item) {
     editing.value = null
     form.value = { date: new Date().toISOString().slice(0, 10), customer_code: '', jkx_code: '', price: '', cost_price: '', material_code: '', material_name: '', factory: '', status: '报价', customer_desc: '', remark: '', alternates: [], spec_document: '', remark_images: [] }
   }
+  pendingImgDeletes.value = [] // 每次开表单都清空待删，避免上次残留
   showForm.value = true
 }
 
@@ -858,6 +867,7 @@ async function saveForm() {
       await createMaterial(data)
       showToast('已创建')
     }
+    flushPendingImgDeletes() // 保存成功，此时才真正删磁盘文件
     showForm.value = false
     load()
     loadCustomerList()

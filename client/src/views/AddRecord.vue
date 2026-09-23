@@ -379,13 +379,17 @@ async function onRemarkFileChange(e) {
   if (files?.length) await uploadRImages(files)
   remarkFileInput.value.value = ''
 }
-async function removeRImg(i) {
+// 删除备注图片：只登记「待删」，等保存成功才真正删磁盘文件。
+// 立即删会导致「删图后不保存就离开」→ DB 仍引用已删文件 → 详情页裂图
+const pendingImgDeletes = ref([])
+function removeRImg(i) {
   const url = form.value.remark_images[i]
-  if (url) {
-    const filename = url.split('?')[0].split('/').pop()
-    deletePriceImage(filename).catch(() => {})
-  }
+  if (url) pendingImgDeletes.value.push(url.split('?')[0].split('/').pop())
   form.value.remark_images.splice(i, 1)
+}
+function flushPendingImgDeletes() {
+  for (const filename of pendingImgDeletes.value) deletePriceImage(filename).catch(() => {})
+  pendingImgDeletes.value = []
 }
 
 function onCurrencyConfirm({ selectedOptions }) { form.value.currency = selectedOptions[0].value; showCurrencyPicker.value = false }
@@ -397,6 +401,7 @@ function onPriceWithoutTaxChange() { const v = form.value.price_without_tax; if 
 
 // 加载表单数据
 async function loadFormData() {
+  pendingImgDeletes.value = [] // 每次加载都清空待删，避免上次残留
   if (isEdit.value) {
     showLoadingToast({ message:'加载中...', forbidClick:true })
     try {
@@ -441,13 +446,14 @@ async function onSubmit() {
   try {
     if (isEdit.value) { await store.edit(route.params.id, form.value); showToast('修改成功') }
     else { await store.add(form.value); showToast('新增成功') }
+    flushPendingImgDeletes() // 保存成功，此时才真正删磁盘文件
     formDirty.value = false
     router.push('/')
   } catch (e) { showToast(e.message||'操作失败') } finally { submitting.value = false }
 }
 async function onSubmitNew() {
   submittingNew.value = true
-  try { await store.add(form.value); formDirty.value = false; showToast('新记录已创建，原记录保留'); router.push('/') }
+  try { await store.add(form.value); flushPendingImgDeletes(); formDirty.value = false; showToast('新记录已创建，原记录保留'); router.push('/') }
   catch (e) { showToast(e.message||'操作失败') } finally { submittingNew.value = false }
 }
 </script>
