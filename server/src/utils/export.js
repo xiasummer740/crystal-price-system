@@ -473,8 +473,10 @@ export function exportMapCustomers() {
   return XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
 }
 
-export function exportMaterials() {
-  const rows = queryAll('SELECT * FROM customer_materials WHERE is_deleted = 0 ORDER BY customer ASC, created_at DESC')
+export function exportMaterials(customer = '') {
+  const rows = customer
+    ? queryAll('SELECT * FROM customer_materials WHERE is_deleted = 0 AND customer = ? ORDER BY created_at DESC', [customer])
+    : queryAll('SELECT * FROM customer_materials WHERE is_deleted = 0 ORDER BY customer ASC, created_at DESC')
   const data = rows.map(r => {
     let alternates = []
     try { alternates = JSON.parse(r.alternates || '[]') } catch {}

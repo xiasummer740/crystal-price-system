@@ -6,7 +6,7 @@
 
 ## 当前工作：客户资料归档（按客户名组织数据目录）
 
-**状态：方案已与祥哥定稿，尚未动代码**
+**状态：方案定稿 ✅ ｜ 影响面分析 ✅ ｜ 地基模块已写（**未接线**）｜ 业务接线 0 行**
 
 祥哥需求：数据目录下的文件按**客户**归档，点按钮直接打开某客户文件夹；另一台电脑安装后要**自动整理**已有全部内容。
 
@@ -41,9 +41,94 @@ _未分配客户/             ← 没填客户名的记录兜底
 - 同类：`:350` 的 `NOT LIKE '/api/specs/客户物料/%'` 因库里是 percent-encoded 而**永远为真**，等于护栏失效（目前无害，靠 `srcPath` 不存在兜住）
 - 这正是本次搬家必须防的坑，一并修
 
-### 参考
+### 影响面分析（第 2 步，已完成）
 
-- 备份教学已教（确认数据目录 → 完全退出 → 整目录拷贝（不是只拷 data.db）→ 核对文件数/大小 → 加日期打包）
+**搬家映射表**（旧位置 → 新位置 → 谁引用它）：
+
+| # | 类别 | 旧磁盘位置 | 新磁盘位置 | DB 表.列 | 旧 URL | 新 URL |
+|---|------|-----------|-----------|---------|--------|--------|
+| 1 | 客户物料规格书 | `规格书/客户物料/<客户>/f`<br>（更旧：`规格书/f`） | `客户管理/<客户>/规格书/f` | `customer_materials.spec_document` | `/api/specs/客户物料/<客户>/f`<br>`/api/specs/f` | `/api/cust/<客户>/规格书/f` |
+| 2 | 客户物料备注图 | `客户物料图片库/f` | `客户管理/<客户>/物料图片/f` | `customer_materials.remark_images` (JSON) | `/api/uploads/materials/f` | `/api/cust/<客户>/物料图片/f` |
+| 3 | 记事附件（图/文件） | `记事图片库/f` | `客户管理/<客户>/记事/<日期>/图片N.ext` | `notes.images` (JSON) | `/api/uploads/notes/f` | `/api/cust/<客户>/记事/<日期>/图片N.ext` |
+| 4 | 报价规格书 | `规格书/报价/<品类>/f`<br>（更旧：`规格书/f`） | `报价规格书/<品类>/f` | `material_prices.spec_document` | `/api/specs/报价/<品类>/f` | `/api/quote-specs/<品类>/f` |
+| 5 | 报价备注图 | `报价图片库/f` | `报价备注图/f` | `material_prices.remark_images` (JSON) | `/api/uploads/prices/f` | `/api/quote-images/f` |
+
+**代码接触点**（共 8 个文件）：
+
+| 文件 | 行 | 作用 | 处理 |
+|------|----|------|------|
+| `server/src/index.js` | 140/145/150/155 | 4 个 `express.static` 挂载 | 新增 `/api/cust`（根=客户管理）、`/api/quote-specs`、`/api/quote-images`；旧路由保留只读兜底 |
+| | 162-224 | `specUpload` 的 `folder` query → 目标目录 + 生成 URL | folder 语义改为「相对 DATA_DIR 的路径」，URL 前缀随之切换 |
+| | 271-323 | `cleanupDuplicateSpecs()` | 保留（迁移后旧目录空转，无害） |
+| | 339-427 | `migrateSpecsToCustomerFolders` / `migrateQuoteSpecsToCategoryFolders` | **删除** —— 新迁移统一接管，留着就是两套逻辑打架 |
+| `server/src/routes/materials.js` | 15/18 | `specDir` / `materialsUploadDir` | 改走路径助手 |
+| | 35-39 | 备注图上传 + URL | 加 customer query；URL 前缀改 |
+| | 55-88 | `renameCustomerFolder()` | 改为迁**整个** `客户管理/<客户>/`（规格书+物料图片+记事），并同步 `notes.customer` |
+| `server/src/routes/notes.js` | 20-42 | 附件上传目录 + URL | 加 customer/日期 query；URL 前缀改 |
+| `server/src/routes/prices.js` | 12-33 | 报价备注图上传目录 + URL | 指向 `报价备注图/` |
+| `server/src/utils/export.js` | 248 / 327 | 记事导出按 `记事图片库/f` 找文件 | 改为按新 URL 解析；导出的 ZIP 内部仍是打平的 `images/` |
+| `electron/main.js` | 302 | 首次启动建子目录 | 加 `客户管理` / `报价规格书` / `报价备注图` / `_未分配客户` |
+| | 742-752 | `open-spec` 拼 `DATA_DIR/规格书/<路径>` | 按 URL 前缀解析（新旧都要认） |
+| `client/src/views/*.vue` | 6 处 | `url.startsWith('/api/specs/')` 判断 + 取文件名 | 增加新前缀判断 |
+
+**设计决策（已定）**：
+
+- **上传落位**：`multer` 的 `destination` 回调能读到 `req.query`，所以沿用现有「folder 走 query」的做法 ——
+  规格书（物料/报价）在上传时就知道客户/品类 → **直接落目标目录**；
+  报价备注图无上下文依赖 → **直接落 `报价备注图/`**；
+  记事附件、物料备注图要「客户 + 日期」，上传时用 query 带过去，**保存时再核对一次**：若记录最终客户变了，调 `rehomeFiles()` 把图挪到正确客户目录并改写 URL。
+- **删除类操作**：现有 `DELETE /upload/:filename` 只接受**裸文件名**（`includes('/')` 即拒绝）。新结构是多级目录 → 改为「必须传完整归档 URL」，由路径助手解析回磁盘路径，并校验解析结果落在 `客户管理/`（或报价两目录）之内，越界即拒。
+- **URL 里带的是 sanitize 后的客户名，DB 里存原始客户名** —— 展示名从 DB 取（现状已如此），两者不混用。
+- **重名客户 sanitize 后撞车**（如 `A/B` 与 `A_B`）：迁移前检测，命中就写进报告并**停下问祥哥**，不自动合并。实测 63 个客户无非法字符，正常不会触发。
+- **孤儿文件**（29 张记事图 + 若干规格书）**不动**，留原地并在报告里列数 —— 不猜、不乱归户。
+- **备份教学已教**（确认数据目录 → 完全退出 → 整目录拷贝（不是只拷 data.db）→ 核对文件数/大小 → 加日期打包）
+
+**迁移的验收标准（硬指标）**：搬完后逐条自检 ——
+① DB 里每个文件引用都能解析到磁盘上**真实存在**的文件（0 断链）；
+② 磁盘上每个归档文件都**有主**（被 DB 引用）或**在报告里被明确列为孤儿**；
+③ 连跑两次结果一致（幂等）。
+
+---
+
+## 已落地：地基模块（写好但**没接线**）
+
+| 文件 | 行数 | 作用 | 状态 |
+|------|------|------|------|
+| `server/src/utils/customerArchive.js` | 318 | **路径助手** —— 全系统归档区读写的唯一入口：`DIR`/`LEGACY` 常量、URL ↔ 磁盘路径互转（`resolveUrl`/`isArchivedUrl`/`insideRoot`）、`safeSegment`、`rehomeFiles()` | ✅ 语法过 · ❌ 无人 import |
+| `server/src/utils/archiveSync.js` | 487 | **搬迁引擎 + 自检** —— `syncArchive()` 走「备份→复制→改库落盘→确认后才删源→写报告」；`verifyReferences()` 断链自检；产出 `DATA_DIR/客户资料归档报告.txt` | ✅ 语法过 · ❌ 无人 import |
+| `server/src/utils/export.js` | +4/−2 | `exportMaterials(customer)` 支持按客户筛选（给「每客户 物料清单.xlsx」用） | ✅ 已改 |
+
+**验证到什么程度（诚实口径）**：三个文件 `node --check` 全过。
+**`syncArchive()` 一次都没执行过，没有测试，没有任何调用方。**
+「语法过 ≠ 能跑」—— 离能交差还差整条接线 + 沙箱实跑。
+
+## 📦 本机数据已换成生产数据（2026-09-23）
+
+- **现在的数据目录**：`G:\Users\Documents\晶振报价管理系统`（534 文件 / 169.8MB，`data.db` 796KB）
+  判定依据是 `%APPDATA%\crystal-price-system\user-config.json` 的 `dataDir` 字段，不是猜的（同机上有多个同名目录）
+- **做法**：旧目录（32 文件 / 2.07MB）删除 → `tar -xf` 解压 RAR5
+  （Windows 自带 bsdtar 就能解 RAR5，**不用装 7z/WinRAR**）
+- **验证 5 层全过**：① 9 个目录的文件数**和字节总数**都与 rar 完全一致 ② `data.db` sha256 与源一致
+  ③ 应用日志 `DATA_DIR` 指向正确、无新错误 ④ 规格书页「共 57 条」= DB `material_samples` 57
+  ⑤ 首页「共 67 条」= 67 个未删物料名（`material_prices` 514 行里 443 行 `is_deleted=1`）
+- **库现状**：客户 109 · `material_prices` 514（未删 71）· `price_logs` 828 · `customer_materials` 282 · `notes` 71
+- **开发库没动**：`server\数据库\data.db` 仍是 8-17 那份 232KB
+
+→ 好处：**21 条 404、63 个客户文件夹这些摸底结论，现在可以直接在本机真实库上复现**，
+不用再依赖 `G:\Temp\crystal-realdata` 副本（副本还在，`D:\xwechat_files\...\晶振报价管理系统.rar` 原件也在）。
+
+## ▶️ 下一步（接力从这里接）
+
+按上面「影响面分析」表的 8 个接触点接线，建议顺序：
+
+1. **挂新 static 路由** —— `/api/cust`（根 = `客户管理/`）、`/api/quote-specs`、`/api/quote-images`；**旧 4 条路由保留只读兜底**（没刷新的旧页面不至于立刻 404）
+2. **删旧迁移** —— `index.js:339-427` 的 `migrateSpecsToCustomerFolders` / `migrateQuoteSpecsToCategoryFolders` **删掉**（新迁移统一接管，留着就是两套逻辑打架）🔴 这正是 21 条 404 的根因
+3. **上传落位** —— `specUpload` 的 folder 语义改为「相对 DATA_DIR 的路径」；`materials.js` / `notes.js` / `prices.js` 三处上传同步改
+4. **接入启动** —— `index.js` 启动时调 `syncArchive()`（「另一台电脑装完自动整理」走的就是这条路径）
+5. **前端跟随** —— 6 处 `url.startsWith('/api/specs/')` 判断加新前缀；`electron/main.js` 首次启动建新子目录 + `open-spec` 按 URL 前缀解析（新旧都认）
+6. **沙箱实跑 + 幂等验证** —— 按上面 3 条硬指标自检，**连跑两次结果必须一致**
+
+⚠️ **别拿 G 盘生产目录当试验场** —— 先在 `G:\Temp\crystal-realdata` 摸底副本或另建沙箱跑通，再碰生产数据。
 
 ---
 
