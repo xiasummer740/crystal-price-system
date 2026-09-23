@@ -133,9 +133,15 @@ router.get('/customers/search', (req, res) => {
 
 // ========== CRUD ==========
 
-// 列表 — 按客户筛选 + 搜索 + 状态/工厂/日期筛选 + 分页
+// 可点表头排序的列（白名单，防 SQL 注入：只放真实列名，前端传别的就退回默认排序）
+const SORTABLE_COLS = new Set([
+  'date', 'customer_code', 'jkx_code', 'price', 'cost_price',
+  'material_code', 'material_name', 'factory', 'status', 'customer_desc', 'remark'
+])
+
+// 列表 — 按客户筛选 + 搜索 + 状态/工厂/日期筛选 + 排序 + 分页
 router.get('/', (req, res) => {
-  const { page = 1, pageSize = 50, keyword, status, customer, factory, start, end } = req.query
+  const { page = 1, pageSize = 50, keyword, status, customer, factory, start, end, sort, order } = req.query
   const conditions = ['is_deleted = 0']
   const params = []
 
@@ -154,9 +160,17 @@ router.get('/', (req, res) => {
   const total = queryOne(`SELECT COUNT(*) as total FROM customer_materials ${where}`, params)?.total ?? 0
   const offset = (Number(page) - 1) * Number(pageSize)
 
+  // 未指定排序时保持原行为；指定了才按白名单列排序（sort/order 都经校验，不可注入）
+  // 报价/成本价在库里是 TEXT，直接排会按字符串比（"100" < "9"），必须先转数值
+  const NUMERIC_SORT_COLS = new Set(['price', 'cost_price'])
+  const sortExpr = NUMERIC_SORT_COLS.has(sort) ? `CAST(NULLIF(TRIM(${sort}), '') AS REAL)` : sort
+  const orderBy = SORTABLE_COLS.has(sort)
+    ? `${sortExpr} ${String(order).toLowerCase() === 'asc' ? 'ASC' : 'DESC'}, id DESC`
+    : 'date DESC, updated_at DESC, id DESC'
+
   const rows = queryAll(`
     SELECT * FROM customer_materials ${where}
-    ORDER BY date DESC, updated_at DESC, id DESC
+    ORDER BY ${orderBy}
     LIMIT ? OFFSET ?
   `, [...params, Number(pageSize), offset]).map(parseAlternates)
 

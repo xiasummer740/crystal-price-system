@@ -89,15 +89,20 @@
             <input v-model="dateEnd" type="date" class="date-input" @change="onSearch" />
           </div>
           <button v-if="hasFilters" class="clear-filter-btn" @click="clearFilters" title="清除所有筛选">✕ 清除</button>
+          <div class="filter-btn" @click="showColSettings = true" title="设置每列文字的对齐方式">⚙ 列设置</div>
         </div>
 
         <div class="table-wrap" ref="tableWrapRef">
           <table class="mat-table" :style="{ width: totalWidth + 'px' }">
             <thead>
               <tr>
-                <th v-for="col in columns" :key="col.key" class="col-th" :class="{ 'col-narrow': colWidths[col.key] < 20 }" :style="{ width: colWidths[col.key] + 'px', minWidth: colWidths[col.key] + 'px' }">
+                <th v-for="col in columns" :key="col.key" class="col-th"
+                  :class="{ 'col-narrow': colWidths[col.key] < 20, 'col-sortable': sortableKeys.has(col.key) }"
+                  :style="{ width: colWidths[col.key] + 'px', minWidth: colWidths[col.key] + 'px', textAlign: colAligns[col.key] }"
+                  @click="toggleSort(col.key)">
                   {{ col.label }}
-                  <span class="col-resize" @mousedown.prevent="startResize($event, col.key)" title="拖动调整宽度"></span>
+                  <span v-if="sortKey === col.key" class="sort-ind">{{ sortOrder === 'asc' ? '▲' : '▼' }}</span>
+                  <span class="col-resize" @mousedown.prevent="startResize($event, col.key)" @click.stop title="拖动调整宽度"></span>
                 </th>
               </tr>
             </thead>
@@ -106,30 +111,30 @@
                 <td colspan="12" class="empty-row">暂无物料记录，点击「＋ 新增」添加</td>
               </tr>
               <tr v-for="item in list" :key="item.id" class="mat-row" :style="{ background: statusRowBg(item.status) }">
-                <td class="cell-copy" :style="{ width: colWidths.date + 'px' }" @click="copyText(item.date)">{{ (item.date || '').slice(0, 10) }}</td>
-                <td class="cell-copy" :style="{ width: colWidths.customer_code + 'px' }" @click="copyText(item.customer_code)">{{ item.customer_code }}</td>
-                <td class="cell-copy" :style="{ width: colWidths.jkx_code + 'px' }" @click="copyText(item.jkx_code)">{{ item.jkx_code }}</td>
-                <td class="cell-copy" :style="{ width: colWidths.price + 'px' }" @click="copyText(item.price)">{{ item.price }}</td>
-                <td class="cell-copy" :style="{ width: colWidths.cost_price + 'px' }" @click="copyText(item.cost_price)">{{ item.cost_price }}</td>
-                <td class="cell-copy" :style="{ width: colWidths.material_code + 'px' }" @click="copyText(item.material_code)">{{ item.material_code }}</td>
-                <td class="cell-copy" :style="{ width: colWidths.material_name + 'px' }" :title="materialNameTitle(item)" @click="copyText(item.material_name)">
+                <td class="cell-copy" :style="{ width: colWidths.date + 'px', textAlign: colAligns.date }" @click="copyText(item.date)">{{ (item.date || '').slice(0, 10) }}</td>
+                <td class="cell-copy" :style="{ width: colWidths.customer_code + 'px', textAlign: colAligns.customer_code }" @click="copyText(item.customer_code)">{{ item.customer_code }}</td>
+                <td class="cell-copy" :style="{ width: colWidths.jkx_code + 'px', textAlign: colAligns.jkx_code }" @click="copyText(item.jkx_code)">{{ item.jkx_code }}</td>
+                <td class="cell-copy" :style="{ width: colWidths.price + 'px', textAlign: colAligns.price }" @click="copyText(item.price)">{{ item.price }}</td>
+                <td class="cell-copy" :style="{ width: colWidths.cost_price + 'px', textAlign: colAligns.cost_price }" @click="copyText(item.cost_price)">{{ item.cost_price }}</td>
+                <td class="cell-copy" :style="{ width: colWidths.material_code + 'px', textAlign: colAligns.material_code }" @click="copyText(item.material_code)">{{ item.material_code }}</td>
+                <td class="cell-copy" :style="{ width: colWidths.material_name + 'px', textAlign: colAligns.material_name }" :title="materialNameTitle(item)" @click="copyText(item.material_name)">
                   <span class="rich-text" v-html="renderRich(item.material_name)"></span>
                   <span v-if="(item.alternates || []).length" class="alt-badge" :title="altNames(item)">备选{{ item.alternates.length }}</span>
                 </td>
-                <td class="cell-copy" :style="{ width: colWidths.factory + 'px' }" @click="copyText(item.factory)">
+                <td class="cell-copy" :style="{ width: colWidths.factory + 'px', textAlign: colAligns.factory }" @click="copyText(item.factory)">
                   <span class="prim-name">{{ item.factory }}</span>
                   <span v-if="(item.alternates || []).length" class="alt-badge alt-factory" :title="altFactories(item)">+{{ item.alternates.length }}</span>
                 </td>
-                <td class="col-status" :style="{ width: colWidths.status + 'px' }">
+                <td class="col-status" :style="{ width: colWidths.status + 'px', textAlign: colAligns.status }">
                   <span class="status-tag" :style="{ background: statusBg(item.status), color: statusColor(item.status), borderColor: statusColor(item.status) + '55' }">
                     {{ item.status }}
                   </span>
                 </td>
-                <td class="cell-copy" :style="{ width: colWidths.customer_desc + 'px' }" :title="item.customer_desc" @click="copyText(item.customer_desc)">
+                <td class="cell-copy" :style="{ width: colWidths.customer_desc + 'px', textAlign: colAligns.customer_desc }" :title="item.customer_desc" @click="copyText(item.customer_desc)">
                   <span class="rich-text" v-html="renderRich(item.customer_desc)"></span>
                 </td>
-                <td class="cell-copy" :style="{ width: colWidths.remark + 'px' }" :title="item.remark" @click="copyText(item.remark)">{{ item.remark }}</td>
-                <td class="col-actions" :style="{ width: colWidths.actions + 'px' }">
+                <td class="cell-copy" :style="{ width: colWidths.remark + 'px', textAlign: colAligns.remark }" :title="item.remark" @click="copyText(item.remark)">{{ item.remark }}</td>
+                <td class="col-actions" :style="{ width: colWidths.actions + 'px', textAlign: colAligns.actions }">
                   <button v-if="item.spec_document" class="tbl-btn spec-btn" @click="openSpec(item.spec_document)" title="打开规格书">📄</button>
                   <button v-if="rimgCount(item)" class="tbl-btn spec-btn rimgs-btn" @click="previewRImgs(item)" title="备注图片">📷{{ rimgCount(item) > 1 ? rimgCount(item) : '' }}</button>
                   <button class="tbl-btn edit-btn-sm" @click="openForm(item)">✎</button>
@@ -157,6 +162,25 @@
       <!-- 工厂筛选弹窗 -->
       <van-action-sheet v-model:show="showFactorySheet" :actions="factoryActions" cancel-text="取消"
         @select="onFactorySelect" close-on-click-action />
+
+      <!-- 列设置：每列文字对齐方式 -->
+      <van-popup v-model:show="showColSettings" position="right" :style="{ width: '300px', height: '100%' }">
+        <div class="colset">
+          <div class="colset-head">
+            <span class="colset-title">⚙ 列设置</span>
+            <button class="colset-reset" @click="resetColAligns">对齐恢复默认</button>
+          </div>
+          <div class="colset-tip">选每列文字的对齐方式，自动记住。列宽可直接拖动表头右边缘调整。</div>
+          <div class="colset-row" v-for="col in columns" :key="col.key">
+            <span class="colset-name">{{ col.label }}</span>
+            <div class="align-group">
+              <button v-for="opt in ALIGN_OPTS" :key="opt.value" class="align-btn"
+                :class="{ active: colAligns[col.key] === opt.value }"
+                @click="colAligns[col.key] = opt.value; saveColAligns()">{{ opt.label }}</button>
+            </div>
+          </div>
+        </div>
+      </van-popup>
 
       <!-- 新增/编辑弹窗 -->
       <van-overlay :show="showForm" z-index="2000">
@@ -443,6 +467,58 @@ function loadColWidths() {
 }
 function saveColWidths() {
   try { localStorage.setItem('materials_col_widths', JSON.stringify(colWidths.value)) } catch {}
+}
+
+// ===== 列对齐记忆 =====
+// 默认：状态/操作两列居中（和数据格一致，表头不再和数据错开），其余靠左
+const COL_ALIGN_DEFAULTS = {
+  date: 'left', customer_code: 'left', jkx_code: 'left', price: 'left', cost_price: 'left',
+  material_code: 'left', material_name: 'left', factory: 'left', status: 'center',
+  customer_desc: 'left', remark: 'left', actions: 'center'
+}
+const ALIGN_OPTS = [
+  { value: 'left', label: '左' },
+  { value: 'center', label: '中' },
+  { value: 'right', label: '右' }
+]
+const showColSettings = ref(false)
+const colAligns = ref(loadColAligns())
+function loadColAligns() {
+  try {
+    const saved = JSON.parse(localStorage.getItem('materials_col_aligns') || '{}')
+    const aligns = { ...COL_ALIGN_DEFAULTS }
+    for (const k of Object.keys(COL_ALIGN_DEFAULTS)) {
+      if (ALIGN_OPTS.some(o => o.value === saved[k])) aligns[k] = saved[k]
+    }
+    return aligns
+  } catch { return { ...COL_ALIGN_DEFAULTS } }
+}
+function saveColAligns() {
+  try { localStorage.setItem('materials_col_aligns', JSON.stringify(colAligns.value)) } catch {}
+}
+function resetColAligns() {
+  colAligns.value = { ...COL_ALIGN_DEFAULTS }
+  saveColAligns()
+}
+
+// ===== 表头点击排序 =====
+// 点一下升序、再点降序、第三下取消（回到默认的日期倒序）
+const sortKey = ref('')
+const sortOrder = ref('desc')
+// 操作列是按钮，不参与排序
+const sortableKeys = new Set(columns.filter(c => c.key !== 'actions').map(c => c.key))
+function toggleSort(key) {
+  if (!sortableKeys.has(key)) return
+  if (sortKey.value !== key) {
+    sortKey.value = key
+    sortOrder.value = 'asc'
+  } else if (sortOrder.value === 'asc') {
+    sortOrder.value = 'desc'
+  } else {
+    sortKey.value = ''
+  }
+  page.value = 1
+  load()
 }
 function startResize(e, key) {
   const startX = e.clientX
@@ -774,6 +850,7 @@ async function load() {
     if (factoryFilter.value) params.factory = factoryFilter.value
     if (dateStart.value) params.start = dateStart.value
     if (dateEnd.value) params.end = dateEnd.value
+    if (sortKey.value) { params.sort = sortKey.value; params.order = sortOrder.value }
     const r = await fetchMaterials(params)
     list.value = r.data.list || []
     total.value = r.data.total || 0
@@ -1056,6 +1133,25 @@ onUnmounted(() => {
 .col-resize::after { content: ''; position: absolute; top: 25%; bottom: 25%; left: 2px; width: 2px; background: #d0d0d0; }
 .col-resize:hover::after { background: var(--color-primary); }
 
+/* 表头点击排序 */
+.col-sortable { cursor: pointer; user-select: none; }
+.col-sortable:hover { color: var(--color-primary); }
+.sort-ind { margin-left: 3px; font-size: 9px; color: var(--color-primary); }
+
+/* 列设置面板 */
+.colset { padding: 16px; height: 100%; overflow: auto; box-sizing: border-box; }
+.colset-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+.colset-title { font-size: 15px; font-weight: 600; color: #323233; }
+.colset-reset { padding: 3px 10px; border-radius: 4px; border: 1px solid #d9d9d9; background: #fff; color: #666; font-size: 11px; cursor: pointer; font-family: inherit; }
+.colset-reset:hover { border-color: var(--color-primary); color: var(--color-primary); }
+.colset-tip { font-size: 11px; color: #999; line-height: 1.5; margin-bottom: 12px; }
+.colset-row { display: flex; align-items: center; justify-content: space-between; padding: 7px 0; border-bottom: 1px solid #f5f5f5; }
+.colset-name { font-size: 12px; color: #555; }
+.align-group { display: flex; gap: 4px; }
+.align-btn { width: 30px; height: 24px; border-radius: 4px; border: 1px solid #d9d9d9; background: #fff; color: #666; font-size: 11px; cursor: pointer; font-family: inherit; transition: all .15s; }
+.align-btn:hover { border-color: var(--color-primary); color: var(--color-primary); }
+.align-btn.active { background: var(--color-primary); border-color: var(--color-primary); color: #fff; }
+
 /* 点击复制 */
 .cell-copy { cursor: pointer; user-select: none; transition: background .15s; }
 .cell-copy:hover { background: rgba(var(--color-primary-rgb),.06) !important; }
@@ -1087,8 +1183,7 @@ onUnmounted(() => {
 .spec-drop-main { font-size: 13px; font-weight: 600; color: #1890ff; margin-bottom: 4px; }
 .spec-drop-sub { font-size: 10px; color: #999; }
 
-.col-status { text-align: center; }
-.col-actions { text-align: center; }
+/* 对齐由 colAligns 内联样式控制（可在「⚙ 列设置」里改），原 .col-status/.col-actions 的居中已并入默认值 */
 
 .status-tag { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; border: 1px solid; }
 .tbl-btn { background: none; border: none; cursor: pointer; font-size: 14px; padding: 2px 4px; transition: opacity .15s; line-height: 1; }

@@ -85,6 +85,69 @@ describe('POST /api/materials — 防重复校验', () => {
   })
 })
 
+describe('GET /api/materials — 排序', () => {
+  const C = '排序测试客户'
+  // 日期、报价、名称刻意错开，好区分是按哪一列排的
+  const SEED = [
+    { customer_code: 'S-1', jkx_code: 'J-1', material_name: 'BBB', price: '9', cost_price: '300', factory: 'A厂', status: '报价', date: '2026-03-01' },
+    { customer_code: 'S-2', jkx_code: 'J-2', material_name: 'AAA', price: '100', cost_price: '20', factory: 'B厂', status: '送样', date: '2026-01-01' },
+    { customer_code: 'S-3', jkx_code: 'J-3', material_name: 'CCC', price: '50', cost_price: '1', factory: 'C厂', status: '下批量', date: '2026-02-01' }
+  ]
+
+  before(async () => {
+    for (const s of SEED) {
+      const res = await request.post(BASE).send({ customer: C, ...s })
+      assert.equal(res.body.code, 0, `种子数据应写入成功: ${res.body.msg || res.status}`)
+      testIds.push(res.body.data.id)
+    }
+  })
+
+  it('不传 sort → 保持默认（日期倒序）', async () => {
+    const res = await request.get(BASE).query({ customer: C })
+    assert.equal(res.body.data.list.map(r => r.customer_code).join(','), 'S-1,S-3,S-2')
+  })
+
+  it('sort=price&order=asc → 按报价数值升序（不是字符串序）', async () => {
+    const res = await request.get(BASE).query({ customer: C, sort: 'price', order: 'asc' })
+    // 字符串序会排成 "100","50","9"；数值序才是 9,50,100
+    assert.equal(res.body.data.list.map(r => r.price).join(','), '9,50,100')
+  })
+
+  it('sort=price&order=desc → 按报价数值降序', async () => {
+    const res = await request.get(BASE).query({ customer: C, sort: 'price', order: 'desc' })
+    assert.equal(res.body.data.list.map(r => r.price).join(','), '100,50,9')
+  })
+
+  it('sort=material_name&order=asc → 按物料名称升序', async () => {
+    const res = await request.get(BASE).query({ customer: C, sort: 'material_name', order: 'asc' })
+    assert.equal(res.body.data.list.map(r => r.material_name).join(','), 'AAA,BBB,CCC')
+  })
+
+  it('sort=date&order=asc → 按日期升序', async () => {
+    const res = await request.get(BASE).query({ customer: C, sort: 'date', order: 'asc' })
+    assert.equal(res.body.data.list.map(r => r.date).join(','), '2026-01-01,2026-02-01,2026-03-01')
+  })
+
+  it('缺 order 参数 → 默认降序', async () => {
+    const res = await request.get(BASE).query({ customer: C, sort: 'price' })
+    assert.equal(res.body.data.list.map(r => r.price).join(','), '100,50,9')
+  })
+
+  it('非法 sort 字段 → 退回默认排序，且不破坏表（防注入）', async () => {
+    const res = await request.get(BASE).query({ customer: C, sort: 'id; DROP TABLE customer_materials' })
+    assert.equal(res.status, 200, '非法排序字段不应 500')
+    assert.equal(res.body.data.list.map(r => r.customer_code).join(','), 'S-1,S-3,S-2', '应退回默认日期倒序')
+    const again = await request.get(BASE).query({ customer: C })
+    assert.equal(again.body.data.total, 3, '表应完好无损')
+  })
+
+  it('排序与筛选可叠加', async () => {
+    const res = await request.get(BASE).query({ customer: C, factory: 'B厂', sort: 'price', order: 'desc' })
+    assert.equal(res.body.data.total, 1)
+    assert.equal(res.body.data.list[0].customer_code, 'S-2')
+  })
+})
+
 describe('PUT /api/materials/:id — 编辑防重复', () => {
   it('编辑改编码撞上同客户已有编码 → 拦截', async () => {
     const res = await request.put(`${BASE}/${testIds[0]}`).send({ customer_code: 'CUS-002' })
