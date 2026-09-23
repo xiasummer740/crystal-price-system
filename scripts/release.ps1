@@ -127,7 +127,13 @@ $InstallerENPath = Join-Path $DistDir $InstallerNameEN
 $hasInstaller = Test-Path $InstallerPath
 
 if ($hasInstaller) {
-    Copy-Item $InstallerPath $InstallerENPath -Force
+    # nsis.artifactName 已是英文名时，$InstallerPath 与 $InstallerENPath 是同一个路径，
+    # Copy-Item 会「无法用自身覆盖自身」并因 $ErrorActionPreference='Stop' 直接终止
+    if ($InstallerPath -ne $InstallerENPath) {
+        Copy-Item $InstallerPath $InstallerENPath -Force
+    } else {
+        Write-Host '  [提示] 产物名已是英文，跳过复制副本' -ForegroundColor Cyan
+    }
     $sizeMB = [math]::Round((Get-Item $InstallerPath).Length / 1MB, 1)
     Write-Host "  安装版: $DefaultInstallerPattern ($sizeMB MB)" -ForegroundColor Green
 } else {
@@ -314,7 +320,8 @@ if (Test-Path $BlockMapPath) {
 # ===== 清理临时文件 =====
 Write-Host ''
 Write-Host '清理临时文件...' -ForegroundColor Gray
-if (Test-Path $InstallerENPath) { Remove-Item $InstallerENPath -Force }
+# 两者同路径时，删 EN 副本等于删掉刚打好的产物，必须跳过
+if ($InstallerPath -ne $InstallerENPath -and (Test-Path $InstallerENPath)) { Remove-Item $InstallerENPath -Force }
 Write-Host '  [OK] 完成' -ForegroundColor Gray
 
 # ===== 全部完成 =====
