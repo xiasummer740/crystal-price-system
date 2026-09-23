@@ -52,6 +52,13 @@
       "server/**/*",
       "!server/**/数据库{,/**/*}",
       "!server/**/data.db",
+      "!server/.auth_token",
+      "!server/.mcp.json",
+      "!server/logs{,/**/*}",
+      "!server/src/Excel备份{,/**/*}",
+      "!server/.claude{,/**/*}",
+      "!server/scripts{,/**/*}",
+      "!server/模板{,/**/*}",
       "client/dist/**/*",
       "package.json",
       "dev-app-update.yml"
