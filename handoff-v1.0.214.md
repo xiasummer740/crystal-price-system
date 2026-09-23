@@ -86,7 +86,7 @@ electron-builder 读到旧版本号，打出一个版本号错误的包。
 - **报价记录无法按客户拆** —— `material_prices` 没有 customer 列，`first_inquiry_customer` 全是简称，**能对上完整客户名的 0 条** → `报价记录.xlsx` 只能放 `客户管理` 外面
 - 客户文件夹 63 个；记事图片 111 张可 100% 归位（49 个「客户+日期」桶）；**`notes` 表没有 `date` 列**，只能取 `created_at`
 - **DB 里路径是 percent-encoded**，`LIKE '/api/specs/客户物料/%'` 永远匹配不上
-- 🔴 **发现生产故障**：21 条国润聚源规格书 404 —— `migrateSpecsToCustomerFolders()` 靠「根目录还有没有源文件」决定要不要修，文件已搬走就永远跳过，**自己造成的错位修不回来**
+- 🔴 **发现生产故障**：21 条<客户A>规格书 404 —— `migrateSpecsToCustomerFolders()` 靠「根目录还有没有源文件」决定要不要修，文件已搬走就永远跳过，**自己造成的错位修不回来**
 
 完整方案与真实数据摸底详见 `PROGRESS.md`。
 

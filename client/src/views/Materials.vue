@@ -822,7 +822,7 @@ function selectCustomer(name, carryKeyword) {
   dateStart.value = ''
   dateEnd.value = ''
   // 若搜索词是物料型号而非客户名 → 作为物料筛选关键词（定位到该物料）
-  // 但若搜索词只是客户名的一部分（如搜「视晶无线」选中「深圳市视晶无线技术有限公司」），
+  // 但若搜索词只是客户名的一部分（如只敲了公司名中间几个字，却选中了完整公司名），
   // 说明用户就是在搜客户 → 不带入，免得每次都要手动清空
   const q = (carryKeyword || '').trim()
   keyword.value = (q && !name.includes(q)) ? q : ''
