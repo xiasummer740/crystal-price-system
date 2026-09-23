@@ -3,6 +3,7 @@ import multer from 'multer'
 import fs from 'fs'
 import { queryAll, queryOne, execute } from '../db.js'
 import * as A from '../utils/customerArchive.js'
+import { pageParams } from '../utils/paging.js'
 
 const router = Router()
 
@@ -99,7 +100,7 @@ function findCreateConflict(b) {
 
 // GET 列表 + 搜索 + 筛选 + 分页
 router.get('/', (req, res) => {
-  const { page = 1, pageSize = 50, keyword, factory, quoter, currency, category, startDate, endDate, sortBy = 'created_at', sortOrder = 'DESC', multiFilter } = req.query
+  const { keyword, factory, quoter, currency, category, startDate, endDate, sortBy = 'created_at', sortOrder = 'DESC', multiFilter } = req.query
   const conditions = ['is_deleted = 0']
   const params = []
   if (keyword) {
@@ -129,14 +130,14 @@ router.get('/', (req, res) => {
   const validSort = allowedSort.includes(sortBy) ? sortBy : 'created_at'
   const validOrder = sortOrder.toUpperCase() === 'ASC' ? 'ASC' : 'DESC'
   const total = queryOne(`SELECT COUNT(*) as total FROM material_prices ${where}`, params)?.total ?? 0
-  const offset = (Number(page) - 1) * Number(pageSize)
-  const rows = queryAll(`SELECT * FROM material_prices ${where} ORDER BY ${validSort} ${validOrder} LIMIT ? OFFSET ?`, [...params, Number(pageSize), offset])
-  res.json({ code: 0, data: { list: rows, total, page: Number(page), pageSize: Number(pageSize) } })
+  const pg = pageParams(req.query)
+  const rows = queryAll(`SELECT * FROM material_prices ${where} ORDER BY ${validSort} ${validOrder} LIMIT ? OFFSET ?`, [...params, pg.pageSize, pg.offset])
+  res.json({ code: 0, data: { list: rows, total, page: pg.page, pageSize: pg.pageSize } })
 })
 
 // GET 同款合并列表 — 13个技术字段相同的视为同款，只显示最低价那条完整记录（必须在 /:id 之前）
 router.get('/grouped', (req, res) => {
-  const { page = 1, pageSize = 50, keyword, factory, quoter, currency, category, startDate, endDate, multiFilter } = req.query
+  const { keyword, factory, quoter, currency, category, startDate, endDate, multiFilter } = req.query
   const conditions = ['t.is_deleted = 0']
   const params = []
   if (keyword) {
@@ -168,8 +169,8 @@ router.get('/grouped', (req, res) => {
 
   // 分组统计 + 逐条取最低价记录
   const total = queryOne(`SELECT COUNT(*) as total FROM (SELECT 1 FROM material_prices t ${where} GROUP BY ${groupCols})`, params)?.total ?? 0
-  const offset = (Number(page) - 1) * Number(pageSize)
-  const paged = queryAll(`SELECT ${groupCols}, COUNT(*) as rc, COUNT(DISTINCT NULLIF(factory_code,'')) as fc FROM material_prices t ${where} GROUP BY ${groupCols} ORDER BY MAX(t.created_at) DESC LIMIT ? OFFSET ?`, [...params, Number(pageSize), offset])
+  const pg = pageParams(req.query)
+  const paged = queryAll(`SELECT ${groupCols}, COUNT(*) as rc, COUNT(DISTINCT NULLIF(factory_code,'')) as fc FROM material_prices t ${where} GROUP BY ${groupCols} ORDER BY MAX(t.created_at) DESC LIMIT ? OFFSET ?`, [...params, pg.pageSize, pg.offset])
   const list = []
   for (const grp of paged) {
     const conds = ['is_deleted = 0', ...matchCols.map(c => `COALESCE(${c},'') = ?`)]
@@ -178,7 +179,7 @@ router.get('/grouped', (req, res) => {
     const row = queryOne(`SELECT * FROM material_prices WHERE ${conds.join(' AND ')} ORDER BY ${orderExpr} ASC, id ASC LIMIT 1`, vals)
     if (row) { row.record_count = grp.rc; row.factory_count = grp.fc; list.push(row) }
   }
-  res.json({ code: 0, data: { list, total, page: Number(page), pageSize: Number(pageSize) } })
+  res.json({ code: 0, data: { list, total, page: pg.page, pageSize: pg.pageSize } })
 })
 
 // 筛选选项（必须在 /:id 之前）

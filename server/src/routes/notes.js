@@ -3,6 +3,7 @@ import multer from 'multer'
 import fs from 'fs'
 import { queryAll, queryOne, execute } from '../db.js'
 import * as A from '../utils/customerArchive.js'
+import { pageParams } from '../utils/paging.js'
 
 // 统一处理：将「未命名」标题转为空，前端自行决定如何显示
 function cleanNote(row) {
@@ -166,7 +167,7 @@ router.post('/customers/import-excel', excelUpload.single('file'), (req, res) =>
 
 // 列表 + 搜索 + 分页
 router.get('/', (req, res) => {
-  const { page = 1, pageSize = 50, keyword, customer, category_id, status, priority, reminder, start, end } = req.query
+  const { keyword, customer, category_id, status, priority, reminder, start, end } = req.query
   const conditions = ['n.is_deleted = 0']
   const params = []
 
@@ -185,7 +186,7 @@ router.get('/', (req, res) => {
 
   const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : ''
   const total = queryOne(`SELECT COUNT(*) as total FROM notes n ${where}`, params)?.total ?? 0
-  const offset = (Number(page) - 1) * Number(pageSize)
+  const pg = pageParams(req.query)
 
   const rows = queryAll(`
     SELECT n.*, c.name as category_name, c.color as category_color
@@ -196,9 +197,9 @@ router.get('/', (req, res) => {
       CASE n.status WHEN 'todo' THEN 0 WHEN 'done' THEN 1 WHEN 'follow_up' THEN 2 ELSE 3 END,
       n.updated_at DESC
     LIMIT ? OFFSET ?
-  `, [...params, Number(pageSize), offset])
+  `, [...params, pg.pageSize, pg.offset])
 
-  res.json({ code: 0, data: { list: rows.map(cleanNote), total, page: Number(page), pageSize: Number(pageSize) } })
+  res.json({ code: 0, data: { list: rows.map(cleanNote), total, page: pg.page, pageSize: pg.pageSize } })
 })
 
 // 查询到期提醒（供 Electron 轮询）

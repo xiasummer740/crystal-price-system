@@ -6,6 +6,7 @@ import path from 'path'
 import { queryAll, queryOne, execute } from '../db.js'
 import { exportMaterials } from '../utils/export.js'
 import { STATUS_CONFIG } from '../utils/materialStatus.js'
+import { pageParams } from '../utils/paging.js'
 import { triggerBackup } from '../utils/excelBackup.js'
 import * as A from '../utils/customerArchive.js'
 
@@ -189,7 +190,7 @@ function sortExprOf(col) {
 
 // 列表 — 按客户筛选 + 搜索 + 状态/工厂/日期筛选 + 排序 + 分页
 router.get('/', (req, res) => {
-  const { page = 1, pageSize = 50, keyword, status, customer, factory, start, end, sort, order } = req.query
+  const { keyword, status, customer, factory, start, end, sort, order } = req.query
   const conditions = ['is_deleted = 0']
   const params = []
 
@@ -206,7 +207,7 @@ router.get('/', (req, res) => {
 
   const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : ''
   const total = queryOne(`SELECT COUNT(*) as total FROM customer_materials ${where}`, params)?.total ?? 0
-  const offset = (Number(page) - 1) * Number(pageSize)
+  const pg = pageParams(req.query)
 
   // 未指定排序时保持原行为；指定了才按白名单列排序（sort/order 都经校验，不可注入）
   // 每个表达式都可能产出 NULL（空值/不是数字），一律 NULLS LAST 沉底；
@@ -219,9 +220,9 @@ router.get('/', (req, res) => {
     SELECT * FROM customer_materials ${where}
     ORDER BY ${orderBy}
     LIMIT ? OFFSET ?
-  `, [...params, Number(pageSize), offset]).map(parseAlternates)
+  `, [...params, pg.pageSize, pg.offset]).map(parseAlternates)
 
-  res.json({ code: 0, data: { list: rows, total, page: Number(page), pageSize: Number(pageSize) } })
+  res.json({ code: 0, data: { list: rows, total, page: pg.page, pageSize: pg.pageSize } })
 })
 
 // 获取有物料的客户列表（含物料数）

@@ -2,13 +2,14 @@ import { Router } from 'express'
 import multer from 'multer'
 import { queryAll, queryOne, execute } from '../db.js'
 import { generateSampleTemplate, exportSamples, importSamplesFromExcel } from '../utils/export.js'
+import { pageParams } from '../utils/paging.js'
 
 const router = Router()
 const upload = multer({ storage: multer.memoryStorage() })
 
 // 列表
 router.get('/', (req, res) => {
-  const { page=1, pageSize=50, keyword, factory, brand, sortBy='created_at', sortOrder='DESC', multiFilter } = req.query
+  const { keyword, factory, brand, sortBy='created_at', sortOrder='DESC', multiFilter } = req.query
   const conditions = ['is_deleted = 0']
   const params = []
   if (keyword) { conditions.push('(material_code LIKE ? OR material_name LIKE ? OR brand LIKE ?)'); const kw=`%${keyword}%`; params.push(kw,kw,kw) }
@@ -48,9 +49,9 @@ router.get('/', (req, res) => {
   const validSort = ['created_at','material_code','material_name','brand','price_with_tax','stock_quantity'].includes(sortBy) ? sortBy : 'created_at'
   const validOrder = sortOrder.toUpperCase()==='ASC' ? 'ASC' : 'DESC'
   const total = queryOne(`SELECT COUNT(*) as total FROM material_samples ${where}`, params)?.total ?? 0
-  const offset = (Number(page)-1)*Number(pageSize)
-  const rows = queryAll(`SELECT * FROM material_samples ${where} ORDER BY ${validSort} ${validOrder} LIMIT ? OFFSET ?`, [...params, Number(pageSize), offset])
-  res.json({ code:0, data:{ list:rows, total, page:Number(page), pageSize:Number(pageSize) } })
+  const pg = pageParams(req.query)
+  const rows = queryAll(`SELECT * FROM material_samples ${where} ORDER BY ${validSort} ${validOrder} LIMIT ? OFFSET ?`, [...params, pg.pageSize, pg.offset])
+  res.json({ code:0, data:{ list:rows, total, page:pg.page, pageSize:pg.pageSize } })
 })
 
 // 筛选选项（必须在 /:id 之前）
