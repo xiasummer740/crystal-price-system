@@ -1,9 +1,18 @@
 import XLSX from 'xlsx'
 import JSZip from 'jszip'
+// 物料清单要写单元格样式，而 xlsx 社区版会把 cell.s 静默丢掉 —— 实测写一个带样式的
+// 表出去，styles.xml 里 cellXfs 仍然只有默认的那一个。这里用它的带样式分叉，
+// 且只给下面的 exportMaterials 用：其他导出（含自动备份）继续走 xlsx，产物一字不变。
+import XLSXStyle from 'xlsx-js-style'
+// 冻结首行 xlsx-js-style 也写不了 <pane>，只能拆包补一段 XML。用同步的 adm-zip，
+// 这样 exportMaterials 能保住同步签名，不会把 syncArchive 那条链路拖成 async。
+import AdmZip from 'adm-zip'
 import fs from 'fs'
 import path from 'path'
 import { queryAll, queryOne, executeBatch, saveNow } from '../db.js'
 import * as A from './customerArchive.js'
+import { rowFillOf } from './materialStatus.js'
+import { warn } from './logger.js'
 
 // 解析 Excel 中的「登记时间」单元格，返回 SQLite 'YYYY-MM-DD HH:mm:ss' 格式
 // 支持：JS Date / Excel 数字序列号 / ISO 字符串 / 中文 'YYYY年MM月DD日 HH:mm' / 'YYYY/MM/DD' / 空
@@ -486,14 +495,84 @@ export function exportMapCustomers() {
   return XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
 }
 
-export function exportMaterials(customer = '') {
+// 物料清单的列：顺序、列宽、对齐都照客户给的 A物料模板.xlsx 抄，一列不多一列不少。
+// 表头只加粗、数据行不加边框 —— 也是照模板来的，模板本身就是这个样式。
+const MATERIAL_COLS = [
+  { key: '日期',        wch: 10.375, align: 'center' },
+  { key: '客户物料编码', wch: 12.25,  align: 'center' },
+  { key: '晶科鑫料号',   wch: 23.5,   align: 'center' },
+  { key: '报价',        wch: 9,      align: 'right'  },
+  { key: '成本价',      wch: 9,      align: 'right'  },
+  { key: '物料编码',     wch: 27,     align: 'center' },
+  { key: '物料名称',     wch: 91.875, align: 'left'   },
+  { key: '工厂',        wch: 9,      align: 'center' },
+  { key: '状态',        wch: 12.875, align: 'center' },
+  { key: '客户描述',     wch: 14,     align: 'left'   },
+  { key: '备注',        wch: 9,      align: 'left'   }
+]
+
+// 模板里没有「客户」列（它只针对一家）。但导全部客户时没有这一列就分不清哪行是谁家的 ——
+// 自动备份（excelBackup）走的正是这条路，所以只在那种情况下补在最前面。
+const CUSTOMER_COL = { key: '客户', wch: 16, align: 'center' }
+
+// 只有备份才加的两列。**这两列导出时必须原样带着** —— /api/materials/import 会读它们
+// （见 routes/materials.js 里 `row['规格书']` / `row['备选物料']`），砍掉的话
+// 「导出 → 再导入」会把规格书引用和备选物料**静默清空**，备份就成了残缺的备份。
+// 客户看的那份（归档目录里的 物料清单.xlsx）不加，保持模板原样的 11 列。
+const BACKUP_ONLY_COLS = [
+  { key: '规格书',   wch: 40, align: 'left' },
+  { key: '备选物料', wch: 40, align: 'left' }
+]
+
+// 状态配色收在 utils/materialStatus.js（全系统唯一来源，见 rowFillOf）。
+
+// 冻结首行：xlsx-js-style 写不出 <pane>，拆包补一段。补不上就原样返回 ——
+// 宁可没有冻结，也不能赌一个可能打不开的文件。
+function freezeTopRow(buf) {
+  try {
+    const zip = new AdmZip(buf)
+    const entry = zip.getEntry('xl/worksheets/sheet1.xml')
+    if (!entry) return buf
+    const xml = zip.readAsText(entry)
+    if (xml.includes('<pane ')) return buf
+    const next = xml.replace(
+      /<sheetView([^>]*?)\/>/,
+      '<sheetView$1><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/>' +
+      '<selection pane="bottomLeft" activeCell="A2" sqref="A2"/></sheetView>'
+    )
+    if (next === xml) {
+      // 正则没匹配上（多半是 xlsx-js-style 改了 <sheetView> 的写法）。
+      // 这时冻结会**悄没声地消失** —— 必须出日志，否则只能等谁翻表格时才发现。
+      warn('export', '物料清单冻结首行未生效：表格 XML 结构与预期不符（xlsx-js-style 可能改版了）')
+      return buf
+    }
+    zip.updateFile('xl/worksheets/sheet1.xml', Buffer.from(next, 'utf8'))
+    return zip.toBuffer()
+  } catch (e) {
+    warn('export', '物料清单冻结首行失败，已跳过', e.message)
+    return buf
+  }
+}
+
+/**
+ * @param customer 客户名；空 = 导全部客户（会自动补「客户」列）
+ * @param full     true = 备份用，补上「规格书」「备选物料」两列（导入端要读，缺了就丢数据）
+ */
+export function exportMaterials(customer = '', { full = false } = {}) {
   const rows = customer
     ? queryAll('SELECT * FROM customer_materials WHERE is_deleted = 0 AND customer = ? ORDER BY created_at DESC', [customer])
     : queryAll('SELECT * FROM customer_materials WHERE is_deleted = 0 ORDER BY customer ASC, created_at DESC')
-  const data = rows.map(r => {
-    let alternates = []
-    try { alternates = JSON.parse(r.alternates || '[]') } catch {}
-    return {
+
+  const cols = [
+    ...(customer ? [] : [CUSTOMER_COL]),
+    ...MATERIAL_COLS,
+    ...(full ? BACKUP_ONLY_COLS : [])
+  ]
+
+  // 用 aoa 而不是 json_to_sheet：这个客户一条物料都没有时，表头也得照样出
+  const aoa = [cols.map(c => c.key)]
+  for (const r of rows) {
+    const v = {
       '客户': r.customer || '',
       '日期': r.date || '',
       '客户物料编码': r.customer_code || '',
@@ -505,20 +584,57 @@ export function exportMaterials(customer = '') {
       '工厂': r.factory || '',
       '状态': r.status || '',
       '客户描述': r.customer_desc || '',
-      '备注': r.remark || '',
-      '规格书': r.spec_document || '',
-      '备选物料': alternates.map(a => [a.material_code || '', a.material_name || '', a.factory || '', a.cost_price || ''].join('@')).join(' | ')
+      '备注': r.remark || ''
     }
-  })
-  const wb = XLSX.utils.book_new()
-  const ws = XLSX.utils.json_to_sheet(data)
-  ws['!cols'] = [
-    { wch: 16 }, { wch: 12 }, { wch: 18 }, { wch: 18 }, { wch: 12 },
-    { wch: 12 }, { wch: 18 }, { wch: 20 }, { wch: 14 },
-    { wch: 10 }, { wch: 30 }, { wch: 30 }
-  ]
-  XLSX.utils.book_append_sheet(wb, ws, '客户物料')
-  return XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' })
+    if (full) {
+      let alternates = []
+      try { alternates = JSON.parse(r.alternates || '[]') } catch {}
+      v['规格书'] = r.spec_document || ''
+      v['备选物料'] = alternates
+        .map(a => [a.material_code || '', a.material_name || '', a.factory || '', a.cost_price || ''].join('@'))
+        .join(' | ')
+    }
+    aoa.push(cols.map(c => v[c.key]))
+  }
+
+  const ws = XLSXStyle.utils.aoa_to_sheet(aoa)
+  const nCol = cols.length
+  const nRow = aoa.length
+
+  // 表头照模板：只加粗、居中，不加底纹也不加边框
+  const headerStyle = {
+    font: { bold: true, sz: 11, name: '宋体' },
+    alignment: { horizontal: 'center', vertical: 'center' }
+  }
+  for (let c = 0; c < nCol; c++) {
+    const cell = ws[XLSXStyle.utils.encode_cell({ r: 0, c })]
+    if (cell) cell.s = headerStyle
+  }
+
+  // 整行同一个色 —— 逐格铺满，状态格也不例外。别给某一格单独上重色：
+  // 那样整行就不是一个色了，扫一眼会以为那格是另一类信息。
+  const statusCol = cols.findIndex(c => c.key === '状态')
+  for (let r = 1; r < nRow; r++) {
+    const rowFill = rowFillOf(String(aoa[r][statusCol] || '').trim())
+    for (let c = 0; c < nCol; c++) {
+      const cell = ws[XLSXStyle.utils.encode_cell({ r, c })]
+      if (!cell) continue
+      cell.s = {
+        font: { sz: 11, name: '宋体' },
+        alignment: { horizontal: cols[c].align, vertical: 'center' }
+      }
+      if (rowFill) cell.s.fill = { patternType: 'solid', fgColor: { rgb: rowFill } }
+    }
+  }
+
+  // 行高交给 Excel 自适应（模板里是固定 16.5，但咱们的物料名称能到 140 字符，
+  // 写死高度会把字截掉；不设 !rows 时 Excel 会按内容算）
+  ws['!cols'] = cols.map(c => ({ wch: c.wch }))
+  ws['!autofilter'] = { ref: `A1:${XLSXStyle.utils.encode_col(nCol - 1)}${nRow}` }
+
+  const wb = XLSXStyle.utils.book_new()
+  XLSXStyle.utils.book_append_sheet(wb, ws, '客户物料')
+  return freezeTopRow(XLSXStyle.write(wb, { type: 'buffer', bookType: 'xlsx' }))
 }
 
 export function importSamplesFromExcel(fileBuffer) {

@@ -37,9 +37,9 @@
       </div>
 
       <!-- 状态筛选 chips -->
-      <div class="mm-chips" v-if="STATUS_ORDER.length">
+      <div class="mm-chips" v-if="statusOrder.length">
         <span class="mm-chip" :class="{ active: statusFilter === '' }" @click="setStatus('')">全部</span>
-        <span v-for="s in STATUS_ORDER" :key="s" class="mm-chip" :class="{ active: statusFilter === s }" :style="statusFilter === s ? chipActiveStyle(s) : {}" @click="setStatus(s)">{{ s }}</span>
+        <span v-for="s in statusOrder" :key="s" class="mm-chip" :class="{ active: statusFilter === s }" :style="statusFilter === s ? chipActiveStyle(s) : {}" @click="setStatus(s)">{{ s }}</span>
       </div>
 
       <div v-if="materialList.length" class="mat-list">
@@ -126,8 +126,10 @@
 import { ref, onMounted } from 'vue'
 import { showToast } from 'vant'
 import { fetchMaterialCustomers, searchAllCustomers, fetchMaterials, getMaterialStatusConfig } from '../utils/api.js'
+import { STATUS_FALLBACK, statusOrderFromConfig } from '../utils/materialStatus.js'
 
-const STATUS_ORDER = ['报价', '规格书', '送样', '下散单', '下批量']
+// 状态清单由服务端下发（唯一来源见 utils/materialStatus.js），这里不再本地抄一份
+const statusOrder = ref([...STATUS_FALLBACK])
 
 const selectedCustomer = ref('')
 const customerList = ref([])
@@ -286,6 +288,7 @@ onMounted(async () => {
   try {
     const r = await getMaterialStatusConfig()
     statusColors.value = r.data || {}
+    statusOrder.value = statusOrderFromConfig(r.data)
   } catch {}
   loadCustomerList()
 })

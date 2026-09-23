@@ -1,7 +1,7 @@
 // @ts-check
 const { test, expect } = require('@playwright/test')
 
-const BASE = 'http://localhost:3266'
+const { BASE } = require('./_base.cjs')
 
 test.describe('晶振报价系统 E2E', () => {
 

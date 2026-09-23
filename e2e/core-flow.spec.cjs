@@ -1,6 +1,6 @@
 const { test, expect } = require('@playwright/test')
 
-const BASE = 'http://localhost:3266'
+const { BASE } = require('./_base.cjs')
 const TEST_ID = `E2E测试-${Date.now()}`
 
 test.describe('核心流程: 新增 → 保存 → 表格更新', () => {

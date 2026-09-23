@@ -68,7 +68,9 @@ function doFlush(type) {
       fs.writeFileSync(path.join(dir, `${prefix}${stamp}.xlsx`), buf)
       pruneFifo(dir, prefix)
     } else if (type === 'materials') {
-      const buf = exportMaterials()
+      // full：带上「规格书」「备选物料」。备份是拿来回导入的，
+      // 少了这两列恢复时会被静默清空 —— 备份必须完整。
+      const buf = exportMaterials('', { full: true })
       const prefix = '客户物料-自动备份-'
       fs.writeFileSync(path.join(dir, `${prefix}${stamp}.xlsx`), buf)
       pruneFifo(dir, prefix)

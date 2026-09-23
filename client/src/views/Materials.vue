@@ -329,6 +329,7 @@ import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { showToast, showConfirmDialog } from 'vant'
 import { fetchMaterials, createMaterial, updateMaterial, deleteMaterial, getMaterialStatusConfig, exportMaterials, importMaterialsExcel, searchAllCustomers, fetchMaterialCustomers, fetchMaterialFactories, uploadMaterialImages, deleteMaterialImage, isLocalFileUrl, fileDisplayName, http } from '../utils/api.js'
+import { STATUS_FALLBACK, statusOrderFromConfig } from '../utils/materialStatus.js'
 
 const route = useRoute()
 const router = useRouter()
@@ -360,9 +361,10 @@ const factoryList = ref([])
 
 // 状态配置
 const statusColors = ref({})
-const STATUS_ORDER = ['报价', '规格书', '送样', '下散单', '下批量']
+// 状态清单由服务端下发（唯一来源见 utils/materialStatus.js），这里不再本地抄一份
+const statusOrder = ref([...STATUS_FALLBACK])
 const statusActions = computed(() => {
-  const acts = STATUS_ORDER.map(s => ({ name: s, value: s }))
+  const acts = statusOrder.value.map(s => ({ name: s, value: s }))
   acts.unshift({ name: '全部状态', value: '' })
   return acts
 })
@@ -1060,6 +1062,7 @@ onMounted(async () => {
   try {
     const r = await getMaterialStatusConfig()
     statusColors.value = r.data || {}
+    statusOrder.value = statusOrderFromConfig(r.data)
   } catch {}
   await loadCustomerList()
 })

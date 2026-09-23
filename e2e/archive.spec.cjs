@@ -1,9 +1,8 @@
 // 客户资料归档改造的浏览器验证：规格书链接必须真的能打开（改造前是 21 条 404）
 const { test, expect } = require('@playwright/test')
 
-// 默认打本机正式端口；跑沙箱时用 E2E_BASE 覆盖，别把测试打到生产数据上。
-// 例：E2E_BASE=http://127.0.0.1:3277 npx playwright test e2e/archive.spec.cjs
-const BASE = process.env.E2E_BASE || 'http://localhost:3266'
+// 地址一律走 _base.cjs（无默认值，必须显式给 E2E_BASE，见那个文件的说明）
+const { BASE } = require('./_base.cjs')
 
 test.describe('客户资料归档', () => {
 

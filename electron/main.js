@@ -407,33 +407,7 @@ function createWindow(port) {
     log('Page loaded successfully')
   })
 
-  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    // 地图地址窗口（优先匹配，避免 standalone=1 被记事拦截）
-    if (url.includes('/#/map-addresses')) {
-      openMapWindow(serverPort)
-      return { action: 'deny' }
-    }
-    // 拦截记事浮窗请求，创建桌面窗口
-    if (url.includes('/#/notes') && url.includes('?standalone=1')) {
-      openNotesWindow(serverPort)
-      return { action: 'deny' }
-    }
-    // 绩效明细窗口
-    if (url.includes('/#/performance') && url.includes('?standalone=1')) {
-      openPerfWindow(serverPort)
-      return { action: 'deny' }
-    }
-    // 客户物料窗口
-    if (url.includes('/#/materials') && url.includes('?standalone=1')) {
-      openMaterialsWindow(serverPort)
-      return { action: 'deny' }
-    }
-    // 仅允许 http/https 外部链接通过系统浏览器打开
-    if (url.startsWith('http://') || url.startsWith('https://')) {
-      shell.openExternal(url)
-    }
-    return { action: 'deny' }
-  })
+  attachWindowOpenHandler(mainWindow)
 
   const url = `http://localhost:${port}?v=${app.getVersion()}&packaged=${app.isPackaged}`
   log(`Loading URL: ${url}`)
@@ -497,6 +471,41 @@ function saveNotesBounds() {
     saveFullConfig({ notesWindow: { ...cfg.notesWindow, ...bounds } })
   } catch (e) { log('saveNotesBounds error: ' + e.message) }
 }
+// 把 window.open 的子窗口请求转成正经 BrowserWindow。
+// 注意 setWindowOpenHandler 是「每个 webContents 各注册一份」的 —— 只在主窗口注册，
+// 从子窗口（物料/记事/地图/绩效）里再点开子窗口就会落到 Chromium 原生弹窗：
+// 没有 preload，window.electronAPI 是 undefined，页面上 v-if="isElectron" 的按钮全部消失。
+// 所以 5 个窗口都要挂。
+function attachWindowOpenHandler(win) {
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    // 地图地址窗口（优先匹配，避免 standalone=1 被记事拦截）
+    if (url.includes('/#/map-addresses')) {
+      openMapWindow(serverPort)
+      return { action: 'deny' }
+    }
+    // 拦截记事浮窗请求，创建桌面窗口
+    if (url.includes('/#/notes') && url.includes('?standalone=1')) {
+      openNotesWindow(serverPort)
+      return { action: 'deny' }
+    }
+    // 绩效明细窗口
+    if (url.includes('/#/performance') && url.includes('?standalone=1')) {
+      openPerfWindow(serverPort)
+      return { action: 'deny' }
+    }
+    // 客户物料窗口
+    if (url.includes('/#/materials') && url.includes('?standalone=1')) {
+      openMaterialsWindow(serverPort)
+      return { action: 'deny' }
+    }
+    // 仅允许 http/https 外部链接通过系统浏览器打开
+    if (url.startsWith('http://') || url.startsWith('https://')) {
+      shell.openExternal(url)
+    }
+    return { action: 'deny' }
+  })
+}
+
 function openNotesWindow(port) {
   if (notesWindow && !notesWindow.isDestroyed()) { notesWindow.focus(); return }
   const cfg = loadFullConfig()
@@ -526,6 +535,7 @@ function openNotesWindow(port) {
   }
   notesWindow.on('resize', debounceSave)
   notesWindow.on('move', debounceSave)
+  attachWindowOpenHandler(notesWindow)
   const url = `http://localhost:${port}/#/notes?standalone=1&v=${app.getVersion()}&packaged=${app.isPackaged}`
   notesWindow.loadURL(url)
   notesWindow.on('closed', () => {
@@ -627,6 +637,7 @@ function openMapWindow(port) {
   }
   mapWindow.on('resize', debounceSave)
   mapWindow.on('move', debounceSave)
+  attachWindowOpenHandler(mapWindow)
   const url = `http://localhost:${port}/#/map-addresses?standalone=1&v=${app.getVersion()}&packaged=${app.isPackaged}`
   mapWindow.loadURL(url)
   mapWindow.on('closed', () => {
@@ -672,6 +683,7 @@ function openPerfWindow(port) {
   }
   perfWindow.on('resize', debounceSave)
   perfWindow.on('move', debounceSave)
+  attachWindowOpenHandler(perfWindow)
   const url = `http://localhost:${port}/#/performance?standalone=1&v=${app.getVersion()}&packaged=${app.isPackaged}`
   perfWindow.loadURL(url)
   perfWindow.on('closed', () => {
@@ -719,6 +731,7 @@ function openMaterialsWindow(port) {
   }
   materialsWindow.on('resize', debounceSave)
   materialsWindow.on('move', debounceSave)
+  attachWindowOpenHandler(materialsWindow)
   const url = `http://localhost:${port}/#/materials?standalone=1&v=${app.getVersion()}&packaged=${app.isPackaged}`
   materialsWindow.loadURL(url)
   materialsWindow.on('closed', () => {

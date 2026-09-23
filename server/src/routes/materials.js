@@ -5,6 +5,7 @@ import fs from 'fs'
 import path from 'path'
 import { queryAll, queryOne, execute } from '../db.js'
 import { exportMaterials } from '../utils/export.js'
+import { STATUS_CONFIG } from '../utils/materialStatus.js'
 import { triggerBackup } from '../utils/excelBackup.js'
 import * as A from '../utils/customerArchive.js'
 
@@ -113,16 +114,8 @@ function renameCustomerFolder(oldName, newName) {
   return { movedRows: moved }
 }
 
-// 状态列表（带颜色）
-// 采购进度视觉色阶：询价(冷)→规格(蓝紫)→送样(青)→散单(橙)→批量(绿)
-// 采用 Ant Design 标准色（色相分离明显、色弱友好、白底可读）
-const STATUS_CONFIG = {
-  '报价':   { color: '#1677ff', order: 0 },
-  '规格书': { color: '#722ed1', order: 1 },
-  '送样':   { color: '#13c2c2', order: 2 },
-  '下散单': { color: '#fa8c16', order: 3 },
-  '下批量': { color: '#52c41a', order: 4 }
-}
+// 状态清单已挪到 utils/materialStatus.js（全系统唯一来源，含 color/order）。
+// 这里只引用，不再抄第三份 —— 抄本越多，加状态时漏改的地方越多，而且不报错。
 
 // ========== 全系统客户联想 ==========
 
@@ -264,7 +257,9 @@ router.get('/status-config', (_req, res) => {
 
 // 导出 Excel（必须在 /:id 前注册，避免被匹配为 id）
 router.get('/export', (_req, res) => {
-  const buffer = exportMaterials()
+  // full：文件名就叫「备份」，且配套的 /import 会读「规格书」「备选物料」两列 ——
+  // 这里少给两列，用户导出再导入就会把这两项清空。归档用的 11 列表不走这条路。
+  const buffer = exportMaterials('', { full: true })
   res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
   const fn = '客户物料备份.xlsx'
   res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(fn)}"; filename*=UTF-8''${encodeURIComponent(fn)}`)
