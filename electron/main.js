@@ -47,21 +47,6 @@ function copyDirRecursive(src, dst) {
     }
   }
 }
-// 覆盖模式复制（用于从便携版迁移数据，保证数据不丢失）
-function copyDirRecursiveOverwrite(src, dst) {
-  if (!fs.existsSync(dst)) fs.mkdirSync(dst, { recursive: true })
-  for (const entry of fs.readdirSync(src)) {
-    const sp = path.join(src, entry)
-    const dp = path.join(dst, entry)
-    const stat = fs.statSync(sp)
-    if (stat.isDirectory()) {
-      copyDirRecursiveOverwrite(sp, dp)
-    } else {
-      fs.copyFileSync(sp, dp)
-    }
-  }
-}
-
 // 用户主动切换数据目录：弹选择器 → 落盘 → 拷贝 → 写新配置 → 提示重启
 async function switchDataDir() {
   const current = process.env.DATA_DIR
@@ -111,6 +96,9 @@ async function switchDataDir() {
       `已于 ${new Date().toISOString()} 迁移到 ${target}\n（此目录可安全删除）`, 'utf8')
     saveUserConfig(target)
     log(`switchDataDir: 迁移完成，重启应用`)
+    // 重启出来的子进程会继承父进程的环境变量。启动时 process.env.DATA_DIR 已经被设成
+    // 旧目录了，不清掉的话子进程 resolveDataDir() 第 0 步会直接采用那个旧值 —— 切换等于没切。
+    delete process.env.DATA_DIR
     app.relaunch()
     app.exit(0)
   } catch (e) {
@@ -154,8 +142,19 @@ function readDataDirTxt() {
   }
 }
 
-// 解析数据目录：优先配置 → NSIS 写的 data-dir.txt → 自动迁移 legacy → 弹选择器
+// 解析数据目录：显式 DATA_DIR → 用户配置 → NSIS 写的 data-dir.txt → 自动迁移 legacy → 弹选择器
 async function resolveDataDir() {
+  // 0. 启动时显式指定了 DATA_DIR 就直接采用，优先级高于一切（连用户配置也不许盖过它）。
+  //    开发/验证靠它把程序指向沙箱 —— 从前这里不认这个变量，结果是「明明设了 DATA_DIR，
+  //    程序照样打开正式数据目录」，脚本里的写库和清理会直接落到真实数据上。
+  //    普通用户双击启动时没有这个变量，走下面的老路，行为不变。
+  const explicit = process.env.DATA_DIR
+  if (explicit) {
+    log(`resolveDataDir: 使用显式指定的 DATA_DIR ${explicit}`)
+    if (!fs.existsSync(explicit)) fs.mkdirSync(explicit, { recursive: true })
+    return explicit
+  }
+
   // 1. 读已保存的用户配置（用户用菜单切换过）
   const cfg = loadUserConfig()
   if (cfg?.dataDir && fs.existsSync(cfg.dataDir)) {
@@ -186,21 +185,34 @@ async function resolveDataDir() {
 
   if (found) {
     const target = path.join(app.getPath('documents'), '晶振报价管理系统')
-    if (found !== target) {
-      log(`resolveDataDir: 迁移 ${found} → ${target}`)
-      try {
-        copyDirRecursiveOverwrite(found, target) // 覆盖模式，保证数据不丢失
-        // 在旧位置写迁移标记
-        fs.writeFileSync(
-          path.join(found, 'MIGRATED.txt'),
-          `已于 ${new Date().toISOString()} 迁移到 ${target}\n（此目录可安全删除）`,
-          'utf8'
-        )
-      } catch (e) {
-        log(`迁移失败：${e.message}，仍使用原位置`)
-        saveUserConfig(found)
-        return found
-      }
+    // 路径先归一再比。`G:\...\晶振报价管理系统` 和带尾斜杠、大小写不同的写法指的是同一个
+    // 目录，光比字符串会判成「不等」→ 于是把目录拷到它自己身上。
+    if (path.resolve(found) === path.resolve(target)) {
+      saveUserConfig(target)
+      return target
+    }
+    // 目标里已经有一份数据库时，**绝不自动迁移**：拷贝会把目标里（可能更新的）数据
+    // 换成探测到的旧副本，而且不可撤销。此时以目标为准，原目录一个字节都不动，只留日志。
+    if (hasDb(target)) {
+      log(`resolveDataDir: ${found} 与 ${target} 都有数据库，保留现有 ${target}，不自动迁移`)
+      saveUserConfig(target)
+      return target
+    }
+    log(`resolveDataDir: 迁移 ${found} → ${target}`)
+    try {
+      // 用不覆盖的拷贝：迁移只允许「往里添」，不允许「拿旧的盖掉已有的」。
+      // 目标里但凡有同名文件（模板、Excel备份等），一律保留目标那份。
+      copyDirRecursive(found, target)
+      // 在旧位置写迁移标记
+      fs.writeFileSync(
+        path.join(found, 'MIGRATED.txt'),
+        `已于 ${new Date().toISOString()} 迁移到 ${target}\n（此目录可安全删除）`,
+        'utf8'
+      )
+    } catch (e) {
+      log(`迁移失败：${e.message}，仍使用原位置`)
+      saveUserConfig(found)
+      return found
     }
     saveUserConfig(target)
     return target
