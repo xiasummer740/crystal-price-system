@@ -75,10 +75,21 @@ if (-not $NewVersion) {
 Write-Host ''
 Write-Host '[1/5] 更新版本号...' -ForegroundColor Cyan
 
+# ⚠️ -replace 的 pattern/replacement 必须加括号。
+# 不加时 `'A' + $x + '"', 'B' + $y + '"' 会被解析成字符串拼接/数组，而非两个参数，
+# 替换静默失效：写回原内容，却仍然打印 [OK]。
+# 实测（2026-09-23）：v1.0.214 因此被打包成 1.0.213.exe。
 $content = Get-Content $PackageJsonPath -Raw -Encoding UTF8
-$content = $content -replace '"version":\s*"' + $CurrentVersion + '"', '"version": "' + $NewVersion + '"'
+$content = $content -replace ('"version":\s*"' + [regex]::Escape($CurrentVersion) + '"'), ('"version": "' + $NewVersion + '"')
 [System.IO.File]::WriteAllText($PackageJsonPath, $content, (New-Object System.Text.UTF8Encoding $false))
-Write-Host "  [OK] package.json: $CurrentVersion -> $NewVersion" -ForegroundColor Green
+
+# 写回后核对，杜绝静默失败（宁可在这里停下，也别打出一个版本号错的包）
+$verifyVersion = (Get-Content $PackageJsonPath -Raw | ConvertFrom-Json).version
+if ($verifyVersion -ne $NewVersion) {
+    Write-Host "  [错误] 版本号写入失败：期望 $NewVersion，实际 $verifyVersion" -ForegroundColor Red
+    exit 1
+}
+Write-Host "  [OK] package.json: $CurrentVersion -> $NewVersion（已核对）" -ForegroundColor Green
 
 # ===== [2/5] 构建 + 打包 =====
 Write-Host ''
@@ -94,7 +105,7 @@ if ($LASTEXITCODE -ne 0) {
     Write-Host "  $buildResult"
     # 回滚版本号
     $content = Get-Content $PackageJsonPath -Raw -Encoding UTF8
-    $content = $content -replace '"version":\s*"' + $NewVersion + '"', '"version": "' + $CurrentVersion + '"'
+    $content = $content -replace ('"version":\s*"' + [regex]::Escape($NewVersion) + '"'), ('"version": "' + $CurrentVersion + '"')
     [System.IO.File]::WriteAllText($PackageJsonPath, $content, (New-Object System.Text.UTF8Encoding $false))
     Write-Host '  [提示] 版本号已回滚' -ForegroundColor Yellow
     exit 1
@@ -122,6 +133,11 @@ if ($hasInstaller) {
 } else {
     Write-Host '  [错误] 没有找到打包产物！' -ForegroundColor Red
     Write-Host "  期待文件: $InstallerPath" -ForegroundColor Yellow
+    # 回滚版本号，别把仓库留在「已 bump 但没发版」的半路状态
+    $content = Get-Content $PackageJsonPath -Raw -Encoding UTF8
+    $content = $content -replace ('"version":\s*"' + [regex]::Escape($NewVersion) + '"'), ('"version": "' + $CurrentVersion + '"')
+    [System.IO.File]::WriteAllText($PackageJsonPath, $content, (New-Object System.Text.UTF8Encoding $false))
+    Write-Host '  [提示] 版本号已回滚' -ForegroundColor Yellow
     exit 1
 }
 
