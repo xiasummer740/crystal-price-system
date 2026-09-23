@@ -325,7 +325,7 @@
 import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { showToast, showConfirmDialog } from 'vant'
-import { fetchMaterials, createMaterial, updateMaterial, deleteMaterial, getMaterialStatusConfig, exportMaterials, importMaterialsExcel, searchAllCustomers, fetchMaterialCustomers, fetchMaterialFactories, uploadMaterialImages, deleteMaterialImage, http } from '../utils/api.js'
+import { fetchMaterials, createMaterial, updateMaterial, deleteMaterial, getMaterialStatusConfig, exportMaterials, importMaterialsExcel, searchAllCustomers, fetchMaterialCustomers, fetchMaterialFactories, uploadMaterialImages, deleteMaterialImage, isLocalFileUrl, fileDisplayName, http } from '../utils/api.js'
 
 const route = useRoute()
 const router = useRouter()
@@ -607,10 +607,9 @@ async function uploadSpecFile(file) {
   if (!file) return
   const fd = new FormData()
   fd.append('file', file)
-  // 按客户名分文件夹存储（与报价系统规格书分开），folder 用 query 传
-  const folder = '客户物料/' + (selectedCustomer.value || '')
+  // 落位由后端按客户名算（归档区 客户管理/<客户>/规格书/），前端只传原始客户名
   try {
-    const r = await http.post('/upload-spec?folder=' + encodeURIComponent(folder), fd)
+    const r = await http.post('/upload-spec?customer=' + encodeURIComponent(selectedCustomer.value || ''), fd)
     const { url, filename, reused } = r.data || {}
     if (url) {
       form.value.spec_document = url + '?name=' + encodeURIComponent(filename || file.name)
@@ -688,7 +687,7 @@ async function uploadRImages(files) {
   const origNames = toUpload.map(f => f.name)
   for (const f of toUpload) fd.append('files', f)
   try {
-    const r = await uploadMaterialImages(fd)
+    const r = await uploadMaterialImages(fd, selectedCustomer.value || '')
     const urls = r.data || []
     const enriched = urls.map((url, i) => url + '?name=' + encodeURIComponent(origNames[i]))
     form.value.remark_images.push(...enriched)
@@ -727,11 +726,11 @@ async function onRemarkFileChange(e) {
 const pendingImgDeletes = ref([])
 function removeRImg(i) {
   const url = form.value.remark_images[i]
-  if (url) pendingImgDeletes.value.push(url.split('?')[0].split('/').pop())
+  if (url) pendingImgDeletes.value.push(url)
   form.value.remark_images.splice(i, 1)
 }
 function flushPendingImgDeletes() {
-  for (const filename of pendingImgDeletes.value) deleteMaterialImage(filename).catch(() => {})
+  for (const url of pendingImgDeletes.value) deleteMaterialImage(url).catch(() => {})
   pendingImgDeletes.value = []
 }
 function cancelForm() {
@@ -752,7 +751,7 @@ function previewRImgs(item) {
 
 function openSpec(url) {
   if (!url) return
-  if (url.startsWith('/api/specs/')) {
+  if (isLocalFileUrl(url)) {
     // 与报价模块一致：用系统默认程序打开本地文件（像双击文件夹）
     window.electronAPI?.openSpec?.(url)
   } else {

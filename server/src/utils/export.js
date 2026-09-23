@@ -2,10 +2,8 @@ import XLSX from 'xlsx'
 import JSZip from 'jszip'
 import fs from 'fs'
 import path from 'path'
-import { fileURLToPath } from 'url'
 import { queryAll, queryOne, executeBatch, saveNow } from '../db.js'
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url))
+import * as A from './customerArchive.js'
 
 // 解析 Excel 中的「登记时间」单元格，返回 SQLite 'YYYY-MM-DD HH:mm:ss' 格式
 // 支持：JS Date / Excel 数字序列号 / ISO 字符串 / 中文 'YYYY年MM月DD日 HH:mm' / 'YYYY/MM/DD' / 空
@@ -219,9 +217,36 @@ export async function exportNotesPackage(query = {}) {
   const statusMap = { todo: '待办', done: '已完成', follow_up: '跟进后续' }
   const priorityMap = { 1: '高', 2: '中', 3: '低' }
   const headers = ['编号','标题','内容','客户','分类','优先级','状态','提醒时间','已提醒','是否置顶','创建时间','更新时间','图片文件名']
+  // 图片先解析成「磁盘绝对路径 → 导出文件名」。迁到归档区后同名文件遍地都是
+  // （每个客户目录下都有自己的 图片1.png），ZIP 里必须区分开；且表里写下的名字
+  // 要和 ZIP 条目一致，否则导出的包再导入回来图片就对不上了。
+  const imgAbsOf = (url) => {
+    const hit = A.resolveUrl(url)
+    return hit && fs.existsSync(hit.abs) ? hit.abs : null
+  }
+  const exportName = new Map()
+  const usedNames = new Set()
+  for (const r of rows) {
+    let images = []
+    try { images = JSON.parse(r.images || '[]') } catch {}
+    for (const u of images) {
+      const abs = imgAbsOf(u)
+      if (!abs || exportName.has(abs)) continue
+      let name = A.safeFilename(path.basename(abs), 'image')
+      if (usedNames.has(name)) {
+        const ext = path.extname(name), base = path.basename(name, ext)
+        let i = 2
+        while (usedNames.has(`${base}_${i}${ext}`)) i++
+        name = `${base}_${i}${ext}`
+      }
+      usedNames.add(name)
+      exportName.set(abs, name)
+    }
+  }
+
   const data = rows.map(r => {
     let imageNames = ''
-    try { imageNames = JSON.parse(r.images || '[]').map(u => decodeURIComponent(u.split('/').pop())).join(', ') } catch {}
+    try { imageNames = JSON.parse(r.images || '[]').map(u => exportName.get(imgAbsOf(u)) || '').filter(Boolean).join(', ') } catch {}
     return [
       r.id, r.title, r.content, r.customer,
       r.category_name || '',
@@ -245,19 +270,7 @@ export async function exportNotesPackage(query = {}) {
   const zip = new JSZip()
   zip.file('记事便签.xlsx', xlsxBuf)
 
-  const notesUploadDir = path.join(process.env.DATA_DIR || path.join(__dirname, '..', '..'), '记事图片库')
-  const added = new Set()
-  for (const row of rows) {
-    let images = []
-    try { images = JSON.parse(row.images || '[]') } catch {}
-    for (const url of images) {
-      const name = decodeURIComponent(url.split('/').pop())
-      if (added.has(name)) continue
-      added.add(name)
-      const fp = path.join(notesUploadDir, name)
-      if (fs.existsSync(fp)) zip.file(`images/${name}`, fs.readFileSync(fp))
-    }
-  }
+  for (const [abs, name] of exportName) zip.file(`images/${name}`, fs.readFileSync(abs))
   return zip.generateAsync({ type: 'nodebuffer' })
 }
 

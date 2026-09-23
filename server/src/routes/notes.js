@@ -1,9 +1,8 @@
 import { Router } from 'express'
 import multer from 'multer'
-import path from 'path'
 import fs from 'fs'
-import { fileURLToPath } from 'url'
 import { queryAll, queryOne, execute } from '../db.js'
+import * as A from '../utils/customerArchive.js'
 
 // 统一处理：将「未命名」标题转为空，前端自行决定如何显示
 function cleanNote(row) {
@@ -13,23 +12,30 @@ function cleanNote(row) {
 import { exportNotesPackage, generateNoteTemplate, importNotesFromZip } from '../utils/export.js'
 import XLSX from 'xlsx'
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const router = Router()
 
 // ========== 附件上传（图片+文件） ==========
-const notesUploadDir = path.join(process.env.DATA_DIR || path.join(__dirname, '..', '..'), '记事图片库')
-if (!fs.existsSync(notesUploadDir)) fs.mkdirSync(notesUploadDir, { recursive: true })
+// 落位：客户管理/<客户>/记事/<日期>/，文件名统一成 图片N.ext（与归档迁移后的命名一致）
+function todayLocal() {
+  const d = new Date(), p = n => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
+}
 
 const fileUpload = multer({
   storage: multer.diskStorage({
-    destination: notesUploadDir,
-    filename: (_req, file, cb) => {
-      const ext = path.extname(file.originalname) || ''
-      const base = path.basename(file.originalname, ext)
-      // 保留原始文件名（防止中文/特殊字符丢失），前缀时间戳+随机串防冲突
-      const safeBase = base.replace(/[<>:"/\\|?*]/g, '_').slice(0, 80)
-      const name = Date.now() + '-' + Math.random().toString(36).slice(2, 8) + '-' + safeBase + ext
-      cb(null, name)
+    destination: (req, _file, cb) => {
+      const customer = String(req.query?.customer || '').trim()
+      const date = String(req.query?.date || '').trim() || todayLocal()
+      const dir = A.customerNoteDayDirAbs(customer, date)
+      A.ensureDir(dir)
+      req._noteCustomer = customer
+      req._noteDate = date
+      req._noteDir = dir
+      cb(null, dir)
+    },
+    filename: (req, file, cb) => {
+      // 序号接着目录里已有的往下排；multer 逐个处理文件，前一个写完下一个扫描时能看到
+      cb(null, A.noteImageName(A.nextSequenceIn(req._noteDir, '图片'), file.originalname))
     }
   }),
   limits: { fileSize: 50 * 1024 * 1024 } // 50MB
@@ -37,21 +43,17 @@ const fileUpload = multer({
 
 router.post('/upload', fileUpload.array('files', 9), (req, res) => {
   if (!req.files || !req.files.length) return res.status(400).json({ code: 1, msg: '请选择文件' })
-  const urls = req.files.map(f => `/api/uploads/notes/${encodeURIComponent(f.filename)}`)
+  const urls = req.files.map(f => A.noteImageUrl(req._noteCustomer, req._noteDate, f.filename))
   res.json({ code: 0, data: urls })
 })
 
 // 删除已上传的附件
-router.delete('/upload/:filename', (req, res) => {
-  // 文件名可能被双重 URL 编码（服务端存中文 + 客户端 encodeURIComponent），解码还原
-  let filename = decodeURIComponent(req.params.filename)
-  // 防止路径遍历：只允许删除 uploads/notes 目录下的文件
-  if (filename.includes('/') || filename.includes('\\') || filename === '' || filename === '.') {
-    return res.status(400).json({ code: 1, msg: '非法的文件名' })
-  }
-  const filePath = path.join(notesUploadDir, filename)
-  if (!fs.existsSync(filePath)) return res.status(404).json({ code: 1, msg: '文件不存在' })
-  try { fs.unlinkSync(filePath); res.json({ code: 0, msg: '已删除' }) }
+// 文件在多层目录里，裸文件名不再够用 —— 必须传完整归档 URL，解析回磁盘路径再删。
+router.delete('/upload', (req, res) => {
+  const hit = A.resolveUrl(req.query?.url)
+  if (!hit) return res.status(400).json({ code: 1, msg: '非法的文件路径' })
+  if (!fs.existsSync(hit.abs)) return res.status(404).json({ code: 1, msg: '文件不存在' })
+  try { fs.unlinkSync(hit.abs); res.json({ code: 0, msg: '已删除' }) }
   catch (e) { res.status(500).json({ code: 1, msg: '删除失败' }) }
 })
 
@@ -90,7 +92,10 @@ const importUpload = multer({ storage: multer.memoryStorage() })
 router.post('/import', importUpload.single('file'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ code: 1, msg: '请选择文件' })
-    const count = await importNotesFromZip(req.file.buffer, notesUploadDir)
+    // 导入的图片先进旧目录（记事图片库/），下次启动 syncArchive 会自动归档到
+    // 客户管理/<客户>/记事/<日期>/。导入时按「行 → 客户/日期」落位需要在解压阶段
+    // 就解析整张表，收益不抵复杂度，先沿用这条能跑通的路径。
+    const count = await importNotesFromZip(req.file.buffer, A.ensureDir(A.rootAbs(A.LEGACY.notesImages)))
     res.json({ code: 0, data: { count }, msg: `成功导入 ${count} 条记事` })
   } catch (e) {
     console.error('[notes-import]', e)

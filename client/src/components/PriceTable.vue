@@ -91,9 +91,10 @@
 import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { showToast } from 'vant'
+import { isLocalFileUrl } from '../utils/api.js'
 function openExternal(url) {
   if (!url) return
-  if (url.startsWith('/api/specs/')) {
+  if (isLocalFileUrl(url)) {
     window.electronAPI?.openSpec?.(url)
   } else {
     const fullUrl = url.startsWith('http') ? url : window.location.origin + url

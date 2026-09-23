@@ -470,7 +470,7 @@
 import { ref, reactive, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { usePriceStore } from '../stores/price.js'
-import { importExcel, http, saveSettings as saveSettingsApi, fetchSettings } from '../utils/api.js'
+import { importExcel, http, saveSettings as saveSettingsApi, fetchSettings, isLocalFileUrl, fileDisplayName } from '../utils/api.js'
 import { showToast, showConfirmDialog } from 'vant'
 import SaveStatusBadge from '../components/SaveStatusBadge.vue'
 import PriceTable from '../components/PriceTable.vue'
@@ -617,7 +617,7 @@ function onSpecEditDrop(e) { specEditDragOver.value=false; const file=e.dataTran
 async function onSpecEditUpload(e) { const file=e.target.files[0]; if(file) uploadSpecEditFile(file); specEditFileInput.value && (specEditFileInput.value.value='') }
 function openExternal(url) {
   if (!url) return
-  if (url.startsWith('/api/specs/')) {
+  if (isLocalFileUrl(url)) {
     window.electronAPI?.openSpec?.(url)
   } else {
     const fullUrl = url.startsWith('http') ? url : window.location.origin + url
@@ -625,18 +625,13 @@ function openExternal(url) {
   }
 }
 function decodeSpecName(url) {
-  if (!url) return ''
-  try {
-    const name = url.replace('/api/specs/', '')
-    return decodeURIComponent(name)
-  } catch { return url }
+  return fileDisplayName(url)
 }
 async function uploadSpecEditFile(file) {
   const fd=new FormData(); fd.append('file',file)
-  // 报价系统规格书按品类分文件夹
+  // 报价系统规格书按品类分文件夹（落位由后端算：报价规格书/<品类>/）
   const category = (specEditForm.value.category || '').trim()
-  const folder = '报价/' + (category || '未分类')
-  try { const r=await http.post('/upload-spec?folder=' + encodeURIComponent(folder), fd); specEditForm.value.spec_document=r.data.url; showToast('上传成功') } catch { showToast('上传失败') }
+  try { const r=await http.post('/upload-spec?category=' + encodeURIComponent(category), fd); specEditForm.value.spec_document=r.data.url; showToast('上传成功') } catch { showToast('上传失败') }
 }
 function editGroupSpecs() {
   const fk = Object.keys(md.value.factories)[0]; const q = md.value.factories[fk]?.[0]

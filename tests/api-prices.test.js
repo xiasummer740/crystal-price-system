@@ -265,7 +265,7 @@ describe('POST /api/prices — 备注图片 remark_images', () => {
       material_code: 'IMG-001',
       material_name: '带图片备注测试',
       remarks: '原始报价截图',
-      remark_images: ['/api/uploads/prices/1-test.png', '/api/uploads/prices/2-a.pdf?name=a.pdf']
+      remark_images: ['/api/quote-images/1-test.png', '/api/quote-images/2-a.pdf?name=a.pdf']
     })
     assert.equal(res.body.code, 0, `新增应成功: ${res.body.msg || res.status}`)
     const id = res.body.data.id
@@ -274,14 +274,14 @@ describe('POST /api/prices — 备注图片 remark_images', () => {
     const check = await request.get(`${BASE}/${id}`)
     const arr = JSON.parse(check.body.data.remark_images || '[]')
     assert.equal(arr.length, 2, '应保存 2 个图片')
-    assert.equal(arr[0], '/api/uploads/prices/1-test.png')
+    assert.equal(arr[0], '/api/quote-images/1-test.png')
 
     // 编辑：替换 remark_images
-    const upd = await request.put(`${BASE}/${id}`).send({ remark_images: ['/api/uploads/prices/3-new.png'] })
+    const upd = await request.put(`${BASE}/${id}`).send({ remark_images: ['/api/quote-images/3-new.png'] })
     assert.equal(upd.body.code, 0)
     const check2 = await request.get(`${BASE}/${id}`)
     const arr2 = JSON.parse(check2.body.data.remark_images || '[]')
     assert.equal(arr2.length, 1, '编辑后应剩 1 个')
-    assert.equal(arr2[0], '/api/uploads/prices/3-new.png')
+    assert.equal(arr2[0], '/api/quote-images/3-new.png')
   })
 })

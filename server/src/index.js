@@ -18,6 +18,8 @@ import materialsRouter from './routes/materials.js'
 import { exportToExcel, importFromExcel, generateTemplate, generateSampleTemplate, generateNoteTemplate } from './utils/export.js'
 import { initDb, saveNow, queryAll, execute } from './db.js'
 import { triggerBackup, flushPending } from './utils/excelBackup.js'
+import * as A from './utils/customerArchive.js'
+import { syncArchive } from './utils/archiveSync.js'
 import * as logger from './utils/logger.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -156,18 +158,46 @@ const materialsUploadDir = path.join(process.env.DATA_DIR || path.join(__dirname
 if (!fs.existsSync(materialsUploadDir)) fs.mkdirSync(materialsUploadDir, { recursive: true })
 app.use('/api/uploads/materials', express.static(materialsUploadDir))
 
+// ===== 归档区（客户资料归档后的正式位置）=====
+// 客户管理/<客户>/{规格书,物料图片,记事/<日期>}、报价规格书/<品类>、报价备注图
+// 上面那 4 条旧路由保留只读兜底：没刷新的旧页面 / 老书签不至于立刻 404。
+// 迁移完成后旧目录应为空，这几条自然失效。
+for (const [mount, root] of [
+  ['/api/cust', A.DIR.customers],
+  ['/api/quote-specs', A.DIR.quoteSpec],
+  ['/api/quote-images', A.DIR.quoteImage]
+]) {
+  app.use(mount, express.static(A.ensureDir(A.rootAbs(root))))
+}
+
+// 桌面端「用系统程序打开」用：URL → 磁盘绝对路径。
+// 路径规则只在 A.resolveUrl 一处实现，主进程不重复写一份 —— 两套 sanitize 迟早漂移，
+// 而这次的 404 就是「写入用一套规则、读取用另一套」造出来的。
+app.get('/api/file-path', (req, res) => {
+  const hit = A.resolveUrl(req.query?.url)
+  if (!hit) return res.status(400).json({ code: 1, msg: '无法解析该文件路径' })
+  if (!fs.existsSync(hit.abs)) return res.status(404).json({ code: 1, msg: '文件不存在' })
+  res.json({ code: 0, data: { path: hit.abs } })
+})
+
 // 规格书上传
-// folder 字段：可选子目录（如 "客户物料/深圳市XX"），报价系统不传则存根目录
+// 落位由「原始客户名 / 品类名」决定（query 传，multer 的 destination 里 req.body 可能尚未就绪）：
+//   customer=深圳市XX  → 客户管理/深圳市XX/规格书/     （客户物料规格书）
+//   category=RTC       → 报价规格书/RTC/              （报价规格书，空→未分类）
+// 客户端不传路径：路径一律由路径助手算，保证与搬迁/静态路由用的是同一套 sanitize 规则。
 // 去重：目标目录已有同名文件 → 复用已有文件，不重复存储
 const specUpload = multer({
   storage: multer.diskStorage({
     destination: (req, _file, cb) => {
-      // folder 通过 query 参数传入（multer 解析 file 时 req.body 可能尚未就绪）
-      const folder = String(req.query?.folder || '').replace(/[<>:"|?*\\]/g, '_').trim()
-      const dir = folder ? path.join(specDir, folder) : specDir
-      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
+      const customer = String(req.query?.customer || '').trim()
+      const category = String(req.query?.category || '').trim()
+      let dir, urlOf
+      if (customer) { dir = A.customerSpecDirAbs(customer); urlOf = fn => A.customerSpecUrl(customer, fn) }
+      else if (category) { dir = A.quoteSpecDirAbs(category); urlOf = fn => A.quoteSpecUrl(category, fn) }
+      else return cb(new Error('上传参数缺失：需带 customer（客户物料规格书）或 category（报价规格书）'))
+      A.ensureDir(dir)
       req._specDir = dir
-      req._specFolder = folder
+      req._specUrlOf = urlOf
       cb(null, dir)
     },
     filename: (req, file, cb) => {
@@ -209,13 +239,11 @@ app.post('/api/upload-spec', (req, res) => {
     // 去重：删除临时文件，返回已存在的规格书 URL
     if (req._specDup && req.file.filename.startsWith('._dup_')) {
       try { fs.unlinkSync(path.join(req._specDir, req.file.filename)) } catch {}
-      const rel = req._specFolder ? `${req._specFolder}/${path.basename(req._specDupPath)}` : path.basename(req._specDupPath)
       let displayName
       try { displayName = Buffer.from(req.file.originalname, 'binary').toString('utf8') } catch { displayName = req.file.originalname }
-      return res.json({ code: 0, data: { url: `/api/specs/${encodeURIComponent(rel)}`, filename: displayName, reused: true } })
+      return res.json({ code: 0, data: { url: req._specUrlOf(path.basename(req._specDupPath)), filename: displayName, reused: true } })
     }
-    const rel = req._specFolder ? `${req._specFolder}/${req.file.filename}` : req.file.filename
-    const url = `/api/specs/${rel.split('/').map(encodeURIComponent).join('/')}`
+    const url = req._specUrlOf(req.file.filename)
     // 返回 decode 后的原始文件名给前端显示
     let displayName
     try { displayName = Buffer.from(req.file.originalname, 'binary').toString('utf8') } catch { displayName = req.file.originalname }
@@ -333,98 +361,23 @@ function migrateNotesDropInProgress() {
 }
 try { migrateNotesDropInProgress() } catch (e) { console.warn('[notes-migrate] 迁移失败:', e.message) }
 
-// ===== 规格书迁移：历史客户物料规格书按客户名分文件夹 =====
-// 旧版客户物料规格书都存根目录，迁移到 规格书/客户物料/{客户名}/ 并更新引用
-// 若同一文件被报价系统引用，保留根目录副本（不破坏报价系统）
-function specFilenameFromUrl(url) {
-  if (!url) return ''
-  let p = url.replace('/api/specs/', '')
-  p = p.split('?')[0]
-  try { p = decodeURIComponent(p) } catch {}
-  // 若是子目录路径，取最后一段文件名
-  return p.split('/').pop() || ''
+// ===== 客户资料归档：把归档区对齐到数据库（取代旧的两个「规格书迁移」）=====
+// 旧迁移有个致命缺陷：靠「根目录还有没有源文件」决定要不要修，文件一旦搬走就永远跳过 ——
+// 它自己造成的错位永远修不回来，生产上 21 条国润聚源规格书 404 就是这么来的。
+// 新迁移以「数据库引用能不能落到真实文件」为准，所以能修自己的历史错误。
+// 幂等：已经搬过的，第二次启动是零成本空跑。另一台电脑装完自动整理走的就是这条路径。
+try {
+  const rep = syncArchive()
+  const moved = Object.values(rep.migrated).reduce((a, b) => a + b, 0)
+  if (moved || rep.deletedSources) {
+    console.log(`[archive-sync] 归档 ${moved} 个文件，清理旧位置重复 ${rep.deletedSources} 个，详见 客户资料归档报告.txt`)
+  }
+  if (rep.broken.length) console.warn(`[archive-sync] ${rep.broken.length} 条引用找不到文件，见 客户资料归档报告.txt`)
+  if (rep.skipped) console.warn(`[archive-sync] ${rep.skipped} 条因客户名撞车被跳过（需人工决定），见 客户资料归档报告.txt`)
+} catch (e) {
+  // 归档失败不能拖垮整个服务：搬迁是「先复制、确认后才删源」，源文件都还在，下次启动重试即可
+  console.warn('[archive-sync] 归档失败:', e.message)
 }
-function migrateSpecsToCustomerFolders() {
-  // 找旧格式（根目录引用）的客户物料规格书
-  const mats = queryAll(
-    "SELECT id, customer, spec_document FROM customer_materials WHERE is_deleted = 0 AND spec_document != '' AND spec_document NOT LIKE '/api/specs/客户物料/%'"
-  )
-  if (!mats.length) { console.log('[spec-migrate] 无需要迁移的规格书'); return }
-
-  // 报价系统引用的根目录文件名（这些文件不能删除，保留根目录副本）
-  const priceRefs = new Set()
-  const prices = queryAll("SELECT spec_document FROM material_prices WHERE is_deleted = 0 AND spec_document != ''")
-  for (const p of prices) {
-    const fn = specFilenameFromUrl(p.spec_document)
-    if (fn) priceRefs.add(fn)
-  }
-
-  let moved = 0
-  for (const m of mats) {
-    const fn = specFilenameFromUrl(m.spec_document)
-    if (!fn) continue
-    const customer = (m.customer || '未命名客户').replace(/[<>:"|?*\\/]/g, '_').trim() || '未命名客户'
-    const destDir = path.join(specDir, '客户物料', customer)
-    const srcPath = path.join(specDir, fn)
-    if (!fs.existsSync(srcPath)) continue
-    if (!fs.existsSync(destDir)) fs.mkdirSync(destDir, { recursive: true })
-    const destPath = path.join(destDir, fn)
-    if (!fs.existsSync(destPath)) {
-      fs.copyFileSync(srcPath, destPath)
-    }
-    // 更新数据库引用（保留 ?name= 显示名）
-    const newPath = ['客户物料', customer, fn].map(encodeURIComponent).join('/')
-    const queryStr = m.spec_document.includes('?name=') ? m.spec_document.substring(m.spec_document.indexOf('?name=')) : ''
-    execute("UPDATE customer_materials SET spec_document = ? WHERE id = ?", ['/api/specs/' + newPath + queryStr, m.id])
-    moved++
-    // 若此文件不被报价系统引用，删除根目录副本（避免孤儿文件）
-    if (!priceRefs.has(fn)) {
-      try { fs.unlinkSync(srcPath) } catch {}
-    }
-  }
-  if (moved > 0) {
-    try { saveNow() } catch {}
-    console.log(`[spec-migrate] 已迁移 ${moved} 个客户物料规格书到客户文件夹`)
-  }
-}
-try { migrateSpecsToCustomerFolders() } catch (e) { console.warn('[spec-migrate] 迁移失败:', e.message) }
-
-// ===== 规格书迁移：报价系统规格书按品类分文件夹 =====
-// 旧版报价系统规格书存根目录，迁移到 规格书/报价/{品类}/（品类空 → 未分类）并更新引用
-function migrateQuoteSpecsToCategoryFolders() {
-  const prices = queryAll(
-    "SELECT id, category, spec_document FROM material_prices WHERE is_deleted = 0 AND spec_document != '' AND spec_document NOT LIKE '/api/specs/报价/%'"
-  )
-  if (!prices.length) { console.log('[spec-migrate-quote] 无需要迁移的报价规格书'); return }
-
-  let moved = 0
-  for (const p of prices) {
-    const fn = specFilenameFromUrl(p.spec_document)
-    if (!fn) continue
-    const category = (p.category || '').replace(/[<>:"|?*\\/]/g, '_').trim() || '未分类'
-    const destDir = path.join(specDir, '报价', category)
-    const srcPath = path.join(specDir, fn)
-    if (!fs.existsSync(srcPath)) continue
-    if (!fs.existsSync(destDir)) fs.mkdirSync(destDir, { recursive: true })
-    const destPath = path.join(destDir, fn)
-    if (fs.existsSync(destPath)) {
-      // 目标已存在 → 复用，删除根目录文件
-      try { fs.unlinkSync(srcPath) } catch {}
-    } else {
-      fs.renameSync(srcPath, destPath)
-    }
-    // 更新数据库引用（保留 ?name= 显示名）
-    const newPath = ['报价', category, fn].map(encodeURIComponent).join('/')
-    const queryStr = p.spec_document.includes('?name=') ? p.spec_document.substring(p.spec_document.indexOf('?name=')) : ''
-    execute("UPDATE material_prices SET spec_document = ? WHERE id = ?", ['/api/specs/' + newPath + queryStr, p.id])
-    moved++
-  }
-  if (moved > 0) {
-    try { saveNow() } catch {}
-    console.log(`[spec-migrate-quote] 已迁移 ${moved} 个报价规格书到品类文件夹`)
-  }
-}
-try { migrateQuoteSpecsToCategoryFolders() } catch (e) { console.warn('[spec-migrate-quote] 迁移失败:', e.message) }
 
 // 预生成导入模板到模板文件夹
 const templateDir = path.join(process.env.DATA_DIR || path.join(__dirname, '..'), '模板')

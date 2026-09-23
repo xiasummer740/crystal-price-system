@@ -216,13 +216,18 @@ function editTimelineEntry(idx) {
 
 function triggerProgressFileInput() { progressFileInputRef.value?.click() }
 
+// 附件落位参数：客户管理/<客户>/记事/<日期>/，日期跟这条记事自己的一天走
+function noteUploadScope() {
+  return [note.value?.customer || '', (note.value?.created_at || '').slice(0, 10)]
+}
+
 async function onProgressFileChange(e) {
   const files = e.target.files
   if (!files?.length) return
   const fd = new FormData()
   for (const f of files) fd.append('files', f)
   try {
-    const r = await uploadNoteImages(fd)
+    const r = await uploadNoteImages(fd, ...noteUploadScope())
     const urls = r.data || []
     progressFiles.value.push(...urls)
   } catch (e) {
@@ -240,7 +245,7 @@ async function handleProgressFiles(files) {
   const fd = new FormData()
   for (const f of files) fd.append('files', f)
   try {
-    const r = await uploadNoteImages(fd)
+    const r = await uploadNoteImages(fd, ...noteUploadScope())
     const urls = r.data || []
     progressFiles.value.push(...urls)
     showToast(`已添加 ${urls.length} 个附件`)

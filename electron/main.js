@@ -299,7 +299,13 @@ async function startServer() {
   // 数据目录：用户配置 → legacy 探测+迁移 → 弹选择器
   const dataDir = await resolveDataDir()
   log(`dataDir: ${dataDir}`)
-  const subdirs = ['数据库', '规格书', '模板', '备份', 'Excel备份', '记事图片库']
+  const subdirs = [
+    '数据库', '模板', '备份', 'Excel备份',
+    // 归档区（正式位置）
+    '客户管理', '_未分配客户', '报价规格书', '报价备注图',
+    // 旧目录：老书签只读兜底；记事导入的图片也先落这里，下次启动自动归档
+    '规格书', '记事图片库'
+  ]
   for (const sd of subdirs) {
     const p = path.join(dataDir, sd)
     if (!fs.existsSync(p)) fs.mkdirSync(p, { recursive: true })
@@ -738,16 +744,16 @@ ipcMain.handle('open-map-window', () => {
 
 // 浏览器打开外部链接（供渲染进程调用）
 ipcMain.handle('open-external', (_, url) => { shell.openExternal(url) })
-// 规格书：获取本地路径并用系统默认程序打开（像双击文件夹一样）
-ipcMain.handle('open-spec', (_, specUrl) => {
+// 规格书：问服务端要磁盘路径，再用系统默认程序打开（像双击文件夹一样）。
+// 归档后规格书散在 客户管理/<客户>/规格书/、报价规格书/<品类>/ 下，主进程不再自己拼路径，
+// 一律交给服务端的 A.resolveUrl（与上传/搬迁用的是同一套规则）。
+ipcMain.handle('open-spec', async (_, specUrl) => {
   try {
-    let filename = specUrl.replace('/api/specs/', '')
-    // 去掉 ?name= 等查询参数（前端上传时追加了显示名）
-    filename = filename.split('?')[0]
-    const decoded = decodeURIComponent(filename)
-    const filePath = path.join(process.env.DATA_DIR, '规格书', decoded)
-    log(`open-spec: ${filePath}`)
-    shell.openPath(filePath)
+    const r = await fetch(`http://127.0.0.1:${serverPort}/api/file-path?url=${encodeURIComponent(specUrl)}`)
+    const j = await r.json()
+    if (j.code !== 0) return log(`open-spec 失败: ${j.msg} (${specUrl})`)
+    log(`open-spec: ${j.data.path}`)
+    shell.openPath(j.data.path)
   } catch (err) { log(`open-spec error: ${err.message}`) }
 })
 

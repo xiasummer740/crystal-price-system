@@ -89,16 +89,18 @@ export function deletePrice(id) {
 export function uploadPriceImages(formData) {
   return http.post('/prices/upload', formData)
 }
-export function deletePriceImage(filename) {
-  return http.delete(`/prices/upload/${encodeURIComponent(filename)}`)
+// 迁移到归档区后文件在多层目录里，裸文件名不够用 —— 传完整 URL 由后端解析回磁盘路径
+export function deletePriceImage(url) {
+  return http.delete('/prices/upload', { params: { url } })
 }
 
 // 客户物料备注图片/文件上传与删除
-export function uploadMaterialImages(formData) {
-  return http.post('/materials/upload', formData)
+// customer 决定落位（客户管理/<客户>/物料图片/），不传则进 _未分配客户
+export function uploadMaterialImages(formData, customer = '') {
+  return http.post('/materials/upload', formData, { params: { customer } })
 }
-export function deleteMaterialImage(filename) {
-  return http.delete(`/materials/upload/${encodeURIComponent(filename)}`)
+export function deleteMaterialImage(url) {
+  return http.delete('/materials/upload', { params: { url } })
 }
 
 export function getMetaOptions() {
@@ -162,11 +164,12 @@ export function getDueReminders() {
 export function markReminded(id) {
   return http.post(`/notes/${id}/reminded`)
 }
-export function uploadNoteImages(formData) {
-  return http.post('/notes/upload', formData)
+// customer + date 决定落位（客户管理/<客户>/记事/<日期>/），date 不传则由后端取当天
+export function uploadNoteImages(formData, customer = '', date = '') {
+  return http.post('/notes/upload', formData, { params: { customer, date } })
 }
-export function deleteNoteImage(filename) {
-  return http.delete(`/notes/upload/${encodeURIComponent(filename)}`)
+export function deleteNoteImage(url) {
+  return http.delete('/notes/upload', { params: { url } })
 }
 export function fetchNoteCustomers() {
   return http.get('/notes/customers/list')
@@ -358,4 +361,26 @@ export function fetchMaterialCustomers() {
 }
 export function fetchMaterialFactories(customer) {
   return http.get('/materials/factories/list', { params: { customer } })
+}
+
+// ===== 附件 URL 工具 =====
+
+// 本地文件 URL → 交给桌面端用系统程序打开；其余（http 外链）走浏览器。
+// 归档后文件散在 客户管理/、报价规格书/、报价备注图/ 下，旧前缀一并认，
+// 让没刷新到的页面也能正常打开。
+const LOCAL_FILE_PREFIXES = [
+  '/api/cust/', '/api/quote-specs/', '/api/quote-images/',
+  '/api/specs/', '/api/uploads/materials/', '/api/uploads/notes/', '/api/uploads/prices/'
+]
+export function isLocalFileUrl(url) {
+  return !!url && LOCAL_FILE_PREFIXES.some(p => String(url).startsWith(p))
+}
+
+// 附件显示名：优先上传时附加的 ?name= 原始名，否则回落到末段文件名
+export function fileDisplayName(url) {
+  if (!url) return ''
+  const m = String(url).match(/[?&]name=([^&]+)/)
+  if (m) { try { return decodeURIComponent(m[1]) } catch { /* 落到末段 */ } }
+  const last = String(url).split('?')[0].split('/').filter(Boolean).pop() || ''
+  try { return decodeURIComponent(last) } catch { return last }
 }

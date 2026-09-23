@@ -3,29 +3,31 @@ import multer from 'multer'
 import XLSX from 'xlsx'
 import fs from 'fs'
 import path from 'path'
-import { fileURLToPath } from 'url'
 import { queryAll, queryOne, execute } from '../db.js'
 import { exportMaterials } from '../utils/export.js'
 import { triggerBackup } from '../utils/excelBackup.js'
+import * as A from '../utils/customerArchive.js'
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const router = Router()
 
-// 规格书目录（与 index.js 一致）
-const specDir = path.join(process.env.DATA_DIR || path.join(__dirname, '..', '..'), '规格书')
-
 // ========== 客户物料备注图片/文件上传（微信粘贴报价原始记录） ==========
-const materialsUploadDir = path.join(process.env.DATA_DIR || path.join(__dirname, '..', '..'), '客户物料图片库')
-if (!fs.existsSync(materialsUploadDir)) fs.mkdirSync(materialsUploadDir, { recursive: true })
-
+// 落位：客户管理/<客户>/物料图片/ —— 客户名走 query，路径由路径助手算
 const materialFileUpload = multer({
   storage: multer.diskStorage({
-    destination: materialsUploadDir,
+    destination: (req, _file, cb) => {
+      const customer = String(req.query?.customer || '').trim()
+      const dir = A.customerImageDirAbs(customer)   // 客户为空 → _未分配客户
+      A.ensureDir(dir)
+      req._imgCustomer = customer
+      cb(null, dir)
+    },
     filename: (_req, file, cb) => {
-      const ext = path.extname(file.originalname) || ''
-      const base = path.basename(file.originalname, ext)
-      const safeBase = base.replace(/[<>:"/\\|?*]/g, '_').slice(0, 80)
-      cb(null, Date.now() + '-' + Math.random().toString(36).slice(2, 8) + '-' + safeBase + ext)
+      // A.safeFilename 先修 Windows 下 busboy 把 UTF-8 当 Latin-1 读出来的中文乱码，再净化非法字符。
+      // 归档目录是给人翻的，文件名不能是「å¤‡æ³¨å›¾」这种。
+      const safe = A.safeFilename(file.originalname, 'file')
+      const ext = A.extOf(safe)
+      const base = safe.slice(0, safe.length - ext.length).slice(0, 80)
+      cb(null, Date.now() + '-' + Math.random().toString(36).slice(2, 8) + '-' + base + ext)
     }
   }),
   limits: { fileSize: 50 * 1024 * 1024 } // 50MB
@@ -34,57 +36,81 @@ const materialFileUpload = multer({
 // 备注附件上传
 router.post('/upload', materialFileUpload.array('files', 9), (req, res) => {
   if (!req.files || !req.files.length) return res.status(400).json({ code: 1, msg: '请选择文件' })
-  const urls = req.files.map(f => `/api/uploads/materials/${encodeURIComponent(f.filename)}`)
+  const urls = req.files.map(f => A.customerImageUrl(req._imgCustomer, f.filename))
   res.json({ code: 0, data: urls })
 })
 
 // 删除已上传的备注附件
-router.delete('/upload/:filename', (req, res) => {
-  let filename = decodeURIComponent(req.params.filename)
-  if (filename.includes('/') || filename.includes('\\') || filename === '' || filename === '.') {
-    return res.status(400).json({ code: 1, msg: '非法的文件名' })
-  }
-  const filePath = path.join(materialsUploadDir, filename)
-  if (!fs.existsSync(filePath)) return res.status(404).json({ code: 1, msg: '文件不存在' })
-  try { fs.unlinkSync(filePath); res.json({ code: 0, msg: '已删除' }) }
+// 现在文件在多层目录里，裸文件名不再够用 —— 必须传完整归档 URL，解析回磁盘路径再删。
+// resolveUrl 会挡掉路径遍历、绝对路径、NTFS 数据流，并校验结果落在数据目录内。
+router.delete('/upload', (req, res) => {
+  const hit = A.resolveUrl(req.query?.url)
+  if (!hit) return res.status(400).json({ code: 1, msg: '非法的文件路径' })
+  if (!fs.existsSync(hit.abs)) return res.status(404).json({ code: 1, msg: '文件不存在' })
+  try { fs.unlinkSync(hit.abs); res.json({ code: 0, msg: '已删除' }) }
   catch (e) { res.status(500).json({ code: 1, msg: '删除失败' }) }
 })
 
-// ========== 客户改名：规格书文件夹整组迁移 ==========
-// 客户A改名/合并到B：迁移 规格书/客户物料/A/ → B/，并同步该客户全部物料的客户名 + 规格书引用
+// ========== 客户改名：整个客户目录整组迁移 ==========
+// 客户A改名/合并到B：把 客户管理/A/ 整个搬到 客户管理/B/（规格书 + 物料图片 + 记事），
+// 并同步该客户全部物料/记事的客户名 + 三类文件引用。
+// 合并到已有客户时：同名文件保留目标已有的，删掉源副本。
+
+/** 递归搬目录内容到目标（目标已有同名文件则保留已有的，删源副本） */
+function moveInto(srcDir, destDir) {
+  for (const e of fs.readdirSync(srcDir, { withFileTypes: true })) {
+    const s = path.join(srcDir, e.name), d = path.join(destDir, e.name)
+    if (e.isDirectory()) {
+      fs.mkdirSync(d, { recursive: true })
+      moveInto(s, d)
+      try { if (!fs.readdirSync(s).length) fs.rmdirSync(s) } catch {}
+    } else if (fs.existsSync(d)) {
+      try { fs.unlinkSync(s) } catch {}
+    } else {
+      // 跨盘 / 文件被占用会失败 —— 留原地不报错，下次启动 syncArchive 会把它捞回来
+      try { fs.renameSync(s, d) } catch {}
+    }
+  }
+}
+
 function renameCustomerFolder(oldName, newName) {
   if (!oldName || !newName || oldName === newName) return
-  const cleanOld = String(oldName).replace(/[<>:"|?*\\/]/g, '_').trim() || '未命名客户'
-  const cleanNew = String(newName).replace(/[<>:"|?*\\/]/g, '_').trim() || '未命名客户'
-  if (cleanOld === cleanNew) return
+  const oldFolder = A.customerFolder(oldName)
+  const newFolder = A.customerFolder(newName)
+  if (oldFolder === newFolder) return
 
-  const oldDir = path.join(specDir, '客户物料', cleanOld)
-  const newDir = path.join(specDir, '客户物料', cleanNew)
-
-  // 1. 迁移文件夹内文件（同名复用，删除旧副本）
+  // 1. 整个客户目录搬家
+  const oldDir = A.customerDirAbs(oldName)
+  const newDir = A.customerDirAbs(newName)
   if (fs.existsSync(oldDir)) {
-    if (!fs.existsSync(newDir)) fs.mkdirSync(newDir, { recursive: true })
-    for (const f of fs.readdirSync(oldDir)) {
-      const sp = path.join(oldDir, f)
-      const dp = path.join(newDir, f)
-      if (fs.statSync(sp).isDirectory()) continue
-      if (!fs.existsSync(dp)) fs.renameSync(sp, dp)
-      else { try { fs.unlinkSync(sp) } catch {} }
-    }
-    // 清空后的旧文件夹删除
+    A.ensureDir(newDir)
+    moveInto(oldDir, newDir)
     try { if (!fs.readdirSync(oldDir).length) fs.rmdirSync(oldDir) } catch {}
   }
 
-  // 2. 同步该客户全部物料：客户名 + 规格书引用（URL 中是 encodeURIComponent 后的路径）
-  execute("UPDATE customer_materials SET customer = ? WHERE is_deleted = 0 AND customer = ?", [cleanNew, cleanOld])
-  const oldPrefix = '/api/specs/' + encodeURIComponent('客户物料') + '/' + encodeURIComponent(cleanOld)
-  const newPrefix = '/api/specs/' + encodeURIComponent('客户物料') + '/' + encodeURIComponent(cleanNew)
-  const changed = execute(
-    "UPDATE customer_materials SET spec_document = REPLACE(spec_document, ?, ?) WHERE is_deleted = 0 AND spec_document LIKE ?",
-    [oldPrefix, newPrefix, oldPrefix + '%']
-  )
+  // 2. 同步客户名（DB 存原始名，文件夹名才是 sanitize 过的）
+  let moved = 0
+  moved += execute("UPDATE customer_materials SET customer = ? WHERE is_deleted = 0 AND customer = ?", [newName, oldName])?.changes ?? 0
+  moved += execute("UPDATE notes SET customer = ? WHERE is_deleted = 0 AND customer = ?", [newName, oldName])?.changes ?? 0
+
+  // 3. 文件引用改前缀。
+  // 🔴 必须用 encodeURIComponent 后的文件夹名去比：库里存的是 percent-encoded 的 URL，
+  //    拿未编码的中文前缀 LIKE 去匹配永远为真/永远匹配不上（旧代码就是这么失效的）。
+  const fromPfx = '/api/cust/' + encodeURIComponent(oldFolder) + '/'
+  const toPfx = '/api/cust/' + encodeURIComponent(newFolder) + '/'
+  for (const [table, col] of [
+    ['customer_materials', 'spec_document'],
+    ['customer_materials', 'remark_images'],
+    ['notes', 'images']
+  ]) {
+    moved += execute(
+      `UPDATE ${table} SET ${col} = REPLACE(${col}, ?, ?) WHERE is_deleted = 0 AND ${col} LIKE ?`,
+      [fromPfx, toPfx, '%' + fromPfx + '%']
+    )?.changes ?? 0
+  }
+
   triggerBackup('materials')
-  return { movedRows: changed?.changes ?? 0 }
+  return { movedRows: moved }
 }
 
 // 状态列表（带颜色）
@@ -411,11 +437,11 @@ router.put('/:id', (req, res) => {
   ])
   triggerBackup('materials')
 
-  // 客户改名 → 规格书文件夹整组迁移 + 同步该客户全部物料
+  // 客户改名 → 整个客户目录整组迁移 + 同步该客户全部物料/记事
   let renameMsg = ''
   if (b.customer && b.customer !== existing.customer) {
     const info = renameCustomerFolder(existing.customer, b.customer)
-    if (info) renameMsg = `，客户「${existing.customer}」的规格书已迁移到「${b.customer}」`
+    if (info) renameMsg = `，客户「${existing.customer}」的资料已迁移到「${b.customer}」`
   }
   res.json({ code: 0, msg: '更新成功' + renameMsg })
 })

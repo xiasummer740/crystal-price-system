@@ -172,7 +172,7 @@ import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter, onBeforeRouteLeave } from 'vue-router'
 import { usePriceStore } from '../stores/price.js'
 import { showToast, showLoadingToast, closeToast, showConfirmDialog } from 'vant'
-import { http, uploadPriceImages, deletePriceImage } from '../utils/api.js'
+import { http, uploadPriceImages, deletePriceImage, isLocalFileUrl, fileDisplayName } from '../utils/api.js'
 
 const route = useRoute()
 const router = useRouter()
@@ -211,7 +211,7 @@ onUnmounted(() => window.removeEventListener('beforeunload', onBeforeUnload))
 // 统一返回：router.push 触发 onBeforeRouteLeave 守卫检测未保存
 function openExternal(url) {
   if (!url) return
-  if (url.startsWith('/api/specs/')) {
+  if (isLocalFileUrl(url)) {
     window.electronAPI?.openSpec?.(url)
   } else {
     const fullUrl = url.startsWith('http') ? url : window.location.origin + url
@@ -219,11 +219,7 @@ function openExternal(url) {
   }
 }
 function specDisplayName(url) {
-  if (!url) return ''
-  try {
-    const name = url.replace('/api/specs/', '')
-    return decodeURIComponent(name)
-  } catch { return url }
+  return fileDisplayName(url)
 }
 function goBack() {
   router.push('/')
@@ -299,10 +295,9 @@ function onSpecDrop(e) { dragOver.value=false; const file=e.dataTransfer?.files?
 async function onSpecUpload(e) { const file=e.target.files[0]; if(file) uploadSpecFile(file); specFileInput.value.value='' }
 async function uploadSpecFile(file) {
   const fd=new FormData(); fd.append('file',file)
-  // 报价系统规格书按品类分文件夹
+  // 报价系统规格书按品类分文件夹（落位由后端算：报价规格书/<品类>/）
   const category = (form.value.category || '').trim()
-  const folder = '报价/' + (category || '未分类')
-  try { const r=await http.post('/upload-spec?folder=' + encodeURIComponent(folder), fd); form.value.spec_document=r.data.url; showToast('上传成功') } catch { showToast('上传失败') }
+  try { const r=await http.post('/upload-spec?category=' + encodeURIComponent(category), fd); form.value.spec_document=r.data.url; showToast('上传成功') } catch { showToast('上传失败') }
 }
 
 // ===== 备注图片/文件（微信粘贴报价原始记录，多张可选删除） =====
@@ -384,11 +379,11 @@ async function onRemarkFileChange(e) {
 const pendingImgDeletes = ref([])
 function removeRImg(i) {
   const url = form.value.remark_images[i]
-  if (url) pendingImgDeletes.value.push(url.split('?')[0].split('/').pop())
+  if (url) pendingImgDeletes.value.push(url)
   form.value.remark_images.splice(i, 1)
 }
 function flushPendingImgDeletes() {
-  for (const filename of pendingImgDeletes.value) deletePriceImage(filename).catch(() => {})
+  for (const url of pendingImgDeletes.value) deletePriceImage(url).catch(() => {})
   pendingImgDeletes.value = []
 }
 

@@ -134,6 +134,9 @@ function onCustomerBlur() { setTimeout(() => { showCustomerSuggest.value = false
 function selectCustomer(name) { form.customer = name; showCustomerSuggest.value = false }
 const hasChanged = ref(false)
 const originalForm = ref(null)
+// 编辑已有记事时用它自己的日期做附件目录名（客户管理/<客户>/记事/<日期>/），
+// 这样新传的图跟这条记事的图待在一起；新建记事留空，后端取当天。
+const noteDate = ref('')
 
 const form = reactive({
   title: '',
@@ -209,6 +212,7 @@ onMounted(async () => {
       form.priority = d.priority ?? 2
       form.status = d.status || 'todo'
       form.is_pinned = !!d.is_pinned
+      noteDate.value = (d.created_at || '').slice(0, 10)
       if (form.reminder_at) {
         reminderDate.value = form.reminder_at.slice(0, 10)
         reminderTime.value = form.reminder_at.slice(11, 16)
@@ -390,7 +394,7 @@ async function uploadFiles(files) {
   const origNames = toUpload.map(f => f.name)  // 上传前捕获原始文件名（前端 File.name 永远正确）
   for (const f of toUpload) fd.append('files', f)
   try {
-    const r = await uploadNoteImages(fd)
+    const r = await uploadNoteImages(fd, form.customer, noteDate.value)
     const urls = r.data || []
     // 在 URL 后追加 ?name= 参数，确保文件名正确显示（绕过服务器端的编码问题）
     const enriched = urls.map((url, i) => url + '?name=' + encodeURIComponent(origNames[i]))
@@ -405,11 +409,7 @@ async function uploadFiles(files) {
 async function removeImg(i) {
   const url = form.images[i]
   // 通知服务器删除文件（不等待结果，不影响用户体验）
-  if (url) {
-    const parts = url.split('/')
-    const filename = parts[parts.length - 1]
-    deleteNoteImage(filename).catch(() => {})
-  }
+  if (url) deleteNoteImage(url).catch(() => {})
   form.images.splice(i, 1)
   trackChange()
 }

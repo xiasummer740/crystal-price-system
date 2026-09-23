@@ -1,25 +1,23 @@
 import { Router } from 'express'
 import multer from 'multer'
-import path from 'path'
 import fs from 'fs'
-import { fileURLToPath } from 'url'
 import { queryAll, queryOne, execute } from '../db.js'
+import * as A from '../utils/customerArchive.js'
 
 const router = Router()
-const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 // ========== 报价备注图片/文件上传 ==========
-const pricesUploadDir = path.join(process.env.DATA_DIR || path.join(__dirname, '..', '..'), '报价图片库')
-if (!fs.existsSync(pricesUploadDir)) fs.mkdirSync(pricesUploadDir, { recursive: true })
-
+// 落位：报价备注图/（与「客户管理」同级 —— 报价记录本身没有客户字段，归不了户）
 const fileUpload = multer({
   storage: multer.diskStorage({
-    destination: pricesUploadDir,
+    destination: (_req, _file, cb) => cb(null, A.ensureDir(A.quoteImageDirAbs())),
     filename: (_req, file, cb) => {
-      const ext = path.extname(file.originalname) || ''
-      const base = path.basename(file.originalname, ext)
-      const safeBase = base.replace(/[<>:"/\\|?*]/g, '_').slice(0, 80)
-      cb(null, Date.now() + '-' + Math.random().toString(36).slice(2, 8) + '-' + safeBase + ext)
+      // A.safeFilename 先修 Windows 下 busboy 把 UTF-8 当 Latin-1 读出来的中文乱码，再净化非法字符。
+      // 归档目录是给人翻的，文件名不能是「å¤‡æ³¨å›¾」这种。
+      const safe = A.safeFilename(file.originalname, 'file')
+      const ext = A.extOf(safe)
+      const base = safe.slice(0, safe.length - ext.length).slice(0, 80)
+      cb(null, Date.now() + '-' + Math.random().toString(36).slice(2, 8) + '-' + base + ext)
     }
   }),
   limits: { fileSize: 50 * 1024 * 1024 } // 50MB
@@ -28,19 +26,17 @@ const fileUpload = multer({
 // 备注附件上传
 router.post('/upload', fileUpload.array('files', 9), (req, res) => {
   if (!req.files || !req.files.length) return res.status(400).json({ code: 1, msg: '请选择文件' })
-  const urls = req.files.map(f => `/api/uploads/prices/${encodeURIComponent(f.filename)}`)
+  const urls = req.files.map(f => A.quoteImageUrl(f.filename))
   res.json({ code: 0, data: urls })
 })
 
 // 删除已上传的备注附件
-router.delete('/upload/:filename', (req, res) => {
-  let filename = decodeURIComponent(req.params.filename)
-  if (filename.includes('/') || filename.includes('\\') || filename === '' || filename === '.') {
-    return res.status(400).json({ code: 1, msg: '非法的文件名' })
-  }
-  const filePath = path.join(pricesUploadDir, filename)
-  if (!fs.existsSync(filePath)) return res.status(404).json({ code: 1, msg: '文件不存在' })
-  try { fs.unlinkSync(filePath); res.json({ code: 0, msg: '已删除' }) }
+// 必须传完整归档 URL，解析回磁盘路径再删（resolveUrl 挡路径遍历 + 校验落在数据目录内）
+router.delete('/upload', (req, res) => {
+  const hit = A.resolveUrl(req.query?.url)
+  if (!hit) return res.status(400).json({ code: 1, msg: '非法的文件路径' })
+  if (!fs.existsSync(hit.abs)) return res.status(404).json({ code: 1, msg: '文件不存在' })
+  try { fs.unlinkSync(hit.abs); res.json({ code: 0, msg: '已删除' }) }
   catch (e) { res.status(500).json({ code: 1, msg: '删除失败' }) }
 })
 
