@@ -66,7 +66,7 @@ function freshReport() {
     finishedAt: null,
     backupDir: null,
     deletedSources: 0,
-    migrated: { 客户物料规格书: 0, 报价规格书: 0, 客户物料图片: 0, 报价备注图: 0, 记事附件: 0 },
+    migrated: { 客户物料规格书: 0, 报价规格书: 0, 客户物料图片: 0, 报价备注图: 0, 记事附件: 0, 记事更新图: 0 },
     generated: { 记事txt: 0, 物料清单: 0 },
     skipped: 0,
     conflicts: [],      // 客户名净化后撞车
@@ -184,7 +184,7 @@ export function syncArchive({ withBackup = true } = {}) {
   const rows = {
     mats: queryAll('SELECT id, customer, spec_document, remark_images FROM customer_materials WHERE is_deleted = 0'),
     prices: queryAll('SELECT id, category, spec_document, remark_images FROM material_prices WHERE is_deleted = 0'),
-    notes: queryAll('SELECT id, customer, created_at, images FROM notes WHERE is_deleted = 0')
+    notes: queryAll('SELECT id, customer, created_at, images, updates FROM notes WHERE is_deleted = 0')
   }
 
   // —— 客户名净化后撞车：两个不同客户名落到同一个文件夹 → 不猜，跳过并报告 ——
@@ -321,29 +321,34 @@ export function syncArchive({ withBackup = true } = {}) {
     }
 
     // ——— ⑤ 记事附件：一天一个文件夹，图片统一命名 图片N（铺平，不建 图片/ 子目录）———
+    // 正文的图（images）与「更新记录」里的图（updates[].imgs）都要搬。同一个文件常被两处
+    // 同时引用，只搬正文会把源文件删掉、更新区那条旧地址留成死链（旧格式数据实测中招 4 条）。
     for (const n of rows.notes) {
       const imgs = parseJsonArray(n.images)
-      if (!imgs.length || !imgs.some(isPending)) continue
+      const updates = parseJsonArray(n.updates)
+      const updImgs = updates.map(u => (u && Array.isArray(u.imgs) ? u.imgs : []))
+      if (!imgs.some(isPending) && !updImgs.some(a => a.some(isPending))) continue
       if (blocked(n.customer)) { rep.skipped++; continue }
 
       const day = dayOf(n.created_at)
       const dayDir = A.customerNoteDayDirAbs(n.customer, day)
-      const out = []
       let changed = false
       let seq = 0
-      for (const url of imgs) {
+
+      // 正文与更新共用同一个 seq：落进同一个日期目录，连号排避免两处撞名互相覆盖
+      const 搬迁一张 = (url, 类别) => {
+        if (typeof url !== 'string' || !url) return url
         const fn = A.filenameFromUrl(url)
         const inPlace = A.resolveUrl(url, { legacy: false })
         // 已经在正确的日期目录里 → 原样保留（幂等：重跑不会重新编号）
         if (inPlace && inPlace.abs.startsWith(dayDir + path.sep) && fs.existsSync(inPlace.abs)) {
-          out.push(url)
           seq = Math.max(seq, Number((fn.match(/^图片(\d+)\.[^.]+$/) || [0, 0])[1]) || 0)
-          continue
+          return url
         }
         const src = locateSource(byName, [A.rootAbs(A.LEGACY.notesImages, fn)], '')
         if (!src || typeof src === 'object') {
-          rep.broken.push({ 类别: '记事附件', 记录: n.id, 引用: url, 原因: src ? '同名多份' : '磁盘上找不到文件（可能是已删除记事的图）' })
-          out.push(url); continue
+          rep.broken.push({ 类别, 记录: n.id, 引用: url, 原因: src ? '同名多份' : '磁盘上找不到文件（可能是已删除记事的图）' })
+          return url
         }
         // 序号接着目录里已有的往下排，避免覆盖
         if (!seq) seq = A.nextSequenceIn(dayDir, '图片') - 1
@@ -351,14 +356,24 @@ export function syncArchive({ withBackup = true } = {}) {
         const destName = A.noteImageName(seq, fn)
         const destAbs = path.join(dayDir, destName)
         const r = A.copyVerified(src, destAbs)
-        if (!r.ok) { rep.failed.push({ 类别: '记事附件', 记录: n.id, 原因: r.reason }); out.push(url); continue }
+        if (!r.ok) { rep.failed.push({ 类别, 记录: n.id, 原因: r.reason }); return url }
         used.add(src)
         if (path.resolve(src) !== path.resolve(destAbs)) toDelete.add(src)
-        out.push(A.noteImageUrl(n.customer, day, destName))
+        rep.migrated[类别]++
         changed = true
-        rep.migrated.记事附件++
+        return A.noteImageUrl(n.customer, day, destName)
       }
-      if (changed) dbOps.push({ sql: 'UPDATE notes SET images = ? WHERE id = ?', params: [JSON.stringify(out), n.id] })
+
+      const out = imgs.map(u => 搬迁一张(u, '记事附件'))
+      const outUpd = updImgs.map(a => a.map(u => 搬迁一张(u, '记事更新图')))
+
+      if (changed) {
+        dbOps.push({ sql: 'UPDATE notes SET images = ? WHERE id = ?', params: [JSON.stringify(out), n.id] })
+        if (updates.length) {
+          const nextUpd = updates.map((u, i) => (u && Array.isArray(u.imgs) ? { ...u, imgs: outUpd[i] } : u))
+          dbOps.push({ sql: 'UPDATE notes SET updates = ? WHERE id = ?', params: [JSON.stringify(nextUpd), n.id] })
+        }
+      }
     }
   }
 
