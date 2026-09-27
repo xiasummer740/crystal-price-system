@@ -95,6 +95,25 @@ function buildLegacyIndex() {
 }
 
 /**
+ * 历次「搬迁前备份」里的记事图片库。
+ *
+ * 用处：备份是旧目录搬迁前的**整份快照**。旧版迁移搬走源文件后，只剩更新区那条旧地址
+ * 没被改写 —— 那时源文件已经不在 记事图片库/ 了，只在备份里。不认这里，
+ * 「以数据库引用能不能落到真实文件为准」这条自愈设计就断在半路（生产实测中招 4 条）。
+ *
+ * ⚠️ 备份是最后一道保险，只读不删 —— 调用方必须把它排除在 toDelete 之外。
+ */
+function backupNotesImageDirs() {
+  const root = A.rootAbs(A.DIR.backup)
+  try {
+    return fs.readdirSync(root)
+      .filter(d => d.startsWith('归档前-') && !d.endsWith('.tmp'))
+      .map(d => path.join(root, d, A.LEGACY.notesImages))
+      .filter(d => fs.existsSync(d))
+  } catch { return [] }
+}
+
+/**
  * 找搬迁的源文件。
  * 同一份文件被多条记录引用是常态（<客户A>那批规格书就是），所以不排除「已被认领」的文件 ——
  * 拷贝是「复制到各目的地」，一份源可以供多个目标，源只删一次。
@@ -134,7 +153,14 @@ function countPending(rows) {
     if (isPending(p.spec_document)) n++
     for (const u of parseJsonArray(p.remark_images)) if (isPending(u)) n++
   }
-  for (const nt of rows.notes) for (const u of parseJsonArray(nt.images)) if (isPending(u)) n++
+  // 正文与「更新记录」都要数：只数正文的话，当「只剩更新图没迁」时 n=0，
+  // 下面 if (n > 0) 整块搬迁被跳过 —— 那批死链就永远修不回来（旧库实测中招 4 条）。
+  for (const nt of rows.notes) {
+    for (const u of parseJsonArray(nt.images)) if (isPending(u)) n++
+    for (const up of parseJsonArray(nt.updates)) {
+      for (const u of (up && Array.isArray(up.imgs) ? up.imgs : [])) if (isPending(u)) n++
+    }
+  }
   return n
 }
 
@@ -323,6 +349,7 @@ export function syncArchive({ withBackup = true } = {}) {
     // ——— ⑤ 记事附件：一天一个文件夹，图片统一命名 图片N（铺平，不建 图片/ 子目录）———
     // 正文的图（images）与「更新记录」里的图（updates[].imgs）都要搬。同一个文件常被两处
     // 同时引用，只搬正文会把源文件删掉、更新区那条旧地址留成死链（旧格式数据实测中招 4 条）。
+    const bakDirs = backupNotesImageDirs()
     for (const n of rows.notes) {
       const imgs = parseJsonArray(n.images)
       const updates = parseJsonArray(n.updates)
@@ -345,7 +372,10 @@ export function syncArchive({ withBackup = true } = {}) {
           seq = Math.max(seq, Number((fn.match(/^图片(\d+)\.[^.]+$/) || [0, 0])[1]) || 0)
           return url
         }
-        const src = locateSource(byName, [A.rootAbs(A.LEGACY.notesImages, fn)], '')
+        const src = locateSource(byName, [
+          A.rootAbs(A.LEGACY.notesImages, fn),          // 还在旧目录：首次迁移走这条
+          ...bakDirs.map(d => path.join(d, fn))         // 已被上一轮迁移搬进备份：补救走这条
+        ], '')
         if (!src || typeof src === 'object') {
           rep.broken.push({ 类别, 记录: n.id, 引用: url, 原因: src ? '同名多份' : '磁盘上找不到文件（可能是已删除记事的图）' })
           return url
@@ -358,7 +388,8 @@ export function syncArchive({ withBackup = true } = {}) {
         const r = A.copyVerified(src, destAbs)
         if (!r.ok) { rep.failed.push({ 类别, 记录: n.id, 原因: r.reason }); return url }
         used.add(src)
-        if (path.resolve(src) !== path.resolve(destAbs)) toDelete.add(src)
+        // 备份里的源只复制、绝不删 —— 那是回退用的最后一道保险
+        if (path.resolve(src) !== path.resolve(destAbs) && !src.startsWith(A.rootAbs(A.DIR.backup) + path.sep)) toDelete.add(src)
         rep.migrated[类别]++
         changed = true
         return A.noteImageUrl(n.customer, day, destName)
@@ -505,8 +536,13 @@ export function verifyReferences(rep = freshReport()) {
     check(p.spec_document, '报价规格书', p.id)
     for (const u of parseJsonArray(p.remark_images)) check(u, '报价备注图', p.id)
   }
-  for (const n of queryAll('SELECT id, images FROM notes WHERE is_deleted = 0')) {
+  // 「更新记录」里的图同样要自检 —— 只查正文的话，报告会显示「找不到 0 条」，
+  // 而实际存在死链。验收标准就是这一行数字，它不能骗人。
+  for (const n of queryAll('SELECT id, images, updates FROM notes WHERE is_deleted = 0')) {
     for (const u of parseJsonArray(n.images)) check(u, '记事附件', n.id)
+    for (const up of parseJsonArray(n.updates)) {
+      for (const u of (up && Array.isArray(up.imgs) ? up.imgs : [])) check(u, '记事更新图', n.id)
+    }
   }
   return rep
 }
