@@ -114,6 +114,18 @@ function backupNotesImageDirs() {
 }
 
 /**
+ * 登记一条「引用落不到文件」。
+ *
+ * 按引用 URL 去重：同一个文件常被正文与「更新记录」同时引用（前端保存进度时两处都写），
+ * 不去重的话一个缺失文件会占 2~4 行（搬迁时一次 + 自检时一次，两个字段各一份）。
+ * 报告里那行数字就是装机手册的验收标准，**它得是「几个文件丢了」而不是「几处引用断了」**。
+ */
+function pushBroken(rep, entry) {
+  if (rep.broken.some(b => b.引用 === entry.引用)) return
+  rep.broken.push(entry)
+}
+
+/**
  * 找搬迁的源文件。
  * 同一份文件被多条记录引用是常态（<客户A>那批规格书就是），所以不排除「已被认领」的文件 ——
  * 拷贝是「复制到各目的地」，一份源可以供多个目标，源只删一次。
@@ -361,9 +373,21 @@ export function syncArchive({ withBackup = true } = {}) {
       const dayDir = A.customerNoteDayDirAbs(n.customer, day)
       let changed = false
       let seq = 0
+      // 「旧地址 → 搬迁结果」的记忆。正文与「更新记录」常引用同一张图（前端保存进度时两处
+      // 都写），不记着的话第二遍会再复制一份：同一张图变成两个文件、同一条记事里出现两条
+      // 不等的 URL，界面上就是一张图显示两遍。真实旧数据实测 4 条记事、5 处。
+      const 已搬 = new Map()
 
       // 正文与更新共用同一个 seq：落进同一个日期目录，连号排避免两处撞名互相覆盖
       const 搬迁一张 = (url, 类别) => {
+        if (typeof url !== 'string' || !url) return url
+        if (已搬.has(url)) return 已搬.get(url)      // 同一张图：复用第一次的结果，不再复制
+        const r = 搬一张(url, 类别)
+        已搬.set(url, r)
+        return r
+      }
+
+      const 搬一张 = (url, 类别) => {
         if (typeof url !== 'string' || !url) return url
         const fn = A.filenameFromUrl(url)
         const inPlace = A.resolveUrl(url, { legacy: false })
@@ -377,7 +401,7 @@ export function syncArchive({ withBackup = true } = {}) {
           ...bakDirs.map(d => path.join(d, fn))         // 已被上一轮迁移搬进备份：补救走这条
         ], '')
         if (!src || typeof src === 'object') {
-          rep.broken.push({ 类别, 记录: n.id, 引用: url, 原因: src ? '同名多份' : '磁盘上找不到文件（可能是已删除记事的图）' })
+          pushBroken(rep, { 类别, 记录: n.id, 引用: url, 原因: src ? '同名多份' : '磁盘上找不到文件（可能是已删除记事的图）' })
           return url
         }
         // 序号接着目录里已有的往下排，避免覆盖
@@ -388,8 +412,11 @@ export function syncArchive({ withBackup = true } = {}) {
         const r = A.copyVerified(src, destAbs)
         if (!r.ok) { rep.failed.push({ 类别, 记录: n.id, 原因: r.reason }); return url }
         used.add(src)
-        // 备份里的源只复制、绝不删 —— 那是回退用的最后一道保险
-        if (path.resolve(src) !== path.resolve(destAbs) && !src.startsWith(A.rootAbs(A.DIR.backup) + path.sep)) toDelete.add(src)
+        // 备份里的源只复制、绝不删 —— 那是回退用的最后一道保险。
+        // 两侧都要 resolve 再比：dataRoot() 把 DATA_DIR 原样返回，相对写法（DATA_DIR=./sandbox）
+        // 下 rootAbs() 是相对前缀，而 src 已被 locateSource resolve 成绝对路径，
+        // 直接 startsWith 恒为 false ⇒ 备份里的源会被当普通源删掉（实测相对写法 deletedSources=1）。
+        if (path.resolve(src) !== path.resolve(destAbs) && !path.resolve(src).startsWith(path.resolve(A.rootAbs(A.DIR.backup)) + path.sep)) toDelete.add(src)
         rep.migrated[类别]++
         changed = true
         return A.noteImageUrl(n.customer, day, destName)
@@ -525,8 +552,8 @@ export function verifyReferences(rep = freshReport()) {
   const check = (url, label, id) => {
     if (!url) return
     const hit = A.resolveUrl(url)
-    if (!hit) { rep.broken.push({ 类别: label, 记录: id, 引用: url, 原因: 'URL 无法解析成磁盘路径' }); return }
-    if (!fs.existsSync(hit.abs)) rep.broken.push({ 类别: label, 记录: id, 引用: url, 原因: '磁盘上没有这个文件' })
+    if (!hit) { pushBroken(rep, { 类别: label, 记录: id, 引用: url, 原因: 'URL 无法解析成磁盘路径' }); return }
+    if (!fs.existsSync(hit.abs)) pushBroken(rep, { 类别: label, 记录: id, 引用: url, 原因: '磁盘上没有这个文件' })
   }
   for (const m of queryAll('SELECT id, spec_document, remark_images FROM customer_materials WHERE is_deleted = 0')) {
     check(m.spec_document, '客户物料规格书', m.id)
