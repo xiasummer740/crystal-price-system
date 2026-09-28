@@ -144,10 +144,31 @@
 ① 跑 Electron 一律带 `DATA_DIR=<沙箱>`；要对照就写**纯 Node 单元探针**，别靠起真 Electron 去凑对照
 ② **启动后第一件事查「它打开了哪个目录」，确认是沙箱再往下做**（判据：启动日志的 `Window bounds:`）。
 
+## ✅ 已发版 v1.0.220（2026-09-28）
+
+https://github.com/xiasummer740/crystal-price-system/releases/tag/v1.0.220
+
+| 项 | 值 |
+|---|---|
+| tag → 提交 | `v1.0.220` → `5e51c91`，已核验包含 `cf83d46`（全部修复）+ `1b98a81`（ISSUES 收口） |
+| 安装版 | `crystal-price-system-setup-1.0.220.exe` · 120451155 B |
+| blockmap | 125702 B（🔴 必传项，已传） |
+| latest.yml | `version: 1.0.220`、英文文件名、`size` 与实传资产**逐字节一致** |
+
+### 发版前的打包 exe 实跑（项目规则：不能只靠 `npm start`）
+
+`DATA_DIR=G:/Temp/v220-sandbox` 起 `dist-exe/win-unpacked` 产物：
+
+- URL 带 `packaged=true` ⇒ 打包版；`Page loaded successfully`、闪屏正常关
+- **修复③ 打包版复核完成**：沙箱 `logs/startup.log` 出现 `[console.log] [spec-cleanup] 无重复规格书`
+  —— 打包版（无控制台窗口）确认能留痕，这正是该修复要证的
+- 主流程真通：`/api/prices` → `{"code":0,…}`；首页 `HTTP 200`
+- 跑完复验生产五项标记**全等于基线**：config md5 `b79d5b09…`（`dataDir` 仍指生产）·
+  `data-dir.txt` 仍指生产且 mtime 早于本次运行（没被写）· data.db `e912f8b0…` · 日志 3162 行 · 文件数 1063
+  ⇒ **这次打包版实跑零污染**（修复④ 的沙箱闸门在打包版里同样生效）
+
 ## 下一步
 
-1. 发版 v1.0.220 → 那台电脑装 220 测「卡启动动画」是否还犯。
-2. **要告诉祥哥的事**：① ⑤ 路径长度那条实测判定为非缺陷（数字见上）② 上面这起生产事故
-   ③ 45 份存量改名已在 9/28 那次事故里**顺带在生产上做掉了**（纯改名、内容未动）。
-3. 可回收的临时目录（**删前先问祥哥**）：`G:\Temp\v220-sandbox`、
-   `prod-snapshot-20260927`(334MB)、`prod-rehearsal-20260927`(334MB)、`verify-v220`(337MB)。
+1. 那台电脑装 **v1.0.220** 测「卡启动动画」是否还犯（v1.0.219 的修复 + 本次日志增强）。
+2. **待办**：`G:\Temp` 下 4 个临时目录可回收（`v220-sandbox`、`prod-snapshot-20260927`、
+   `prod-rehearsal-20260927`、`verify-v220`，合计约 1 GB）—— **删前先问祥哥**。
