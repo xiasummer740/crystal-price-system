@@ -46,7 +46,15 @@ export function loadFullConfig() {
   }
 }
 
+// 沙箱/开发跑（启动时显式传了 DATA_DIR）时，**不要**把配置写进用户的真实文件。
+// ⚠️ 这个文件写的是**固定路径**，跟 DATA_DIR 一点关系都没有 —— 光设了 DATA_DIR
+// 挡不住它，跑一次沙箱、挪一下窗口，用户真实的窗口几何就被沙箱的值覆盖了。
+// 2026-09-28 对抗性复审反例 4：`update:install` 那条堵上之后，这里还有 5 个调用点漏着。
+let _ephemeral = false
+export function setEphemeralConfig(v) { _ephemeral = !!v }
+
 export function saveFullConfig(patch) {
+  if (_ephemeral) return   // 沙箱跑：窗口布局是临时的，别写进真实配置
   if (!fs.existsSync(CONFIG_DIR)) fs.mkdirSync(CONFIG_DIR, { recursive: true })
   const existing = loadFullConfig()
   const payload = { ...existing, ...patch, version: 2, setAt: new Date().toISOString() }

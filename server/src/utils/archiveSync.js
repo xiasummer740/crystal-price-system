@@ -68,6 +68,10 @@ function freshReport() {
     deletedSources: 0,
     migrated: { 客户物料规格书: 0, 报价规格书: 0, 客户物料图片: 0, 报价备注图: 0, 记事附件: 0, 记事更新图: 0 },
     generated: { 记事txt: 0, 物料清单: 0 },
+    renamed: { 物料清单: 0 },   // 旧名 → 带客户全名（只改名，不删文件）
+    renamedList: [],            // 「旧名 → 新名」逐条明细 —— 只记个数的话，验收的人
+                                // 看不出改的到底是哪一份，抽查无可抽（2026-09-28 复审反例 2）
+    keptLegacy: [],             // 新名已存在、旧名原样保留的客户文件夹（须人工确认）
     skipped: 0,
     conflicts: [],      // 客户名净化后撞车
     broken: [],         // 数据库指向的文件找不到
@@ -457,7 +461,14 @@ export function syncArchive({ withBackup = true } = {}) {
   }
 
   rep.finishedAt = new Date()
-  try { fs.writeFileSync(A.rootAbs('客户资料归档报告.txt'), formatReport(rep), 'utf8') } catch { /* 报告写不出不影响搬家本身 */ }
+  // 报告写不出**不能静默**：这份 txt 是装机验收的依据，写失败时它留在磁盘上的是
+  // 上一次的旧内容 —— 比「没有报告」更危险，看的人会当成这次的结论。
+  // 记进 rep 交给调用方出声（index.js 启动日志）。常见原因：用户正拿 Excel 开着它。
+  try {
+    fs.writeFileSync(A.rootAbs('客户资料归档报告.txt'), formatReport(rep), 'utf8')
+  } catch (e) {
+    rep.reportWriteError = e.message
+  }
   return rep
 }
 
@@ -489,6 +500,37 @@ function noteTxtContent(customer, date, notes) {
 }
 
 const toMs = (s) => Date.parse(String(s || '').replace(' ', 'T')) || 0
+
+/**
+ * 目录里名字不对的物料清单 → `<客户全名>物料清单.xlsx`（正名一律由文件夹名拼出来，
+ * 与生成逻辑 `customerFolder(客户名)` 同源）。只改名，不删文件，规则见
+ * `customerArchive.normalizeArchiveList`。
+ * 扫的是目录而不是数据库，所以「物料被删光、只剩个旧文件」的客户目录也能顾到。
+ */
+function renameLegacyArchiveLists(rep) {
+  const root = A.rootAbs(A.DIR.customers)
+  let folders
+  try { folders = fs.readdirSync(root) }
+  catch (e) {
+    // 目录不存在 = 还没归档过，属正常。其余（没权限 / 被占用 / 网络盘掉线）必须留痕：
+    // 否则「扫不动」和「这里本来就没有旧名要改」在所有可观测项上一模一样。
+    if (e.code !== 'ENOENT') rep.failed.push({ 类别: '物料清单改名', 记录: '(读取客户管理目录)', 原因: e.message })
+    return
+  }
+  for (const folder of folders) {
+    const dir = path.join(root, folder)
+    try {
+      if (!fs.statSync(dir).isDirectory()) continue
+      const canonical = folder + A.DIR.archiveList
+      const { renamed, kept } = A.normalizeArchiveList(dir, canonical)
+      rep.renamed.物料清单 += renamed.length
+      // 逐条留名：单份候选时我们是**照着「客户改过名」的假设**去改的，
+      // 万一那是别家误放进来的清单，只有这一行能让人事后发现。
+      for (const n of renamed) rep.renamedList.push(`${folder}/${n} → ${canonical}`)
+      for (const n of kept) rep.keptLegacy.push(`${folder}/${n}`)
+    } catch (e) { rep.failed.push({ 类别: '物料清单改名', 记录: folder, 原因: e.message }) }
+  }
+}
 
 /** 文件不存在、或比数据库内容旧 → 需要重做。所以按下按钮时通常什么都不用写 */
 function needsRebuild(fileAbs, newestSourceTime) {
@@ -528,6 +570,7 @@ function generateReadableFiles(rep) {
   }
 
   // 物料清单.xlsx：按客户
+  renameLegacyArchiveLists(rep)
   const mats = queryAll('SELECT customer, created_at, updated_at FROM customer_materials WHERE is_deleted = 0')
   const newestOf = new Map()
   for (const m of mats) {
@@ -536,7 +579,7 @@ function generateReadableFiles(rep) {
     newestOf.set(c, Math.max(newestOf.get(c) || 0, toMs(m.updated_at || m.created_at)))
   }
   for (const [customer, newest] of newestOf) {
-    const fileAbs = path.join(A.customerDirAbs(customer), A.DIR.archiveList)
+    const fileAbs = A.customerArchiveListAbs(customer)
     if (!needsRebuild(fileAbs, newest)) continue
     try {
       A.ensureDir(path.dirname(fileAbs))
@@ -592,6 +635,22 @@ function formatReport(rep) {
   L.push('【生成的可读文件】')
   L.push(`  记事.txt：${rep.generated.记事txt} 份`)
   L.push(`  物料清单.xlsx：${rep.generated.物料清单} 份`)
+  // 改名这行按实情打印（有失败也打）。只写成功数的话，「改了但失败」和
+  // 「本来就没有旧名要改」在报告里长得一模一样 —— 逐条核对验收的人会读成后者。
+  const renameFail = rep.failed.filter(f => f.类别 === '物料清单改名').length
+  if (rep.renamed.物料清单 || renameFail || rep.keptLegacy.length) {
+    const bits = [`成功 ${rep.renamed.物料清单} 份`]
+    if (renameFail) bits.push(`失败 ${renameFail} 份（见下【搬迁失败】）`)
+    if (rep.keptLegacy.length) bits.push(`新名已存在、旧名原样保留 ${rep.keptLegacy.length} 份`)
+    L.push(`  物料清单改名：${bits.join('，')}`)
+    if (rep.renamedList.length) {
+      L.push(`    ↳ 改名明细（改名依据是「客户改过名」，请抽查确认确实是本客户的清单）：`)
+      for (const item of rep.renamedList) L.push(`      ${item}`)
+    }
+    if (rep.keptLegacy.length) {
+      L.push(`    ⚠️ 保留旧名的客户（引擎只认新名，那份旧文件不会再更新，请人工确认）：${rep.keptLegacy.join('、')}`)
+    }
+  }
   L.push('')
   if (rep.skipped) {
     L.push(`【跳过】客户名净化后撞车，未搬（需人工决定）：${rep.skipped} 条`)

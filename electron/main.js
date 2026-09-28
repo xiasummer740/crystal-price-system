@@ -1,14 +1,24 @@
-import { app, BrowserWindow, shell, dialog, Menu, Notification, ipcMain } from 'electron'
+import { app, BrowserWindow, shell, dialog, Menu, Notification, ipcMain, screen } from 'electron'
 import path from 'path'
 import fs from 'fs'
 import http from 'http'
 import { execSync } from 'child_process'
 import { fileURLToPath } from 'url'
-import { loadUserConfig, saveUserConfig, loadFullConfig, saveFullConfig } from './config.js'
-import { initUpdater, downloadUpdate, quitAndInstall, checkForUpdates } from './updater.js'
+import { loadUserConfig, saveUserConfig, loadFullConfig, saveFullConfig, setEphemeralConfig } from './config.js'
+import { initUpdater, downloadUpdate, quitAndInstall, checkForUpdates, installOnQuit } from './updater.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const BASE_PORT = 3266
+// 闪屏兜底超时：正常就绪是一两秒的事。超过这么久还没就绪 = 出事了，
+// 宁可收掉动画让用户看到窗口（或至少能正常关闭），也别让人对着转圈干瞪眼。
+//
+// 为什么是 90 秒：2026-09-27 沙箱实测（同一台机器、同一份数据）——
+//   · 热启动（第 2、3 次）：建窗口到关闪屏 **1.0 秒**
+//   · 冷启动（第 1 次，文件缓存全冷）：同样的区间 **26.6 秒**
+//     （其中 `syncArchive` 迁移只占 0.7 秒，剩下 26 秒全是窗口/前端冷加载）
+// 原来设的 30 秒对冷启动只剩 3.4 秒余量；客户机比开发机慢，会把「只是慢」
+// 误报成「界面加载异常」，反倒吓人。90 秒对热启动仍是 90 倍余量，只有真卡死才够得着。
+const SPLASH_TIMEOUT_MS = 90000
 
 // 强制禁用 GPU 硬件加速（解决此 Windows 预览版 GPU 崩溃问题）
 app.disableHardwareAcceleration()
@@ -142,6 +152,10 @@ function readDataDirTxt() {
   }
 }
 
+// 数据目录是不是「启动时显式传进来的」。解析完之后 process.env.DATA_DIR 一定被填上，
+// 光看那个变量已经分不清来源 —— 而这两者后续的处置完全不同（见 update:install 那条）。
+let dataDirFromEnv = false
+
 // 解析数据目录：显式 DATA_DIR → 用户配置 → NSIS 写的 data-dir.txt → 自动迁移 legacy → 弹选择器
 async function resolveDataDir() {
   // 0. 启动时显式指定了 DATA_DIR 就直接采用，优先级高于一切（连用户配置也不许盖过它）。
@@ -150,6 +164,10 @@ async function resolveDataDir() {
   //    普通用户双击启动时没有这个变量，走下面的老路，行为不变。
   const explicit = process.env.DATA_DIR
   if (explicit) {
+    dataDirFromEnv = true
+    // 沙箱/开发跑：窗口布局之类的配置一律不落盘到用户的真实 user-config.json
+    // （那个文件是固定路径，DATA_DIR 管不着它 —— 见 config.js 的说明）
+    setEphemeralConfig(true)
     log(`resolveDataDir: 使用显式指定的 DATA_DIR ${explicit}`)
     if (!fs.existsSync(explicit)) fs.mkdirSync(explicit, { recursive: true })
     return explicit
@@ -254,6 +272,7 @@ async function resolveDataDir() {
 }
 
 let mainWindow = null
+let splashWindow = null   // 提到模块级：second-instance 要用它给「启动中再点一次」的用户一个反馈
 let _mainSaveTimer = null
 let serverPort = BASE_PORT
 let dbSaveNow = null
@@ -262,16 +281,55 @@ let reminderInterval = null
 
 // 启动日志（两阶段: DATA_DIR 未就绪时写 startup.log，就绪后写 DATA_DIR/logs/）
 let _logToDir = null
+let _logDeadSig = null   // 上一次「哪几个落点写不进去」的签名，用来去重（见 log()）
 function log(msg) {
   const line = `[${new Date().toISOString()}] ${msg}\n`
+  const dead = []
+  const errs = []
   // 写入 DATA_DIR/logs/startup.log（如果已就绪）
   if (_logToDir) {
-    try { fs.appendFileSync(path.join(_logToDir, 'startup.log'), line, 'utf8') } catch {}
+    try { fs.appendFileSync(path.join(_logToDir, 'startup.log'), line, 'utf8') } catch (e) { dead.push('logs 目录'); errs.push(e.message) }
   }
   // 兜底写入 documents/startup.log
-  const fallback = path.join(app.getPath('documents'), 'startup.log')
-  try { fs.appendFileSync(fallback, line) } catch {}
+  try { fs.appendFileSync(path.join(app.getPath('documents'), 'startup.log'), line) } catch (e) { dead.push('文档目录'); errs.push(e.message) }
+  if (!dead.length) { _logDeadSig = null; return }
+  // 一个都没写进去 = 日志系统自己瞎了，往后记什么都是白记。
+  // 这里不能再调 log()（会递归），只走 stderr —— 开发/命令行启动时看得见；
+  // 打包版没有接收方，但那时也确实没别的出路了。
+  // 按「哪几个落点哑了」而不是「第几次失败」去重：启动最开头只有兜底那一个落点在用，
+  // 那个时刻就把它锁死的话，后面 DATA_DIR 也哑了也不会再出声，人就只修一半。
+  const sig = dead.join('+')
+  if (sig !== _logDeadSig) {
+    _logDeadSig = sig
+    try { process.stderr.write(`[log] 日志写入失败（${sig}）：${errs.join('；')}\n`) } catch {}
+  }
 }
+
+/** 日志参数转成一行文本（Error 要带栈，否则等于只说「出错了」） */
+function fmtLogArg(a) {
+  if (a instanceof Error) return a.stack || a.message
+  if (typeof a === 'string') return a
+  try { return JSON.stringify(a) } catch { try { return String(a) } catch { return '[无法序列化的值]' } }
+}
+
+/**
+ * 把 console 镜像进 log()。
+ *
+ * 打包版主进程的 stdout **没有接收方**，console.log/warn 打出来就没了 —— 而
+ * server/src/index.js 的启动结论（归档了多少文件、物料清单改名几份、报告写没写出去、
+ * 哪几个接口报错）全是 console 打出来的 ⇒ 客户机上装完根本没法核对。
+ * 镜像后「开发机终端看到的」和「客户机 logs/startup.log 留下的」是同一份。
+ */
+function mirrorConsoleToLog() {
+  for (const level of ['log', 'info', 'warn', 'error']) {
+    const orig = console[level].bind(console)
+    console[level] = (...args) => {
+      try { orig(...args) } catch { /* 终端那路失败不影响落盘 */ }
+      try { log(`[console.${level}] ${args.map(fmtLogArg).join(' ')}`) } catch { /* log() 自身失败会走 stderr 兜底 */ }
+    }
+  }
+}
+mirrorConsoleToLog()
 
 // DATA_DIR 就绪后调用：切换到 logs 目录
 function switchLogTo(dir) {
@@ -304,6 +362,15 @@ app.on('second-instance', () => {
   if (mainWindow && !mainWindow.isDestroyed()) {
     if (mainWindow.isMinimized()) mainWindow.restore()
     mainWindow.focus()
+    return
+  }
+  // 主窗口还没建出来 = 上一个实例仍卡在启动阶段。
+  // 从前这里什么都不做，于是「再点一次图标」毫无反应，用户只能去任务管理器强杀
+  // （2026-09-27 那台电脑正是这样）。至少要给点反馈，并留下「用户试过重开」的痕迹。
+  log('second-instance: 主窗口尚未创建，把闪屏提到前台')
+  if (splashWindow && !splashWindow.isDestroyed()) {
+    splashWindow.show()
+    splashWindow.focus()
   }
 })
 
@@ -376,10 +443,40 @@ async function startServer() {
   })
 }
 
+/**
+ * 保存的窗口坐标可能已经失效：换过显示器 / 改过分辨率或缩放 / 上次是在已拔掉的副屏上关的。
+ * 直接拿去建窗口，窗口会落在所有显示器之外 —— 不绘制、不触发 ready-to-show，
+ * 用户只看到一个永远转圈的闪屏。落不到任何显示器上就丢弃坐标，让系统居中。
+ */
+function sanitizeBounds(saved) {
+  const b = { ...(saved || {}) }
+  if (b.x === undefined || b.y === undefined) return b
+  const w = b.width || 1400
+  const h = b.height || 900
+  let visible = false
+  try {
+    for (const d of screen.getAllDisplays()) {
+      const a = d.workArea
+      const ox = Math.min(b.x + w, a.x + a.width) - Math.max(b.x, a.x)
+      const oy = Math.min(b.y + h, a.y + a.height) - Math.max(b.y, a.y)
+      if (ox >= 100 && oy >= 40) { visible = true; break }   // 至少露出够点到标题栏的一块
+    }
+  } catch (e) { log('读显示器信息失败，窗口坐标未校验: ' + e.message); return b }
+  if (visible) return b
+  log(`窗口保存位置 ${b.x},${b.y} 不在任何显示器内，已丢弃改为居中`)
+  delete b.x
+  delete b.y
+  return b
+}
+
 function createWindow(port) {
   log(`Creating window, loading port ${port}`)
+  try {
+    log(`Displays: ${JSON.stringify(screen.getAllDisplays().map(d => ({ id: d.id, workArea: d.workArea, scale: d.scaleFactor })))}`)
+  } catch (e) { log('读屏幕信息失败: ' + e.message) }
   const cfg = loadFullConfig()
-  const saved = cfg?.mainWindow || {}
+  const saved = sanitizeBounds(cfg?.mainWindow)
+  log(`Window bounds: ${saved.x ?? '居中'},${saved.y ?? '居中'} ${saved.width || 1400}x${saved.height || 900}`)
   mainWindow = new BrowserWindow({
     width: saved.width || 1400,
     height: saved.height || 900,
@@ -423,12 +520,13 @@ function createWindow(port) {
   mainWindow.webContents.on('did-finish-load', () => {
     log('Page loaded successfully')
   })
-
+  attachCrashRecovery(mainWindow, '主窗口')
   attachWindowOpenHandler(mainWindow)
 
   const url = `http://localhost:${port}?v=${app.getVersion()}&packaged=${app.isPackaged}`
   log(`Loading URL: ${url}`)
-  mainWindow.loadURL(url)
+  // loadURL 的 promise 以前没人接 —— 它 reject 时是静默的，日志里什么都不留
+  mainWindow.loadURL(url).catch(e => log(`⚠️ loadURL 失败: ${e.message}`))
 }
 
 // 启动动画闪屏
@@ -466,6 +564,7 @@ function showSplash() {
     <div class="bar"><div class="bar-inner"></div></div>
   </div></div></body></html>`
   splash.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`)
+  splashWindow = splash
   return splash
 }
 
@@ -488,6 +587,48 @@ function saveNotesBounds() {
     saveFullConfig({ notesWindow: { ...cfg.notesWindow, ...bounds } })
   } catch (e) { log('saveNotesBounds error: ' + e.message) }
 }
+// 窗口卡死/崩溃时的可观测性与自恢复。
+//
+// 为什么要抽成函数：**5 个窗口都要挂**。只挂主窗口的话，记事/地图/绩效/客户物料崩掉时
+// 没有日志、没有重载、没有提示，窗口停在白屏 —— 跟没修一模一样，而代码里建立的心智
+// 却是「崩溃会自愈」（2026-09-28 对抗性复审反例 3）。
+//
+// 护栏：无脑重载会变成崩溃循环（重载→又崩→再重载），比白屏更耗机器。60 秒滑动窗口内
+// 连崩 3 次就停手并说清楚。计数是**每个窗口各自一份**（闭包变量），副窗崩不会推高主窗的。
+// 日志和弹窗都带窗口名：5 个窗口都可能崩，不写名就分不清是哪一个崩了。
+function attachCrashRecovery(win, label) {
+  // 从前这条没记 —— 渲染进程卡了时日志里一片空白，只能靠猜。
+  // 2026-09-27 那台电脑「首次启动永远卡闪屏」就是栽在这个盲区上。
+  win.on('unresponsive', () => log(`⚠️ ${label}无响应`))
+  let crashCount = 0
+  let lastCrashAt = 0
+  win.webContents.on('render-process-gone', (_, d) => {
+    log(`⚠️ ${label}渲染进程退出: reason=${d.reason} exitCode=${d.exitCode}`)
+    if (d.reason === 'clean-exit' || win.isDestroyed()) return   // 正常退出不算崩溃
+    const now = Date.now()
+    if (now - lastCrashAt > 60000) crashCount = 0     // 隔一分钟以上 = 换了新问题，重新计数
+    lastCrashAt = now
+    crashCount++
+    if (crashCount > 2) {
+      log(`${label}渲染进程连续崩溃 3 次，停止自动重载`)
+      try {
+        dialog.showMessageBox({
+          type: 'error',
+          title: '界面异常',
+          message: `${label}反复崩溃，已停止自动恢复。`,
+          detail: `请关闭软件后重新打开。\n\n诊断日志：数据目录\\logs\\startup.log`
+        })
+      } catch (e) { log('崩溃提示弹窗失败: ' + e.message) }
+      return
+    }
+    log(`${label}渲染进程已崩溃，1 秒后自动重载（第 ${crashCount} 次）`)
+    setTimeout(() => {
+      if (win.isDestroyed()) return
+      try { win.reload() } catch (e) { log('崩溃后自动重载失败: ' + e.message) }
+    }, 1000)
+  })
+}
+
 // 把 window.open 的子窗口请求转成正经 BrowserWindow。
 // 注意 setWindowOpenHandler 是「每个 webContents 各注册一份」的 —— 只在主窗口注册，
 // 从子窗口（物料/记事/地图/绩效）里再点开子窗口就会落到 Chromium 原生弹窗：
@@ -552,6 +693,7 @@ function openNotesWindow(port) {
   }
   notesWindow.on('resize', debounceSave)
   notesWindow.on('move', debounceSave)
+  attachCrashRecovery(notesWindow, '记事窗口')
   attachWindowOpenHandler(notesWindow)
   const url = `http://localhost:${port}/#/notes?standalone=1&v=${app.getVersion()}&packaged=${app.isPackaged}`
   notesWindow.loadURL(url)
@@ -654,6 +796,7 @@ function openMapWindow(port) {
   }
   mapWindow.on('resize', debounceSave)
   mapWindow.on('move', debounceSave)
+  attachCrashRecovery(mapWindow, '地图窗口')
   attachWindowOpenHandler(mapWindow)
   const url = `http://localhost:${port}/#/map-addresses?standalone=1&v=${app.getVersion()}&packaged=${app.isPackaged}`
   mapWindow.loadURL(url)
@@ -700,6 +843,7 @@ function openPerfWindow(port) {
   }
   perfWindow.on('resize', debounceSave)
   perfWindow.on('move', debounceSave)
+  attachCrashRecovery(perfWindow, '绩效窗口')
   attachWindowOpenHandler(perfWindow)
   const url = `http://localhost:${port}/#/performance?standalone=1&v=${app.getVersion()}&packaged=${app.isPackaged}`
   perfWindow.loadURL(url)
@@ -748,6 +892,7 @@ function openMaterialsWindow(port) {
   }
   materialsWindow.on('resize', debounceSave)
   materialsWindow.on('move', debounceSave)
+  attachCrashRecovery(materialsWindow, '客户物料窗口')
   attachWindowOpenHandler(materialsWindow)
   const url = `http://localhost:${port}/#/materials?standalone=1&v=${app.getVersion()}&packaged=${app.isPackaged}`
   materialsWindow.loadURL(url)
@@ -803,8 +948,13 @@ ipcMain.handle('open-customer-folder', async (_, customer) => {
 ipcMain.handle('update:check', () => { checkForUpdates(); return true })
 ipcMain.handle('update:download', () => { downloadUpdate() })
 ipcMain.handle('update:install', () => {
-  // 升级前保存当前数据目录路径，确保新版本能找到旧数据
-  if (process.env.DATA_DIR) saveUserConfig(process.env.DATA_DIR)
+  // 升级前保存当前数据目录路径，确保新版本能找到旧数据。
+  // ⚠️ 只在「这个目录是从配置/安装记录里解析出来的」时才存。
+  // DATA_DIR 是启动时显式传进来的（开发、验证、沙箱）时**绝不能存** —— 存下去等于
+  // 把用户配置里的真实数据目录**永久改写**成那个临时路径，他下次双击打开软件就会
+  // 指向沙箱/测试目录（2026-09-28 实测踩到：沙箱跑一轮 + 点一次「立即重启安装」，
+  // 祥哥的真实 user-config.json 里 dataDir 变成了 G:/Temp/v220-sandbox）。
+  if (process.env.DATA_DIR && !dataDirFromEnv) saveUserConfig(process.env.DATA_DIR)
   quitAndInstall()
 })
 ipcMain.handle('update:diagnose', () => {
@@ -819,10 +969,60 @@ ipcMain.handle('update:diagnose', () => {
 app.whenReady().then(async () => {
   log('App ready')
   const splash = showSplash()
+  // 闪屏只从这里关。以前三处各调一次 splash.close()，先关的那次之后
+  // 再调就是「访问已销毁的窗口」抛错。统一走 closeSplash + 幂等开关。
+  let splashClosed = false
+  const closeSplash = (why) => {
+    if (splashClosed) return
+    splashClosed = true
+    log(`关闭闪屏（${why}）`)
+    try { if (!splash.isDestroyed()) splash.close() } catch (e) { log('splash.close 失败: ' + e.message) }
+  }
+  // 就绪 → 关闪屏；超过 SPLASH_TIMEOUT_MS 还没就绪 → 也关。
+  // 2026-09-27 那台电脑就是卡在这：窗口没就绪，闪屏永不关，用户只能强杀碰运气。
+  const armSplashWatchdog = () => {
+    if (!mainWindow) { log('⚠️ 主窗口不存在，闪屏兜底未武装（闪屏将无人关闭）'); return }
+    mainWindow.once('ready-to-show', () => setTimeout(() => closeSplash('窗口就绪'), 400))
+    // 第二条出口：页面载入完成。
+    // 2026-09-27 复现：ready-to-show 会**永远不触发** —— 同一台机器上写个 12 行的
+    // Electron 小程序（只 loadURL 一段 data:text/html），did-finish-load 267ms 就到，
+    // ready-to-show 30 秒都不来。此时闪屏的唯一出口只剩下面那条 90 秒兜底，
+    // 用户看到的就是「卡在启动动画页，一直进不去」—— 正是客户机 9/27 报的毛病。
+    // did-finish-load 则每次都准点（本机各次启动均在 1 秒内）。
+    // 留 600ms 让首帧画完再收闪屏，避免露出一片白。
+    mainWindow.webContents.once('did-finish-load', () => setTimeout(() => {
+      if (splashClosed) return
+      log('页面已载入，直接进主界面（不等 ready-to-show）')
+      // show() 不是多余的：卡住时正是它逼出首帧（实测 show() 后 30~80ms 才来 ready-to-show）
+      try { if (!mainWindow.isDestroyed()) mainWindow.show() } catch (e) { log('⚠️ 载入后 show() 失败: ' + e.message) }
+      closeSplash('页面已载入')
+    }, 600))
+    setTimeout(() => {
+      if (splashClosed) return
+      log(`⚠️ 闪屏兜底超时：主窗口 ${SPLASH_TIMEOUT_MS}ms 内未就绪，强制收掉闪屏`)
+      // 这是最后一道兜底 —— 它要是也失败，窗口就永远不出现。别空 catch，
+      // 否则复盘的人会以为「窗口显示了只是白屏」，方向整个跑偏。
+      try { if (!mainWindow.isDestroyed()) mainWindow.show() } catch (e) { log('⚠️ 兜底 show() 失败: ' + e.message) }
+      closeSplash('兜底超时')
+      dialog.showMessageBox({
+        type: 'warning',
+        title: '界面加载异常',
+        message: '主窗口迟迟没有加载出来，已先关掉启动动画。',
+        detail: '稍等一下；若窗口仍是一片空白，请关闭软件再重新打开。\n\n诊断日志：数据目录\\logs\\startup.log'
+      })
+    }, SPLASH_TIMEOUT_MS)
+  }
   try {
+    // 这一段（解析数据目录 + import 服务模块，内含同步执行的归档迁移 syncArchive）
+    // 全程堵在主进程 JS 线程上：闪屏的另一条渲染进程照转，但这里一行日志都不写、
+    // 连兜底定时器都轮不到执行 —— 是「卡在启动动画页」最难查的一段盲区。
+    // 记个耗时，至少下次能一眼看出时间花在哪。
+    const t0 = Date.now()
+    log('开始解析数据目录并加载服务模块…')
     // tryListen 自动处理 EADDRINUSE，不预先强杀旧进程以防打断退出保存
     const { port } = await startServer()
     serverPort = port
+    log(`服务就绪，用时 ${Date.now() - t0}ms`)
     const menu = Menu.buildFromTemplate([
       { label: '文件', submenu: [
         { label: '打开数据文件夹', click: () => shell.openPath(process.env.DATA_DIR) },
@@ -838,10 +1038,7 @@ app.whenReady().then(async () => {
     ])
     Menu.setApplicationMenu(menu)
     createWindow(port)
-    // 窗口就绪后关闪屏
-    mainWindow.once('ready-to-show', () => {
-      setTimeout(() => { splash.close() }, 400)
-    })
+    armSplashWatchdog()
     // 初始化升级（必须在 ready-to-show 外，和 xnowpost 一致）
     initUpdater(mainWindow)
     // 启动记事提醒轮询
@@ -857,19 +1054,17 @@ app.whenReady().then(async () => {
           const { port } = await startServer()
           serverPort = port
           createWindow(port)
-          mainWindow.once('ready-to-show', () => {
-            splash.close()
-          })
+          armSplashWatchdog()
           initUpdater(mainWindow)
         } catch (e2) {
-          splash.close()
+          closeSplash('EADDRINUSE 重试失败')
           dialog.showErrorBox('启动失败', '端口被占用，请关闭所有晶振报价系统窗口后重试')
           app.quit()
         }
       }, 2000)
       return
     }
-    splash.close()
+    closeSplash('启动失败')
     dialog.showErrorBox('启动失败', e.message)
     app.quit()
   }
@@ -886,6 +1081,9 @@ app.on('before-quit', (e) => {
       dbSaveNow()
     }
     log('before-quit: 数据库已保存')
+    // 微信式：更新包已经在后台下好了，关软件时顺手装上，用户下次打开就是新版。
+    // 必须在这里（强杀之前）调 —— 它内部是同步派安装程序，之后我们 exit 不影响它。
+    if (installOnQuit()) log('before-quit: 更新已交给安装程序')
   } catch (e) {
     log('before-quit error: ' + (e.stack || e.message))
   }

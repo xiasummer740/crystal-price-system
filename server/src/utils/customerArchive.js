@@ -7,7 +7,7 @@
  *   客户管理/<客户>/规格书/<文件>            客户物料规格书
  *   客户管理/<客户>/物料图片/<文件>          客户物料备注图
  *   客户管理/<客户>/记事/<YYYY-MM-DD>/       记事附件（图片重命名为 图片N.ext）
- *   客户管理/<客户>/物料清单.xlsx            按 📁 客户目录 按钮时生成
+ *   客户管理/<客户>/<客户>物料清单.xlsx      按 📁 客户目录 按钮时生成（带客户全名，单独拷出去也认得出）
  *   报价规格书/<品类>/<文件>                 报价系统规格书
  *   报价备注图/<文件>                        报价系统备注图
  *
@@ -101,6 +101,56 @@ export function categoryFolder(category) {
 /** 客户根目录：DATA_DIR/客户管理/<客户> */
 export function customerDirAbs(customer) {
   return rootAbs(DIR.customers, customerFolder(customer))
+}
+
+/**
+ * 物料清单文件名：`<客户全名>物料清单.xlsx`。
+ * 前缀恒等于文件夹名 —— 文件被单独拷出去、打包发人时，看名字就知道是谁家的。
+ */
+export function archiveListName(customer) {
+  return customerFolder(customer) + DIR.archiveList
+}
+
+/** 客户归档物料清单的绝对路径 */
+export function customerArchiveListAbs(customer) {
+  return path.join(customerDirAbs(customer), archiveListName(customer))
+}
+
+/**
+ * 把目录里名字不对的物料清单归位成 `canonicalName`。
+ * 「不对」包括两种：旧名 `物料清单.xlsx`，以及**上一个客户的名字**
+ * —— 客户改名/合并时 materials.js 的 moveInto 是连名带内容原样搬的，
+ * 不归位的话新目录里会一直顶着别人家的名字，恰好吃掉这个功能的用意。
+ *
+ * **只改名，不删文件**。两种情形**一律不动、原样留着**交给调用方登记：
+ * ① 正名已被占用；② 候选不止一份（谁是本客户的从名字上判断不出来，readdir 顺序
+ * 决定谁抢到正名 —— 那也是猜）。
+ *
+ * ⚠️ 单份候选时**确实会改名**，哪怕它顶着别家客户的名字。这是有意为之：客户改名/合并时
+ * `moveInto` 是连名带内容搬的，这份就是本客户的清单、只是名字没跟上。**代价是**：
+ * 若真有人把别家的清单误放进这个目录，也会被改名成这家的名字（内容不变）。
+ * 所以调用方**必须把改名的原文件名写进报告**，让人能抽查出来 —— 只记个数等于没记。
+ * @returns {{renamed: string[], kept: string[]}} 原文件名列表（不含路径）
+ */
+export function normalizeArchiveList(dirAbs, canonicalName) {
+  const renamed = [], kept = []
+  const candidates = fs.readdirSync(dirAbs)
+    .filter(n => n !== canonicalName && n.endsWith(DIR.archiveList))
+  if (!candidates.length) return { renamed, kept }
+
+  const dst = path.join(dirAbs, canonicalName)
+  // 正名已被占用：不覆盖 —— 宁可多一个，也不猜哪个对
+  // 候选**不止一份**：谁是本客户的，从名字上判断不出来（可能是旧客户名，也可能是别人家的
+  // 被误放进来的）。readdir 顺序决定谁抢到正名，换台机器就换人 —— 那也是「猜」。
+  // 两种情形都原样留着，交给调用方登记进报告让人来看。
+  if (fs.existsSync(dst) || candidates.length > 1) {
+    kept.push(...candidates)
+    return { renamed, kept }
+  }
+
+  fs.renameSync(path.join(dirAbs, candidates[0]), dst)
+  renamed.push(candidates[0])
+  return { renamed, kept }
 }
 
 export function customerSpecDirAbs(customer) { return path.join(customerDirAbs(customer), DIR.spec) }

@@ -386,6 +386,16 @@ try {
   }
   if (rep.broken.length) console.warn(`[archive-sync] ${rep.broken.length} 条引用找不到文件，见 客户资料归档报告.txt`)
   if (rep.skipped) console.warn(`[archive-sync] ${rep.skipped} 条因客户名撞车被跳过（需人工决定），见 客户资料归档报告.txt`)
+  // 物料清单改名与失败同样要出声：纯改名的那一跑（首次升级那 45 份）不去动 migrated/deletedSources，
+  // 从前控制台一个字都不打 —— 装机后想确认「到底改没改」只能自己去翻目录。
+  if (rep.renamed.物料清单) console.log(`[archive-sync] 物料清单改名 ${rep.renamed.物料清单} 份（旧名 → <客户全名>物料清单.xlsx）`)
+  if (rep.keptLegacy.length) console.warn(`[archive-sync] ${rep.keptLegacy.length} 份物料清单因正名已被占用而原样保留（需人工确认）：${rep.keptLegacy.join('、')}`)
+  if (rep.failed.length) console.warn(`[archive-sync] ${rep.failed.length} 项操作失败，见 客户资料归档报告.txt`)
+  // 报告没写出去 = 上面这些「见 客户资料归档报告.txt」全部指向一份**上一次的旧文件**。
+  // 必须明说，否则验收的人拿旧结论当这次的。
+  if (rep.reportWriteError) {
+    console.warn(`[archive-sync] ⚠️ 客户资料归档报告.txt 写入失败，磁盘上那份是旧的、不代表本次结果：${rep.reportWriteError}`)
+  }
 } catch (e) {
   // 归档失败不能拖垮整个服务：搬迁是「先复制、确认后才删源」，源文件都还在，下次启动重试即可
   console.warn('[archive-sync] 归档失败:', e.message)

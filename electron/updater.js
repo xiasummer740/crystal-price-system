@@ -1,10 +1,13 @@
-// 自动在线升级
+// 自动在线升级（微信式：后台静默下载，不打断；关软件时自动装上）
 //
 // 版本检查：直接调 GitHub API（比 electron-updater 快，国内网络友好）
 // 下载安装：先用 autoUpdater 尝试下载，失败则直连 GitHub 用 https 下载
 //
-// autoDownload: false — 检测到新版本只通知，下载由用户触发
-// autoInstallOnAppQuit: true — 下载完成后退出时自动安装
+// autoDownload: false — 库自己的自动下载关掉，改由我们在检测到新版本后触发
+//   （这样下载时机、静默与否、去重都由我们说了算）
+// autoInstallOnAppQuit: 库里这个开关**在本应用里不生效** —— 它挂在 `app.onQuit` 上，
+//   而 main.js 的 before-quit 是 preventDefault + process.exit(0) 强杀的，'quit' 事件
+//   根本不会发。所以「退出时装上」由下面的 installOnQuit() 显式负责。
 
 import { createRequire } from 'module'
 import { appendFileSync, createWriteStream, unlinkSync, existsSync, statSync } from 'fs'
@@ -17,6 +20,15 @@ let mainWindow = null
 let initialized = false
 let appVersion = ''
 let directDownloadPath = null  // 直连下载的文件路径，用于安装
+let readyToInstall = null      // null | 'direct' | 'updater' —— 装好了、等退出时安装
+let readyVersion = null        // 就绪的那个包**是哪个版本**。文件名带版本号，但标志不带 ——
+                               // 用户开着软件好几天、期间又发了一版时，必须能分辨「手上这个包
+                               // 是不是当前要的那个」，否则会拿旧包装上去。
+let downloading = false        // 防并发：自动下载和用户手点「下载更新」可能撞上
+// 用户在**本次下载进行中**又点过一次「下载更新」。前端点按钮是无条件先把界面置成
+// 「正在下载」再调这里的，若在飞的那次是静默的后台下载、它失败时按约定不发事件，
+// 界面就永远停在「连接中...」。记一笔，让那次下载无论如何都回报一声。
+let userAskedDownload = false
 
 const LOG = (msg) => {
   try { appendFileSync('C:\\Users\\Administrator\\AppData\\Local\\Temp\\crystal-updater-debug.log', `[${new Date().toISOString()}] ${msg}\n`) } catch {}
@@ -48,6 +60,9 @@ export function initUpdater(window) {
     })
 
     autoUpdater.on('update-downloaded', () => {
+      downloading = false
+      readyToInstall = 'updater'
+      readyVersion = appVersion
       mainWindow?.webContents.send('update:downloaded')
     })
 
@@ -61,34 +76,73 @@ export function initUpdater(window) {
   }
 }
 
-// 下载更新：先用 autoUpdater，失败则自己直连 GitHub 下载
-export async function downloadUpdate() {
+/**
+ * 下载更新：先用 autoUpdater，失败则自己直连 GitHub 下载。
+ *
+ * @param {{ silent?: boolean }} [opts] silent=true 时失败**不通知前端** ——
+ *   后台自动下载是用户没点过的事，弹个红字吓人不如安静地退回去让他手动点。
+ *   日志照记，出问题时查得到。
+ */
+export async function downloadUpdate(opts = {}) {
+  const { silent = false } = opts
   if (!autoUpdater) {
-    mainWindow?.webContents.send('update:error', { message: '下载模块未就绪' })
+    if (!silent) mainWindow?.webContents.send('update:error', { message: '下载模块未就绪' })
+    else LOG('下载模块未就绪（静默模式，不通知前端）')
     return
   }
-  LOG('downloadUpdate called')
-
-  // 1) 确保 autoUpdater 有更新信息
-  if (!autoUpdater.updateInfoAndProvider) {
-    LOG('updateInfoAndProvider is null, calling checkForUpdates() first')
-    try {
-      await autoUpdater.checkForUpdates()
-    } catch (err) {
-      LOG(`checkForUpdates before download failed: ${err.message}`)
-      // autoUpdater 不行 → 改用直连下载
-      await directDownload()
+  if (downloading) {
+    LOG('已有下载在进行中，忽略本次请求')
+    if (!silent) userAskedDownload = true   // 别让这次点击石沉大海，见 userAskedDownload 的说明
+    return
+  }
+  if (readyToInstall) {
+    if (readyVersion === appVersion) {
+      // ⚠️ **必须回一个事件**。前端点「下载更新」时是**无条件**先把界面置成「正在下载」
+      // 再调这里的（Dashboard.vue 的 onDownloadUpdate），静默 return 会让界面永远停在
+      // 「连接中...」—— 本会话内再没有任何事件能救它。2026-09-28 对抗性复审实测踩到。
+      LOG('安装包已就绪，无需重复下载（回报前端回到「已下载」态）')
+      mainWindow?.webContents.send('update:downloaded')
       return
     }
+    // 手上这个是**上一版**的包（用户开着软件几天没关，期间又发了一版）。留着它会装错版本，
+    // 作废重下。磁盘上那份旧文件不删 —— 文件名带版本号，不会跟新包撞名。
+    LOG(`已就绪的包是 ${readyVersion}，目标已是 ${appVersion}，作废重下`)
+    readyToInstall = null
+    readyVersion = null
+    directDownloadPath = null
   }
+  downloading = true
+  userAskedDownload = !silent
+  LOG(`downloadUpdate called (silent=${silent})`)
 
-  // 2) autoUpdater 下载
   try {
-    await autoUpdater.downloadUpdate()
-  } catch (err) {
-    LOG(`autoUpdater.downloadUpdate failed: ${err.message}`)
-    // 回退到直连下载
-    await directDownload()
+    // 1) 确保 autoUpdater 有更新信息
+    if (!autoUpdater.updateInfoAndProvider) {
+      LOG('updateInfoAndProvider is null, calling checkForUpdates() first')
+      try {
+        await autoUpdater.checkForUpdates()
+      } catch (err) {
+        LOG(`checkForUpdates before download failed: ${err.message}`)
+        // autoUpdater 不行 → 改用直连下载
+        await directDownload(silent)
+        return
+      }
+    }
+
+    // 2) autoUpdater 下载
+    try {
+      await autoUpdater.downloadUpdate()
+    } catch (err) {
+      LOG(`autoUpdater.downloadUpdate failed: ${err.message}`)
+      // 回退到直连下载
+      await directDownload(silent)
+    }
+  } finally {
+    // 成功路径由 'update-downloaded' / directDownload 自己清（它们要置 readyToInstall），
+    // 这里只在「异常逃逸、谁都没接住」时兜底复位，免得一次失败把后续下载永久锁死。
+    if (!readyToInstall) downloading = false
+    // 本次下载已了结，用户那声问询也随之作废 —— 留着会让下一个静默下载失败时凭空弹红字。
+    userAskedDownload = false
   }
 }
 
@@ -183,8 +237,8 @@ async function downloadWithRetry(url, destFile, expectedSize = 0, retries = 3) {
 }
 
 // 直连 GitHub 下载（不依赖 autoUpdater）
-async function directDownload() {
-  LOG('directDownload called')
+async function directDownload(silent = false) {
+  LOG(`directDownload called (silent=${silent})`)
   try {
     const { app } = _require('electron')
     const userDataPath = app.getPath('userData')
@@ -194,9 +248,6 @@ async function directDownload() {
     // 确保目录存在
     const { mkdirSync } = _require('fs')
     if (!existsSync(destDir)) mkdirSync(destDir, { recursive: true })
-
-    // 删除旧文件
-    if (existsSync(destFile)) unlinkSync(destFile)
 
     // 先通过 API 获取 release 信息，拿到 CDN 直链
     const releaseUrl = 'https://api.github.com/repos/xiasummer740/crystal-price-system/releases/latest'
@@ -225,6 +276,27 @@ async function directDownload() {
     }
     LOG(`browser_download_url: ${assetInfo.url} (${assetInfo.size} bytes)`)
 
+    // 上一轮已经下完了 → 直接用，别重下。
+    // 两个理由：① 每次开机都发现同一个版本，重下等于白拉几十上百 MB；
+    // ② 续传逻辑对「已经下满的文件」会发 `Range: bytes=<全长>-`，服务端回 416，
+    //    被当成下载失败 —— 一个下好了的包反而永远装不上。
+    // 文件名里带版本号，所以换了版本不会误命中上一版的产物。
+    if (existsSync(destFile)) {
+      let have = 0
+      try { have = statSync(destFile).size } catch { have = 0 }
+      if (assetInfo.size > 0 && have === assetInfo.size) {
+        LOG(`已有完整安装包（${have} bytes），跳过下载`)
+        directDownloadPath = destFile
+        readyToInstall = 'direct'
+        readyVersion = appVersion
+        downloading = false   // 包已就绪，「正在下载中」这个状态到此结束
+        mainWindow?.webContents.send('update:downloaded')
+        return
+      }
+      LOG(`已有同名文件但大小不符（${have}/${assetInfo.size}），重新下载`)
+      unlinkSync(destFile)
+    }
+
     // 带断点续传 + 重试的下载（expectedSize 用于完整性校验）
     await downloadWithRetry(assetInfo.url, destFile, assetInfo.size)
 
@@ -236,28 +308,77 @@ async function directDownload() {
 
     // 下载完成
     directDownloadPath = destFile
+    readyToInstall = 'direct'
+    readyVersion = appVersion
+    // 同上：包已就绪，别让 downloading 一直挂着 true —— 那样一旦后面派发安装失败
+    // （readyToInstall 已被 quitAndInstall 消费掉），用户在本会话里就再也点不动「下载更新」了。
+    downloading = false
     LOG(`download complete: ${destFile} (${finalSize} bytes)`)
     mainWindow?.webContents.send('update:downloaded')
   } catch (err) {
     LOG(`directDownload error: ${err.message}`)
-    mainWindow?.webContents.send('update:error', { message: `下载失败: ${err.message}。请手动下载安装  https://github.com/xiasummer740/crystal-price-system/releases/latest` })
+    // 静默（后台自动下载）时失败不弹红字：用户压根没点过这件事，
+    // 界面停在「发现新版本」让他随时能手动点是更好的落点。日志里有完整原因。
+    // ⚠️ 但「本次下载进行中用户点过下载」算点过 —— 那时界面已经切到「正在下载」，
+    // 再静默就把它永远晾在「连接中...」了（见 userAskedDownload 的说明）。
+    if (!silent || userAskedDownload) {
+      mainWindow?.webContents.send('update:error', { message: `下载失败: ${err.message}。请手动下载安装  https://github.com/xiasummer740/crystal-price-system/releases/latest` })
+    }
+    // 不往外抛：调用方（IPC / 后台自动下载）都不需要区分成败，
+    // 抛出去只会变成一个没人接的 rejected promise。
   }
 }
 
 export function quitAndInstall() {
-  if (autoUpdater && autoUpdater.updateInfoAndProvider) {
-    autoUpdater.quitAndInstall()
-  } else if (directDownloadPath) {
-    // 直连下载的文件，直接跑安装程序
-    LOG(`quitAndInstall: running ${directDownloadPath}`)
-    try {
-      const { spawn } = _require('child_process')
-      const { app } = _require('electron')
-      spawn(directDownloadPath, ['--updated'], { detached: true, stdio: 'ignore' })
-      app.quit()
-    } catch (err) {
-      LOG(`quitAndInstall spawn error: ${err.message}`)
+  if (!readyToInstall) { LOG('quitAndInstall: 没有就绪的安装包，忽略'); return }
+  const kind = readyToInstall
+  // 立刻消费掉。**不消费就会装两遍**：下面两条路都会再触发一次 app.quit()
+  // （直连那条是我们自己调，updater 那条是库内部的 setImmediate(app.quit())），
+  // 于是又进一遍 before-quit → installOnQuit() → 标志还在 → 再派一次安装程序。
+  // 实测：点一次「立即重启安装」，起来的是两个安装器进程。
+  readyToInstall = null
+  LOG(`quitAndInstall: kind=${kind}`)
+  if (kind === 'updater') {
+    autoUpdater?.quitAndInstall()
+    return
+  }
+  try {
+    const { spawn } = _require('child_process')
+    spawn(directDownloadPath, ['--updated'], { detached: true, stdio: 'ignore' })
+    const { app } = _require('electron')
+    app.quit()
+  } catch (err) {
+    LOG(`quitAndInstall spawn error: ${err.message}`)
+  }
+}
+
+/**
+ * 退出前顺手把更新装上（微信式：用户不用管，下次打开就是新版）。
+ *
+ * 由 main.js 的 before-quit 调用 —— **必须在那次强杀之前调**：
+ * `quitAndInstall()` 内部是同步派安装程序（`BaseUpdater.install()`），
+ * 提交后主进程立刻 `process.exit(0)` 不会打断已经 detach 的安装器。
+ *
+ * @returns {boolean} 是否已经把退出交给安装器（true 时调用方仍应正常强杀）
+ */
+export function installOnQuit() {
+  if (!readyToInstall) return false
+  const kind = readyToInstall
+  // 立刻消费掉：库里那条 quitAndInstall 会再 app.quit() 一次、又进一遍 before-quit，
+  // 留着标志会二次触发安装。下次启动会重新检测到（磁盘上的包还在，走「跳过下载」快路）。
+  readyToInstall = null
+  LOG(`退出时自动安装更新（kind=${kind}）`)
+  try {
+    if (kind === 'updater') {
+      autoUpdater?.quitAndInstall(true, true)
+      return true
     }
+    const { spawn } = _require('child_process')
+    spawn(directDownloadPath, ['--updated'], { detached: true, stdio: 'ignore' })
+    return true
+  } catch (err) {
+    LOG(`installOnQuit error: ${err.message}`)
+    return false
   }
 }
 
@@ -291,6 +412,13 @@ export function checkForUpdates() {
         if (compareVersions(latestVer, appVersion) > 0) {
           // 有新版 → 更新 appVersion 为目标版本，用于直连下载拼 URL
           appVersion = latestVer
+          // 这一版**已经下好了**：别再喊「发现新版本」—— 那会把界面从「已下载完成」
+          // 打回「⬇ 下载更新」，看着像更新丢了；用户点下去还会撞上 downloadUpdate 的早退。
+          if (readyToInstall && readyVersion === latestVer) {
+            LOG(`v${latestVer} 的安装包已就绪，跳过 available 通知（回报「已下载」态）`)
+            mainWindow?.webContents.send('update:downloaded')
+            return
+          }
           // 通知前端
           mainWindow?.webContents.send('update:available', {
             version: latestVer,
@@ -305,6 +433,12 @@ export function checkForUpdates() {
               LOG(`autoUpdater.checkForUpdates background error: ${err.message}`)
             })
           }
+          // 微信式：既然发现新版本，就直接在后台悄悄下，不等用户点。
+          // 界面只多一个小红点，不弹窗、不挡操作；下完变成「重启即装」。
+          // 失败保持静默（用户没点过），界面停在「发现新版本」，他随时能手动点。
+          downloadUpdate({ silent: true }).catch(err => {
+            LOG(`后台自动下载异常: ${err.message}`)
+          })
         } else {
           mainWindow?.webContents.send('update:not-available')
         }

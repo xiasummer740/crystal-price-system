@@ -293,18 +293,22 @@
           <template v-else-if="updateStatus === 'downloading'">
             <div class="dl-info">
               <span class="dl-icon">⏳</span>
-              <span class="dl-status">下载中</span>
+              <span class="dl-status">正在后台下载新版本</span>
               <span v-if="downloadSpeed" class="dl-speed">{{ downloadSpeed }}</span>
             </div>
             <div class="dl-bar-wrap">
               <div class="dl-bar-fill" :style="{ width: (updatePercent > 0 ? updatePercent : 0) + '%' }"></div>
               <span class="dl-pct">{{ updatePercent > 0 ? updatePercent + '%' : '连接中...' }}</span>
             </div>
+            <span class="update-status">不影响使用，可以继续干活</span>
           </template>
 
           <template v-else-if="updateStatus === 'downloaded'">
-            <button class="update-btn" @click="onInstall">⚡ 立即安装</button>
-            <span class="update-status">下载完成，点击安装后应用将自动重启</span>
+            <div class="update-info">新版本 v{{ updateVersion }} 已下载完成</div>
+            <div class="update-actions">
+              <button class="update-btn" @click="onInstall">⚡ 立即重启安装</button>
+            </div>
+            <span class="update-status">也可以不管它 —— 下次关闭软件时会自动装好</span>
           </template>
 
           <template v-else-if="updateStatus === 'installing'">

@@ -228,3 +228,26 @@ describe('PUT /api/materials/:id — 编辑防重复', () => {
     assert.equal(res.body.code, 0, '编辑自身不触发重复')
   })
 })
+
+describe('PUT /api/materials/:id — 改客户名时物料清单跟着改名', () => {
+  it('新目录里不留顶着旧客户名的清单，且当场就改（不等下次启动）', async () => {
+    const A = await import('../server/src/utils/customerArchive.js')
+    const OLD = '甲改名测试', NEW = '乙改名测试'
+
+    const created = await request.post(BASE).send({ customer: OLD, material_name: 'X', status: '报价' })
+    const id = created.body.data.id
+    testIds.push(id)
+
+    // 归档目录里先摆一份清单，文件名按旧客户名（这就是改名前的正常状态）
+    const oldDir = A.customerDirAbs(OLD)
+    fs.mkdirSync(oldDir, { recursive: true })
+    fs.writeFileSync(path.join(oldDir, A.archiveListName(OLD)), 'x')
+
+    const res = await request.put(`${BASE}/${id}`).send({ customer: NEW })
+    assert.equal(res.body.code, 0, `改名应成功: ${res.body.msg}`)
+
+    const newDir = A.customerDirAbs(NEW)
+    assert.ok(fs.existsSync(path.join(newDir, A.archiveListName(NEW))), '清单应跟着改成新客户名')
+    assert.ok(!fs.existsSync(path.join(newDir, A.archiveListName(OLD))), '不该留下顶着旧客户名的清单')
+  })
+})

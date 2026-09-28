@@ -11,6 +11,7 @@
  *  3. 正文与更新引用同一张图 —— 不记忆已搬过的 URL 会复制成两份
  *  4. 同一个缺失文件被两处引用 —— 不去重会把验收数字撑大 2~4 倍
  *  5. 重跑幂等
+ *  6. 物料清单文件名带客户全名（旧名改名 / 新名已存在不覆盖 / 生成也用新名 / 改名失败留痕）
  */
 import assert from 'node:assert/strict'
 import { describe, it, before } from 'node:test'
@@ -136,5 +137,146 @@ describe('归档迁移', () => {
     assert.equal(crypto.createHash('md5').update(fs.readFileSync(path.join(tmpDir, '数据库', 'data.db'))).digest('hex'), before.db, 'data.db 不该变')
     assert.equal(JSON.stringify(list('客户管理')), before.归档, '归档区文件清单不该变')
     assert.equal(JSON.stringify(list(BAK)), before.备份, '备份区不该变')
+  })
+})
+
+describe('物料清单文件名带客户全名', () => {
+  const list1 = c => path.join(tmpDir, '客户管理', c, c + '物料清单.xlsx')
+  const legacy = c => path.join(tmpDir, '客户管理', c, '物料清单.xlsx')
+
+  it('旧名改成新名；新名已存在时旧名原样留着', () => {
+    mk('客户管理/客户A/物料清单.xlsx', 'legacy-A')
+    mk('客户管理/客户B/物料清单.xlsx', 'legacy-B')
+    mk('客户管理/客户B/客户B物料清单.xlsx', 'already-new-B')
+
+    const rep = syncArchive({ withBackup: false })
+
+    assert.equal(rep.renamed.物料清单, 1, `只该给客户A改名，实际 ${rep.renamed.物料清单}`)
+    assert.ok(fs.existsSync(list1('客户A')), '客户A 应出现带全名的新文件')
+    assert.ok(!fs.existsSync(legacy('客户A')), '客户A 不该再留旧名文件')
+    // 是「改名」不是「重新生成」—— 内容必须原样过来
+    assert.equal(fs.readFileSync(list1('客户A'), 'utf8'), 'legacy-A')
+
+    assert.ok(fs.existsSync(legacy('客户B')), '新名已存在时旧名必须原样留着，不猜哪个对')
+    assert.equal(fs.readFileSync(list1('客户B'), 'utf8'), 'already-new-B', '不能覆盖已有的新名文件')
+    // 留下的那份必须登记 —— 引擎只认新名，旧文件从此不再更新，得让人去确认
+    assert.deepEqual(rep.keptLegacy, ['客户B/物料清单.xlsx'], '保留旧名的必须被记下来')
+
+    const txt = fs.readFileSync(path.join(tmpDir, '客户资料归档报告.txt'), 'utf8')
+    assert.match(txt, /物料清单改名：成功 1 份，新名已存在、旧名原样保留 1 份/)
+    assert.match(txt, /⚠️ 保留旧名的客户[^\n]*客户B/, '报告里要列名，便于人工核对')
+  })
+
+  it('重跑幂等：不再改名', () => {
+    const rep = syncArchive({ withBackup: false })
+    assert.equal(rep.renamed.物料清单, 0, '旧名已不存在，第二遍不该再改名')
+    assert.deepEqual(rep.keptLegacy, ['客户B/物料清单.xlsx'], '保留名单每轮应稳定，不能越滚越多')
+  })
+
+  it('客户改名/合并后，新目录里顶着别的客户名的清单要归位', () => {
+    // 现场就是 materials.js moveInto 搬完的样子：文件连名带内容原样过来，名字还是上一个客户的
+    mk('客户管理/客户H/客户G物料清单.xlsx', 'moved-from-G')
+    // 合并场景：目标目录自己那份正名也在，旧的这份不许覆盖，只能留下并登记
+    mk('客户管理/客户I/客户I物料清单.xlsx', 'canonical-I')
+    mk('客户管理/客户I/客户J物料清单.xlsx', 'merged-from-J')
+
+    const rep = syncArchive({ withBackup: false })
+    const hDir = path.join(tmpDir, '客户管理', '客户H')
+
+    assert.ok(fs.existsSync(list1('客户H')), '顶着旧客户名的清单应归位成「客户H物料清单.xlsx」')
+    assert.ok(!fs.existsSync(path.join(hDir, '客户G物料清单.xlsx')), '不该再留着旧客户名的那份')
+    assert.equal(fs.readFileSync(list1('客户H'), 'utf8'), 'moved-from-G', '是改名不是重新生成')
+
+    const iDir = path.join(tmpDir, '客户管理', '客户I')
+    assert.equal(fs.readFileSync(path.join(iDir, '客户I物料清单.xlsx'), 'utf8'), 'canonical-I', '不能覆盖正名')
+    assert.ok(fs.existsSync(path.join(iDir, '客户J物料清单.xlsx')), '正名已存在时旧的留着待人工确认')
+    assert.ok(rep.keptLegacy.includes('客户I/客户J物料清单.xlsx'), '留下的一定要登记，否则永远没人过问')
+  })
+
+  it('改名失败要留痕（报告里不能跟「本来就没旧名」长得一样）', () => {
+    mk('客户管理/客户G/物料清单.xlsx', 'legacy-G')
+    const real = fs.renameSync
+    fs.renameSync = () => { const e = new Error('模拟被占用'); e.code = 'EPERM'; throw e }
+    let rep
+    try { rep = syncArchive({ withBackup: false }) } finally { fs.renameSync = real }
+
+    const fails = rep.failed.filter(f => f.类别 === '物料清单改名')
+    assert.equal(fails.length, 1, `应记录 1 条改名失败，实际 ${fails.length}`)
+    assert.equal(fails[0].记录, '客户G')
+    assert.ok(fs.existsSync(legacy('客户G')), '改名失败时旧文件必须原样还在')
+
+    const txt = fs.readFileSync(path.join(tmpDir, '客户资料归档报告.txt'), 'utf8')
+    assert.match(txt, /物料清单改名：成功 0 份，失败 1 份/, '失败必须出现在报告里')
+  })
+
+  it('改名明细要逐条进报告（只记个数 = 验收的人无从抽查）', () => {
+    // 单份候选：顶着别的客户名，但按「客户改过名」的假设它就该归位。
+    // 这个假设要是错了（那是别家误放进来的清单），唯一能事后发现的就是这份明细。
+    mk('客户管理/客户L/客户W物料清单.xlsx', 'from-W')
+
+    const rep = syncArchive({ withBackup: false })
+
+    const line = '客户L/客户W物料清单.xlsx → 客户L物料清单.xlsx'
+    assert.ok(rep.renamedList.includes(line), `改名明细缺这条，实际 ${JSON.stringify(rep.renamedList)}`)
+    assert.equal(fs.readFileSync(list1('客户L'), 'utf8'), 'from-W', '内容是原样过来的，不是重新生成')
+    const txt = fs.readFileSync(path.join(tmpDir, '客户资料归档报告.txt'), 'utf8')
+    assert.ok(txt.includes(line), '报告正文里要有逐条明细，否则登记了也没人看得见')
+  })
+
+  it('候选不止一份时不猜：两份都留着并登记（顺序不该决定谁是正名）', () => {
+    mk('客户管理/客户K/客户X物料清单.xlsx', 'from-X')
+    mk('客户管理/客户K/客户Y物料清单.xlsx', 'from-Y')
+
+    const rep = syncArchive({ withBackup: false })
+    const kDir = path.join(tmpDir, '客户管理', '客户K')
+
+    assert.ok(!fs.existsSync(list1('客户K')), '两份候选谁是真身从名字判断不出来，不该擅自定正名')
+    assert.equal(fs.readFileSync(path.join(kDir, '客户X物料清单.xlsx'), 'utf8'), 'from-X', '两份都要原样留着')
+    assert.equal(fs.readFileSync(path.join(kDir, '客户Y物料清单.xlsx'), 'utf8'), 'from-Y')
+    assert.ok(rep.keptLegacy.includes('客户K/客户X物料清单.xlsx'), '留下的必须登记，否则永远没人过问')
+    assert.ok(rep.keptLegacy.includes('客户K/客户Y物料清单.xlsx'))
+
+    const txt = fs.readFileSync(path.join(tmpDir, '客户资料归档报告.txt'), 'utf8')
+    assert.match(txt, /保留旧名的客户[^\n]*客户K/, '报告要点名到客户')
+  })
+
+  it('新生成的物料清单也带客户全名', () => {
+    db.execute(
+      "INSERT INTO customer_materials (customer, date, material_name, is_deleted) VALUES (?,?,?,0)",
+      ['客户F', '2024-05-05', 'm1']
+    )
+    db.saveNow()
+
+    syncArchive({ withBackup: false })
+
+    assert.ok(fs.existsSync(list1('客户F')), '生成的应是「客户F物料清单.xlsx」')
+    assert.ok(!fs.existsSync(legacy('客户F')), '不该再生成旧名的物料清单')
+  })
+})
+
+describe('归档报告写失败不能静默', () => {
+  it('报告写不出去时要在 rep 里留痕（否则磁盘上那份旧报告会被当成这次的结论）', () => {
+    mk('客户管理/客户H/物料清单.xlsx', 'legacy-H')
+    const reportAbs = path.join(tmpDir, '客户资料归档报告.txt')
+    // 先放一份「上一次」的报告，模拟真实场景：用户正拿 Excel 开着它 → 本次写失败
+    fs.writeFileSync(reportAbs, '这是上一次的报告，内容早已过时')
+
+    const real = fs.writeFileSync
+    fs.writeFileSync = (p, ...rest) => {
+      if (path.resolve(p) === path.resolve(reportAbs)) {
+        const e = new Error('EBUSY: resource busy or locked')
+        e.code = 'EBUSY'
+        throw e
+      }
+      return real(p, ...rest)
+    }
+    let rep
+    try { rep = syncArchive({ withBackup: false }) } finally { fs.writeFileSync = real }
+
+    assert.ok(rep.reportWriteError, '写失败必须记进 rep，不能空 catch 吞掉')
+    assert.match(rep.reportWriteError, /EBUSY/)
+    // 确认「磁盘上那份是旧内容」这个前提成立 —— 上一条断言若成立而这条不成立，
+    // 说明失败其实是假的（文件被更新了），得回头查测试本身
+    assert.equal(fs.readFileSync(reportAbs, 'utf8'), '这是上一次的报告，内容早已过时')
   })
 })

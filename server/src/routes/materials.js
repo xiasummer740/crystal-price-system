@@ -84,10 +84,16 @@ function renameCustomerFolder(oldName, newName) {
   // 1. 整个客户目录搬家
   const oldDir = A.customerDirAbs(oldName)
   const newDir = A.customerDirAbs(newName)
+  let listFile = null
   if (fs.existsSync(oldDir)) {
     A.ensureDir(newDir)
     moveInto(oldDir, newDir)
     try { if (!fs.readdirSync(oldDir).length) fs.rmdirSync(oldDir) } catch {}
+    // 物料清单得跟着改名：moveInto 是连文件名一起原样搬的，不归位的话
+    // 新目录里会顶着旧客户/被合并客户的名字，等下次启动 syncArchive 才修（那之前只有这一份）。
+    // 失败不留空手：下次启动 syncArchive 会再修一遍，这里负责把话带给用户。
+    try { listFile = A.normalizeArchiveList(newDir, A.archiveListName(newName)) }
+    catch (e) { listFile = { error: e.message } }
   }
 
   // 2. 同步客户名（DB 存原始名，文件夹名才是 sanitize 过的）
@@ -112,7 +118,7 @@ function renameCustomerFolder(oldName, newName) {
   }
 
   triggerBackup('materials')
-  return { movedRows: moved }
+  return { movedRows: moved, listFile }
 }
 
 // 状态清单已挪到 utils/materialStatus.js（全系统唯一来源，含 color/order）。
@@ -437,7 +443,12 @@ router.put('/:id', (req, res) => {
   let renameMsg = ''
   if (b.customer && b.customer !== existing.customer) {
     const info = renameCustomerFolder(existing.customer, b.customer)
-    if (info) renameMsg = `，客户「${existing.customer}」的资料已迁移到「${b.customer}」`
+    if (info) {
+      renameMsg = `，客户「${existing.customer}」的资料已迁移到「${b.customer}」`
+      // 物料清单没归位就说出来 —— 下个启动会再修一遍，但不告诉用户等于没说
+      if (info.listFile?.error) renameMsg += `（⚠️ 物料清单改名失败将下次启动重试：${info.listFile.error}）`
+      else if (info.listFile?.kept?.length) renameMsg += `（⚠️ 物料清单有旧文件未覆盖，请人工确认：${info.listFile.kept.join('、')}）`
+    }
   }
   res.json({ code: 0, msg: '更新成功' + renameMsg })
 })
