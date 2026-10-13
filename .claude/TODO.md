@@ -22,6 +22,42 @@
   ③ 配数据目录 —— 生产数据在本机 `G:\Users\Documents\晶振报价管理系统`，**不在仓库里**，需单独搬或重配 `dataDir`。
 - **一处要改**：`.claude/settings.json` 的 hook 写死了 `C:/Users/Administrator/.claude/hooks/reminder-filter.sh`，
   公司电脑用户名不同就得改（其余配置无 `.env`，不丢东西）。
+  > 补记：本机 `settings.json` 根本不在（`.claude/*` 默认不入库），这条只在家里那台适用。
+
+---
+
+## ✅ 公司电脑落地完成（2026-10-13 实测）· 详见 `docs/公司电脑接力开发-落地记录.md`
+
+**上面第 ③ 条写错了，以这里为准**：本机生产数据**不在** `G:\...`（本机没有 G 盘），而是：
+
+- **生产数据目录 = `D:\software\晶振报价管理系统`**（1101 文件 / 340.6 MB，祥哥**正在用**）
+- 装机版 exe 也在 `D:\software\crystal-price-system\`，其 `%APPDATA%` 配置的 `dataDir` 指向上面这个目录
+- **这台机器同时是开发机和一台在用生产机 → 开发调试绝不能碰那个目录**
+
+**生产库基线指纹**（每次验证后核对）：`data.db` md5 = `9F76631CCDFA01203FFA3BF3673F33FC`，文件数 1101。
+指纹文件在仓库外：`D:\dsh-workspace\晶振报价软件\dev-data\生产库基线指纹.txt`
+
+**两个依赖坑（换电脑必复现，都已解决）**：
+1. `better-sqlite3` —— 从 v1.0.13 起就没被 import 过的废弃依赖，却要编译 C++，导致 server 依赖**全部装不上**。
+   已从 `server/package.json` 删除，删后 `npm install` 干净通过。
+2. Electron 二进制**静默解压失败**（`install.js` 退出 0 但 `dist` 只有一个 LICENSE）。
+   已从本机缓存 zip 手动解压 + 补 `path.txt` 解决，`electron --version` = v33.4.11。
+
+**新的起法（一律走沙箱）**：
+```powershell
+.\scripts\dev-sandbox.ps1 server    # 后端
+.\scripts\dev-sandbox.ps1 app       # 完整 Electron 真机验证
+```
+脚本强制 `DATA_DIR=..\dev-data`，并带护栏：指向生产目录会**拒绝启动**（已实测退出码 1）。
+
+**本机两个环境坑**：① `.ps1` 必须存 **UTF-8 with BOM**，否则 PowerShell 5.1 按 GBK 读中文→语法错；
+② 本机存在 `ELECTRON_RUN_AS_NODE=1`，会让 electron.exe 退化成 Node 不弹窗口（脚本已清）。
+
+**验证结论**：依赖安装 ✅ / 构建 ✅ 26.77s / 后端测试 81 pass ✅ / 前端 3 pass ✅ /
+沙箱后端 ✅ / 沙箱 Electron 真机启动 ✅ / **生产库 md5 与文件数均未变 ✅**。
+
+**待办（本机若要发版才需要）**：本机没装 `gh` CLI，`scripts\release.ps1` 靠 `gh auth token`
+建 Release —— 要在这台机器发版需先装 gh 并 `gh auth login`。
 
 ---
 

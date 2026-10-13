@@ -9,7 +9,6 @@
   "dependencies": {
     "@vitalets/google-translate-api": "^9.2.1",
     "adm-zip": "^0.6.1",
-    "better-sqlite3": "^11.7.0",
     "cors": "^2.8.5",
     "express": "^4.21.0",
     "mammoth": "^1.12.0",
