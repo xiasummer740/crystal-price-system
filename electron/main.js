@@ -1,4 +1,4 @@
-import { app, BrowserWindow, shell, dialog, Menu, Notification, ipcMain, screen } from 'electron'
+import { app, BrowserWindow, shell, dialog, Menu, Notification, ipcMain, screen, nativeImage, clipboard } from 'electron'
 import path from 'path'
 import fs from 'fs'
 import http from 'http'
@@ -919,6 +919,32 @@ ipcMain.handle('open-map-window', () => {
 
 // 浏览器打开外部链接（供渲染进程调用）
 ipcMain.handle('open-external', (_, url) => { shell.openExternal(url) })
+
+// === 复制图片到系统剪贴板 ===
+// 放主进程的理由：渲染进程在 Electron 里写图片剪贴板要过 secure-context 与权限两道，
+// 而 clipboard.writeImage(nativeImage) 是官方路径、没有这些限制。
+// 约定：渲染进程先把图片取成 dataURL，主进程只负责「落到剪贴板」。
+function bufferFromDataUrl(dataUrl) {
+  const m = /^data:([^;,]+)?(;base64)?,(.*)$/s.exec(String(dataUrl || ''))
+  if (!m) throw new Error('不是合法的 dataURL')
+  return m[2]
+    ? Buffer.from(m[3], 'base64')
+    : Buffer.from(decodeURIComponent(m[3]), 'utf8')
+}
+
+ipcMain.handle('image:copy', async (_, { dataUrl, name } = {}) => {
+  try {
+    const img = nativeImage.createFromBuffer(bufferFromDataUrl(dataUrl))
+    if (img.isEmpty()) return { ok: false, msg: '图片内容为空，无法复制' }
+    clipboard.writeImage(img)
+    log(`image:copy 成功（${name || '未命名'}，${img.getSize().width}x${img.getSize().height}）`)
+    return { ok: true }
+  } catch (err) {
+    log(`image:copy 失败: ${err.message}`)
+    return { ok: false, msg: err.message }
+  }
+})
+
 // 规格书：问服务端要磁盘路径，再用系统默认程序打开（像双击文件夹一样）。
 // 归档后规格书散在 客户管理/<客户>/规格书/、报价规格书/<品类>/ 下，主进程不再自己拼路径，
 // 一律交给服务端的 A.resolveUrl（与上传/搬迁用的是同一套规则）。

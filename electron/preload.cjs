@@ -15,6 +15,8 @@ function getLanIp() {
 
 contextBridge.exposeInMainWorld('electronAPI', {
   openExternal: (url) => ipcRenderer.invoke('open-external', url),
+  // 把图片写进系统剪贴板（渲染进程里做要过安全上下文，交主进程最稳）
+  copyImage: (payload) => ipcRenderer.invoke('image:copy', payload),
   openSpec: (url) => ipcRenderer.invoke('open-spec', url),
   openCustomerFolder: (customer) => ipcRenderer.invoke('open-customer-folder', customer),
   getLanIp,

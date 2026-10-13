@@ -269,7 +269,7 @@
                   </div>
                   <input ref="remarkFileInput" type="file" multiple hidden @change="onRemarkFileChange" />
                 </div>
-                <van-image-preview v-model:show="showRPreview" :images="(form.remark_images||[])" :start-position="rPreview" closeable close-on-click-overlay @change="rPreview = $event" />
+                <van-image-preview v-model:show="showRPreview" :images="(form.remark_images||[])" :start-position="rPreview" closeable close-on-click-overlay @change="rPreview = $event" @contextmenu="onPreviewCtx" />
               </div>
             </div>
 
@@ -319,7 +319,8 @@
         @select="onFormStatusSelect" close-on-click-action />
 
       <!-- 主列表备注图片预览 -->
-      <van-image-preview v-model:show="showListPreview" :images="listPreviewImgs" :start-position="listPreviewIdx" closeable close-on-click-overlay @change="listPreviewIdx = $event" />
+      <van-image-preview v-model:show="showListPreview" :images="listPreviewImgs" :start-position="listPreviewIdx" closeable close-on-click-overlay @change="listPreviewIdx = $event" @contextmenu="onPreviewCtx" />
+      <ImageContextMenu ref="ctxMenuRef" />
     </div>
   </transition>
 </template>
@@ -330,6 +331,8 @@ import { useRoute, useRouter } from 'vue-router'
 import { showToast, showConfirmDialog } from 'vant'
 import { fetchMaterials, createMaterial, updateMaterial, deleteMaterial, getMaterialStatusConfig, exportMaterials, importMaterialsExcel, searchAllCustomers, fetchMaterialCustomers, fetchMaterialFactories, uploadMaterialImages, deleteMaterialImage, isLocalFileUrl, fileDisplayName, http } from '../utils/api.js'
 import { STATUS_FALLBACK, statusOrderFromConfig } from '../utils/materialStatus.js'
+// 图片预览右键菜单（复制图片 / 另存为）—— 客户端自带的右键菜单没有「复制图片」
+import ImageContextMenu from '../components/ImageContextMenu.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -754,6 +757,19 @@ function previewRImgs(item) {
   listPreviewImgs.value = item.remark_images || []
   listPreviewIdx.value = 0
   if (listPreviewImgs.value.length) showListPreview.value = true
+}
+
+// 图片预览右键：客户端自带菜单没有「复制图片」，这里接管并弹自己的菜单。
+// ⚠️ 图片 URL **直接从被右键的那个 <img> 上取**（它的 src 就是页面上真正显示的那张），
+// 不要用「数组 + 当前下标」去推 —— 实测那条路会取到空值：
+// 菜单能弹出、但 open() 收到的是空串，点复制才报「没有图片地址」。
+// 取 src 还顺带解决了「左右滑动切图后下标没跟上」的问题。
+const ctxMenuRef = ref(null)
+function onPreviewCtx(e) {
+  e.preventDefault()
+  const img = e.target?.closest?.('.van-image-preview__image')
+  const url = img?.getAttribute('src') || e.target?.getAttribute?.('src')
+  if (url) ctxMenuRef.value?.open(e, url)
 }
 
 function openSpec(url) {
