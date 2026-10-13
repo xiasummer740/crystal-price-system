@@ -1,6 +1,76 @@
 # 🛑 停工快照（手写，非自动生成）
 
-> 2026-09-28 收工 · 当前版本 **v1.0.220（已发版）**
+> 2026-10-14 收工 · 代码到 **ab5c225**，发版停在 **打包环境**这一步
+
+## ⏭️ 下个对话从这里接着干（最重要，先读这段）
+
+**代码全干完了、也全部推上 GitHub 了（远端 = ab5c225，本地领先 0）。唯一没做完的是「发版」。**
+
+### 发版卡在哪（已查明，不是代码问题）
+
+`npm run package` 在 **Windows 打包**这一步失败：
+
+```
+ERROR: Cannot create symbolic link : 客户端没有所需的特权
+  ...\electron-builder\Cache\winCodeSign\...\darwin\10.12\lib\libcrypto.dylib
+```
+
+- **根因**：electron-builder 在 Windows 上打包时**无条件**要下 `winCodeSign` 工具包（**即使我们不签名**）。
+  那个 7z 里含 **2 个 macOS 符号链接**（`darwin/10.12/lib/{libcrypto,libssl}.dylib`），
+  Windows 创建符号链接需要**管理员权限或「开发者模式」**，本机两者都没开 ⇒ 解压失败 ⇒ 整包中止。
+- **不是项目配置问题**：已在该机器上验证过 `sign:false` / `forceCodeSigning:false` 都**不能**阻止它下载。
+- **不是网络问题**（这条已解决）：GitHub 被墙，`npm run package` 必须带代理环境变量：
+  ```powershell
+  $env:HTTP_PROXY="http://127.0.0.1:10808"; $env:HTTPS_PROXY="http://127.0.0.1:10808"
+  ```
+  带上后 Electron 二进制那 110MB 能下（v1.0.220 用的 electron 33.4.11，
+  本机 `%LOCALAPPDATA%\electron\Cache` 里本来就有这个 zip）。
+  注意 `ELECTRON_CACHE` 环境变量**不生效**（electron-builder 用自己的缓存目录结构）。
+
+### 下一步怎么做（两条路，任选）
+
+**路 A（推荐，一次性）**：开 Windows「开发者模式」→ 之后打包不再卡
+- 这台机器 `admin` **在 Administrators 组里**（只是当前进程没提权），所以开得了
+- 管理员 PowerShell 跑：
+  ```powershell
+  reg add "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\AppModelUnlock" /t REG_DWORD /f /v AllowDevelopmentWithoutDevLicense /d 1
+  ```
+  或 设置 → 隐私和安全性 → 开发者选项 → 开发人员模式
+- 可能需要重启
+
+**路 B（已在本机验证可行的手工绕法）**：把 winCodeSign **排除掉 darwin 目录**手工解压到 electron-builder 的缓存里：
+```powershell
+$cache="$env:LOCALAPPDATA\electron-builder\Cache\winCodeSign"
+$seven="<repo>\node_modules\7zip-bin\win\x64\7za.exe"
+$arc=Get-ChildItem $cache -Filter *.7z | Select-Object -First 1
+$dest=Join-Path $cache ([IO.Path]::GetFileNameWithoutExtension($arc.Name))
+& $seven x -bd "-x!darwin" $arc.FullName "-o$dest"     # ← 实测退出码 0、Windows 工具齐备
+```
+（`-x!darwin` 是关键：排除那两个 macOS 软链就能干净解压。
+**注意 `-snl` 语义相反**——它是"把符号链接存为链接"，用了照样失败。）
+
+### 打包通了之后要做的
+
+1. **先备份祥哥的数据**：`D:\software\晶振报价管理系统` → 复制一份留底（340MB）
+2. 装 `gh` CLI（`winget install GitHub.cli`）并 `gh auth login`（走手机设备码）
+   —— `scripts/release.ps1` 靠 `gh auth token` 建 Release
+3. `npm run release -- 1.0.221`（会：bump 版本 → 打包 → tag → push → 上传
+   **安装包 / blockmap / latest.yml** 三样，缺一在线更新就会失败）
+4. 在沙箱验证「检查更新」能发现 1.0.221
+
+### 数据安全（已逐条查证，可放心）
+
+祥哥最关心「更新会不会丢数据」。查了 `build/installer.nsh` + `electron/updater.js`：
+- 更新走「运行新版安装包」，**不执行卸载器**；删数据那段（`RMDir /r`）只在**卸载**流程里
+- `data-dir.txt` 已存在 ⇒ 安装器**跳过**改数据目录那步
+- 数据在 `D:\software\晶振报价管理系统`，**不在程序安装目录内**
+- 即便真跑卸载器：删前要在目标目录找到 `data.db`/`.crystal-marker`，两次确认**默认都是「否/保留」**
+
+> 结论：**在线更新不会丢数据**。但仍建议先备份（第 1 步）。
+
+---
+
+> 2026-09-28 的 v1.0.220 已发版，那份交接见根目录 `handoff-v1.0.220.md`。
 
 **停在哪**：v1.0.220 全流程走完——开发 ✅ 单测 ✅ 真机验证 ✅ 独立对抗复审 ✅ 发版 ✅。
 无半截活。详细交接见根目录 `handoff-v1.0.220.md`。

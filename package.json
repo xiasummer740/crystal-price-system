@@ -70,6 +70,8 @@
     ],
     "win": {
       "icon": "client/public/SJK-256.png",
+      "sign": false,
+      "forceCodeSigning": false,
       "target": [
         {
           "target": "nsis",

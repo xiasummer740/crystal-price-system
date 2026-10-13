@@ -17,6 +17,13 @@ extraResources:
     to: scripts
 win:
   icon: client/public/SJK-256.png
+  # 本程序不签名（无代码签名证书）。显式声明可让 electron-builder 跳过
+  # winCodeSign 工具的下载与解压 —— 那个 7z 里含 macOS 的符号链接（.dylib），
+  # 在未开「开发者模式」的非管理员环境下解压会失败：
+  #   ERROR: Cannot create symbolic link : 客户端没有所需的特权
+  # 从而整包构建失败。关掉签名后不再需要该工具。
+  sign: false
+  forceCodeSigning: false
   target:
     - target: portable
       arch: [x64]
