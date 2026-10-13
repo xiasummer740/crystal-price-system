@@ -354,8 +354,10 @@ async function searchCustomers() {
   const kw = (store.filters.keyword || '').trim()
   if (!kw) { customerHints.value = []; return }
   try {
-    const r = await http.get('/notes/customers/search', { params: { keyword: kw } })
-    customerHints.value = r.data?.data || []
+    const r = await http.get('/customers/suggest', { params: { keyword: kw } })
+    // ⚠️ api.js 拦截器 return res.data，所以 r 就是响应体，候选在 r.data（原先这里写 r.data.data，
+    //    多了一层 → 恒为 undefined，联想其实一直是哑的）
+    customerHints.value = r.data || []
   } catch { customerHints.value = [] }
 }
 function onPickCustomer(h) {

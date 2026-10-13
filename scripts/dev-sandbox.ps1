@@ -100,6 +100,35 @@ if ($dbInfo) { Write-Host "  沙箱库最后写: $($dbInfo.LastWriteTime)" }
 Write-Host "  生产目录    : $ProdDataDir  （本脚本不碰）" -ForegroundColor DarkGray
 Write-Host ''
 
+# ===== 护栏 4：生产端口被装机版占着时必须拦下来 =====
+# 2026-10-13 的血账：装机版当时正开着（占着 3266），我跑「沙箱实证」时没确认端口归属，
+# 请求全打到正式软件上，往生产库写了两条测试记录。
+# 光有 DATA_DIR 不够 —— 端口被占时沙箱端口会往后顺延，而按 3266 写死的脚本照样连到生产。
+# 所以这里显式检查：3266 被非本沙箱进程占着，就拒绝启动。
+$prodPort = 3266
+$owner = Get-NetTCPConnection -State Listen -LocalPort $prodPort -ErrorAction SilentlyContinue | Select-Object -First 1
+if ($owner) {
+    $proc = Get-CimInstance Win32_Process -Filter "ProcessId=$($owner.OwningProcess)" -ErrorAction SilentlyContinue
+    $pname = $proc.Name; $pcmd = $proc.CommandLine
+    $isOurSandbox = $pcmd -and ($pcmd -like "*$DataDir*" -or $pcmd -like '*dev-data*')
+    if (-not $isOurSandbox) {
+        Write-Host ''
+        Write-Host "  [拒绝启动] 端口 $prodPort 已被别的进程占用，而它不像本沙箱实例：" -ForegroundColor Red
+        Write-Host "      PID $($owner.OwningProcess)  $pname" -ForegroundColor Red
+        if ($pcmd) { Write-Host "      $($pcmd.Substring(0, [Math]::Min(120, $pcmd.Length)))" -ForegroundColor DarkGray }
+        Write-Host ''
+        Write-Host '  这多半是「装机版软件」正开着（那里面是祥哥的正式数据）。' -ForegroundColor Yellow
+        Write-Host '  直接往下跑，按 3266 写死的验证脚本会连到正式数据上，而不是沙箱。' -ForegroundColor Yellow
+        Write-Host ''
+        Write-Host '  处理办法（任选）：' -ForegroundColor Yellow
+        Write-Host '    ① 先关掉装机版软件，再重跑本脚本' -ForegroundColor Yellow
+        Write-Host '    ② 或者换端口： -Port 3399，并让验证脚本也用 3399' -ForegroundColor Yellow
+        Write-Host ''
+        exit 1
+    }
+    Write-Host "  提示：$prodPort 已被本沙箱实例占用（PID $($owner.OwningProcess)），继续。" -ForegroundColor DarkGray
+}
+
 # ===== 关键：清掉这两个会捣乱的环境变量 =====
 # ELECTRON_RUN_AS_NODE=1 会让 electron.exe 退化成纯 Node 执行器（不弹窗口），
 # 在 agent/DSH 终端里常被注入；接力开发手动开终端时一般没有，但清掉更稳。

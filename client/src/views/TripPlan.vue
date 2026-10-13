@@ -177,7 +177,7 @@ import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { showToast, showConfirmDialog } from 'vant'
 import {
-  fetchMapCustomers, fetchTripPlans, getTripPlan, createTripPlan, updateTripPlan, deleteTripPlan,
+  fetchMapCustomers, suggestCustomers, fetchTripPlans, getTripPlan, createTripPlan, updateTripPlan, deleteTripPlan,
   getTripPoints, createTripPoint, updateTripPoint, deleteTripPoint, reorderTripPoints
 } from '../utils/api.js'
 import draggable from 'vuedraggable'
@@ -402,8 +402,22 @@ async function onPointSearch() {
   if (!kw) { pointSearchResults.value = []; return }
   pointSearchTimer = setTimeout(async () => {
     try {
+      // 地图客户（带坐标，可直接规划路线）
       const r = await fetchMapCustomers({ keyword: kw })
-      pointSearchResults.value = (r.data || []).slice(0, 10)
+      const mapRows = (r.data || [])
+      // 统一客户名入口：把「还没进地图的客户」也带出来，否则在别处建的客户这里搜不到。
+      // 这些没有坐标，只能按名字加到途经点（和手动添加同一条路）。
+      let unified = []
+      try {
+        const u = await suggestCustomers(kw, 10)
+        // ⚠️ api.js 的响应拦截器 return res.data，候选在 u.data（不是 u.data.data）
+        unified = (u?.data || []).filter(x => x.name)
+      } catch {}
+      const seen = new Set(mapRows.map(c => c.name))
+      const extra = unified
+        .filter(x => !seen.has(x.name))
+        .map(x => ({ id: 0, name: x.name, address: '', latitude: null, longitude: null, phone: '', _noGeo: true }))
+      pointSearchResults.value = [...mapRows, ...extra].slice(0, 12)
     } catch { pointSearchResults.value = [] }
   }, 300)
 }

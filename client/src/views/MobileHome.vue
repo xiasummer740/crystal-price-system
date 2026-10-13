@@ -110,7 +110,14 @@
           <van-field v-model="filterForm.mode" label="模式" placeholder="如：基频" clearable />
           <van-field v-model="filterForm.material_code" label="物料编码" placeholder="物料编码" clearable />
           <van-field v-model="filterForm.standard_lead_time" label="交期" placeholder="如：4周" clearable />
-          <van-field v-model="filterForm.first_inquiry_customer" label="客户" placeholder="客户名称" clearable />
+          <van-field v-model="filterForm.first_inquiry_customer" label="客户" placeholder="客户名称" clearable
+            @update:model-value="onCustInput" @focus="onCustInput" @blur="onCustBlur" />
+          <!-- 客户名联想：走统一名册（客户物料/记事/地图/报价里录过的都能搜到） -->
+          <div class="cust-sug" v-if="showCustSug && custHints.length">
+            <div v-for="c in custHints" :key="c.name" class="cs-item" @mousedown.prevent="pickCust(c.name)">
+              {{ c.name }}
+            </div>
+          </div>
         </div>
         <div class="filter-btns">
           <van-button block type="primary" @click="applyFilter">应用筛选</van-button>
@@ -164,7 +171,7 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { usePriceStore } from '../stores/price.js'
-import { http } from '../utils/api.js'
+import { http, suggestCustomers } from '../utils/api.js'
 import { showToast } from 'vant'
 
 const store = usePriceStore()
@@ -178,6 +185,26 @@ const summaryData = ref(null)
 const currencyColumns = [{ text: '人民币 (CNY)', value: 'CNY' }, { text: '美元 (USD)', value: 'USD' }, { text: '全部', value: '' }]
 
 const filterForm = ref({ factory: '', quoter: '', currency: '', startDate: '', endDate: '', brand: '', dimension: '', frequency: '', mode: '', material_code: '', standard_lead_time: '', first_inquiry_customer: '' })
+
+// ===== 客户名联想（统一名册）=====
+const custHints = ref([])
+const showCustSug = ref(false)
+let custTimer = null
+function onCustInput() {
+  clearTimeout(custTimer)
+  const kw = String(filterForm.value.first_inquiry_customer || '').trim()
+  if (!kw) { custHints.value = []; showCustSug.value = false; return }
+  custTimer = setTimeout(async () => {
+    try {
+      const r = await suggestCustomers(kw, 8)
+      // 拦截器 return res.data ⇒ 候选在 r.data
+      custHints.value = r?.data || []
+      showCustSug.value = custHints.value.length > 0
+    } catch { custHints.value = [] }
+  }, 300)
+}
+function onCustBlur() { setTimeout(() => { showCustSug.value = false }, 200) }
+function pickCust(name) { filterForm.value.first_inquiry_customer = name; showCustSug.value = false }
 const quickActive = ref({})
 const quickFilters = ref([])
 const showAdvFilter = ref(false)
@@ -404,4 +431,9 @@ onUnmounted(() => { stopAutoRefresh(); document.removeEventListener('visibilityc
 .sum-date { font-size:11px; color:#999; min-width:68px; }
 .sum-price { font-weight:600; color:#e53935; flex:1; }
 .sum-lead { font-size:10px; color:#999; }
+/* 客户名联想（筛选弹层内） */
+.cust-sug { margin: 0 16px 8px; background:#fff; border:1px solid #ebedf0; border-radius:0 0 8px 8px; box-shadow:0 4px 16px rgba(0,0,0,.08); max-height:180px; overflow-y:auto; }
+.cust-sug .cs-item { padding:10px 12px; font-size:13px; color:#323233; border-bottom:1px solid #f7f8fa; }
+.cust-sug .cs-item:last-child { border-bottom:none; }
+.cust-sug .cs-item:active { background:#f5f6f8; }
 </style>

@@ -4,6 +4,8 @@ import fs from 'fs'
 import { queryAll, queryOne, execute } from '../db.js'
 import * as A from '../utils/customerArchive.js'
 import { pageParams } from '../utils/paging.js'
+// 客户名统一名册（读并集 / 写入名册）
+import { upsertMany, resolveSuggest, listAll } from '../utils/customerNames.js'
 
 // 统一处理：将「未命名」标题转为空，前端自行决定如何显示
 function cleanNote(row) {
@@ -106,36 +108,15 @@ router.post('/import', importUpload.single('file'), async (req, res) => {
 
 // ========== 记事 CRUD ==========
 
-// 返回客户名列表（customers 表 + notes 表已有客户，去重合并）
+// 返回客户名列表（统一并集：名册 ∪ 记事 ∪ 客户物料 ∪ 报价 ∪ 地图）
+// 从前这里只查 customers + notes，所以「客户物料里新建的客户」在记事页查无此人。
 router.get('/customers/list', (_req, res) => {
-  const rows = queryAll(`
-    SELECT name FROM customers WHERE name != ''
-    UNION
-    SELECT DISTINCT customer FROM notes WHERE is_deleted = 0 AND customer IS NOT NULL AND customer != ''
-    ORDER BY name ASC LIMIT 500
-  `)
-  res.json({ code: 0, data: rows.map(r => r.name) })
+  res.json({ code: 0, data: listAll().map(r => r.name) })
 })
 
 // 搜索客户名（模糊搜索，附该客户的记事数）
 router.get('/customers/search', (req, res) => {
-  const keyword = (req.query.keyword || '').trim()
-  if (!keyword) return res.json({ code: 0, data: [] })
-  const kw = `%${keyword}%`
-  const rows = queryAll(`
-    SELECT c.name, COALESCE(n.cnt, 0) as note_count
-    FROM (
-      SELECT name FROM customers WHERE name != '' AND name LIKE ?
-      UNION
-      SELECT DISTINCT customer as name FROM notes WHERE is_deleted = 0 AND customer IS NOT NULL AND customer != '' AND customer LIKE ?
-    ) c
-    LEFT JOIN (
-      SELECT customer, COUNT(*) as cnt FROM notes WHERE is_deleted = 0 AND customer IS NOT NULL AND customer != '' GROUP BY customer
-    ) n ON c.name = n.customer
-    ORDER BY n.cnt DESC, c.name ASC
-    LIMIT 10
-  `, [kw, kw])
-  res.json({ code: 0, data: rows })
+  res.json({ code: 0, data: resolveSuggest(req.query.keyword, req.query.limit) })
 })
 
 // 从 Excel 导入客户名（只导入"客户"列，去重）
@@ -153,12 +134,10 @@ router.post('/customers/import-excel', excelUpload.single('file'), (req, res) =>
     const custKey = keys.find(k => k.includes('客户')) || keys[0]
     const names = [...new Set(json.map(r => String(r[custKey]).trim()).filter(Boolean))]
 
-    let imported = 0
-    for (const name of names) {
-      try { execute('INSERT OR IGNORE INTO customers (name, source) VALUES (?, ?)', [name, 'excel']); imported++ }
-      catch {}
-    }
-    res.json({ code: 0, data: { total: names.length, imported }, msg: `共 ${names.length} 个客户，导入 ${imported} 个` })
+    // 统一走名册模块：去重、跳过空名、只在真有新增时落盘。
+    // （原实现无论是否插入成功都 imported++，所以那个计数其实不准）
+    const imported = upsertMany(names, 'excel')
+    res.json({ code: 0, data: { total: names.length, imported }, msg: `共 ${names.length} 个客户，新增 ${imported} 个` })
   } catch (e) {
     console.error('[import-customers]', e)
     res.status(500).json({ code: 1, msg: '导入失败: ' + e.message })
@@ -251,6 +230,8 @@ router.post('/', (req, res) => {
     b.status || 'todo',
     b.is_pinned ? 1 : 0
   ])
+  // 新录入的客户名进统一名册（记事里第一次出现的客户，别处也该搜得到）
+  upsertMany([b.customer], 'note')
   res.json({ code: 0, data: { id: r.lastInsertRowid } })
 })
 
@@ -297,6 +278,8 @@ router.put('/:id', (req, res) => {
     b._updates ?? existing.updates ?? '[]',
     Number(req.params.id)
   ])
+  // 编辑时改了客户名（或原值不在名册里）→ 补进统一名册
+  upsertMany([b.customer ?? existing.customer], 'note')
   res.json({ code: 0, msg: '更新成功' })
 })
 

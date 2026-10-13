@@ -782,12 +782,13 @@ async function searchCustomerSuggest() {
   // 从地图现有客户中匹配
   const mapNames = customers.value.map(c => c.name).filter(Boolean);
 
-  // 同时从记事客户 API 搜索
+  // 同时从统一客户名入口搜索（并集：名册 ∪ 记事 ∪ 客户物料 ∪ 报价 ∪ 地图）
   let noteNames = [];
   if (kw) {
     try {
-      const r = await http.get('/notes/customers/search', { params: { keyword: kw } });
-      const notes = r.data?.data || [];
+      const r = await http.get('/customers/suggest', { params: { keyword: kw } });
+      // ⚠️ api.js 拦截器 return res.data ⇒ 候选在 r.data（原先写 r.data.data，多了一层，恒为空）
+      const notes = r.data || [];
       noteNames = notes
         .filter(n => n.name)
         .map(n => n.name);

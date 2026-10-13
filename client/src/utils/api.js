@@ -359,6 +359,22 @@ export function searchAllCustomers(keyword) {
 export function fetchMaterialCustomers() {
   return http.get('/materials/customers/list')
 }
+
+// ===== 客户名统一入口（所有页面的联想/下拉都该走这里）=====
+// 查询范围 = customers 名册 ∪ 记事 ∪ 客户物料 ∪ 报价 ∪ 地图（并集），
+// 所以不管客户名是在哪个页面录进去的，这里都能搜到。
+// 返回项形如 { name, material_count, quote_count, note_count, map_count, total_count }
+export function suggestCustomers(keyword, limit) {
+  return http.get('/customers/suggest', { params: { keyword, limit } })
+}
+/** 取全部客户名（字符串数组），给下拉/网格用 */
+export function fetchAllCustomerNames() {
+  return http.get('/customers/list', { params: { limit_as_list: 1 } })
+}
+/** 取全部客户名（对象数组，带各来源计数） */
+export function fetchAllCustomersDetailed() {
+  return http.get('/customers/list')
+}
 export function fetchMaterialFactories(customer) {
   return http.get('/materials/factories/list', { params: { customer } })
 }

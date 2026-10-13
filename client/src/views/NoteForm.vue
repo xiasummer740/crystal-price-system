@@ -109,7 +109,7 @@
 import { ref, reactive, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { showToast, showConfirmDialog } from 'vant'
-import { getNote, createNote, updateNote, uploadNoteImages, deleteNoteImage, fetchCategories, fetchNoteCustomers } from '../utils/api.js'
+import { getNote, createNote, updateNote, uploadNoteImages, deleteNoteImage, fetchCategories, fetchAllCustomerNames } from '../utils/api.js'
 import NoteCategories from './NoteCategories.vue'
 
 const route = useRoute()
@@ -190,7 +190,8 @@ onMounted(async () => {
     categories.value = r.data || []
   } catch { categories.value = [] }
   try {
-    const r = await fetchNoteCustomers()
+    // 统一客户名入口：含客户物料/报价/地图里录过的客户，不再只有 customers+notes
+    const r = await fetchAllCustomerNames()
     customerList.value = r.data || []
   } catch {}
 

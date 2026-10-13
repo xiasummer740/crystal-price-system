@@ -1,6 +1,8 @@
 import { Router } from "express";
 import { queryAll, queryOne, execute } from "../db.js";
 import { exportMapCustomers } from "../utils/export.js";
+// 客户名统一名册（新建/改名/导入都要进名册）
+import { upsertMany, listAll } from "../utils/customerNames.js";
 import https from "https";
 
 const router = Router();
@@ -77,13 +79,8 @@ router.post("/customers", (req, res) => {
         b.source || "manual",
       ],
     );
-    // 同步写入 notes 的 customers 表
-    try {
-      execute("INSERT OR IGNORE INTO customers (name, source) VALUES (?, ?)", [
-        b.name,
-        "map",
-      ]);
-    } catch {}
+    // 同步写入统一客户名册
+    try { upsertMany([b.name], "map") } catch {}
     res.json({ code: 0, data: { id: r.lastInsertRowid } });
   } catch (e) {
     if (e.message?.includes("UNIQUE"))
@@ -111,14 +108,9 @@ router.put("/customers/:id", (req, res) => {
       Number(req.params.id),
     ],
   );
-  // 同步更新 customers 表
+  // 同步更新统一客户名册
   if (b.name && b.name !== existing.name) {
-    try {
-      execute("INSERT OR IGNORE INTO customers (name, source) VALUES (?, ?)", [
-        b.name,
-        "map",
-      ]);
-    } catch {}
+    try { upsertMany([b.name], "map") } catch {}
   }
   res.json({ code: 0, msg: "更新成功" });
 });
@@ -135,30 +127,21 @@ router.delete("/customers/:id", (req, res) => {
 
 // 从记事导入客户名
 router.post("/customers/import", (_req, res) => {
-  const rows = queryAll(`
-    SELECT name FROM customers WHERE name != ''
-    UNION
-    SELECT DISTINCT customer as name FROM notes WHERE is_deleted = 0 AND customer IS NOT NULL AND customer != ''
-    ORDER BY name ASC
-  `);
+  // 客户名来源收敛到统一并集（名册 ∪ 记事 ∪ 客户物料 ∪ 报价 ∪ 地图）。
+  // 从前这里只查 customers + notes，所以「客户物料里建的客户」根本没被导进地图。
+  const names = listAll().map(r => r.name).filter(Boolean);
   let imported = 0;
-  for (const row of rows) {
-    if (!row.name) continue;
-    const existing = queryOne("SELECT id FROM map_customers WHERE name = ?", [
-      row.name,
-    ]);
+  for (const name of names) {
+    const existing = queryOne("SELECT id FROM map_customers WHERE name = ?", [name]);
     if (!existing) {
-      execute("INSERT INTO map_customers (name, source) VALUES (?, ?)", [
-        row.name,
-        "notes",
-      ]);
+      execute("INSERT INTO map_customers (name, source) VALUES (?, ?)", [name, "sync"]);
       imported++;
     }
   }
   res.json({
     code: 0,
-    data: { total: rows.length, imported },
-    msg: `共 ${rows.length} 个客户名，导入 ${imported} 个`,
+    data: { total: names.length, imported },
+    msg: `共 ${names.length} 个客户名，导入 ${imported} 个`,
   });
 });
 

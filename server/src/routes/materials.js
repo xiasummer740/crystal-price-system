@@ -9,6 +9,8 @@ import { STATUS_CONFIG } from '../utils/materialStatus.js'
 import { pageParams } from '../utils/paging.js'
 import { triggerBackup } from '../utils/excelBackup.js'
 import * as A from '../utils/customerArchive.js'
+// 客户名统一名册：读用并集（suggest/listAll），写用 upsert（任何录入点都进名册）
+import { upsertMany, resolveSuggestWithMaterialMatch, listAll } from '../utils/customerNames.js'
 
 const router = Router()
 
@@ -128,33 +130,11 @@ function renameCustomerFolder(oldName, newName) {
 
 // 搜索全系统所有客户名 + 支持物料型号/编码匹配
 // 输入客户名 → 匹配客户；输入型号/编码 → 匹配到该物料所属客户
+// 查询范围收敛到 customerNames.resolveSuggestWithMaterialMatch（并集 5 张表），
+// 各页面共用同一份实现 —— 从前这里是全系统唯一做全的接口，别的页面各读各的，
+// 才会出现「客户物料里建的客户，记事/地图搜不到」。
 router.get('/customers/search', (req, res) => {
-  const keyword = (req.query.keyword || '').trim()
-  if (!keyword) return res.json({ code: 0, data: [] })
-  const kw = `%${keyword}%`
-  const rows = queryAll(`
-    SELECT DISTINCT name, 0 as material_count FROM (
-      SELECT name FROM customers WHERE name != '' AND name LIKE ?
-      UNION
-      SELECT DISTINCT customer FROM notes WHERE is_deleted = 0 AND customer IS NOT NULL AND customer != '' AND customer LIKE ?
-      UNION
-      SELECT DISTINCT first_inquiry_customer FROM material_prices WHERE is_deleted = 0 AND first_inquiry_customer IS NOT NULL AND first_inquiry_customer != '' AND first_inquiry_customer LIKE ?
-      UNION
-      SELECT DISTINCT name FROM map_customers WHERE name != '' AND name LIKE ?
-      UNION
-      SELECT DISTINCT customer FROM customer_materials WHERE is_deleted = 0 AND customer IS NOT NULL AND customer != '' AND customer LIKE ?
-      -- 物料型号/编码匹配 → 返回所属客户
-      UNION
-      SELECT DISTINCT customer FROM customer_materials WHERE is_deleted = 0 AND customer IS NOT NULL AND customer != ''
-        AND (customer_code LIKE ? OR jkx_code LIKE ? OR material_code LIKE ? OR material_name LIKE ? OR customer_desc LIKE ?)
-      UNION
-      SELECT DISTINCT first_inquiry_customer FROM material_prices WHERE is_deleted = 0 AND first_inquiry_customer IS NOT NULL AND first_inquiry_customer != ''
-        AND (material_code LIKE ? OR material_spec LIKE ? OR material_name LIKE ? OR spec_document LIKE ?)
-    ) src
-    ORDER BY name ASC
-    LIMIT 20
-  `, [kw, kw, kw, kw, kw, kw, kw, kw, kw, kw, kw, kw, kw])
-  res.json({ code: 0, data: rows })
+  res.json({ code: 0, data: resolveSuggestWithMaterialMatch(req.query.keyword, req.query.limit) })
 })
 
 // ========== CRUD ==========
@@ -231,17 +211,14 @@ router.get('/', (req, res) => {
   res.json({ code: 0, data: { list: rows, total, page: pg.page, pageSize: pg.pageSize } })
 })
 
-// 获取有物料的客户列表（含物料数）
+// 客户列表（供客户下拉/网格）
+// ⚠️ 这里**不能**只返回「有物料的客户」：那样在记事/报价/地图里建过、
+//    但客户物料下还没有记录的客户，在这个下拉里就查无此人 ——
+//    而这些恰恰是"打通"要覆盖的对象。按各来源记录数排序（有物料的自然排前面），
+//    每条带 material_count，调用方想区分"有没有物料"自己看这个字段。
 router.get('/customers/list', (_req, res) => {
-  const rows = queryAll(`
-    SELECT customer, COUNT(*) as material_count
-    FROM customer_materials
-    WHERE is_deleted = 0 AND customer IS NOT NULL AND customer != ''
-    GROUP BY customer
-    ORDER BY material_count DESC, customer ASC
-    LIMIT 200
-  `)
-  res.json({ code: 0, data: rows })
+  const rows = listAll()
+  res.json({ code: 0, data: rows.map(r => ({ customer: r.name, material_count: r.material_count })) })
 })
 
 // 获取工厂列表（去重，供筛选）
@@ -323,6 +300,8 @@ router.post('/import', excelUpload.single('file'), (req, res) => {
       imported++
     }
     triggerBackup('materials')
+    // 导入进来的客户名也要进统一名册
+    upsertMany(json.map(row => row['客户']), 'material-import')
     res.json({ code: 0, data: { count: imported }, msg: `成功导入 ${imported} 条记录` })
   } catch (e) {
     console.error('[materials-import]', e)
@@ -396,6 +375,8 @@ router.post('/', (req, res) => {
     remarkImages
   ])
   triggerBackup('materials')
+  // 新录入的客户名要进统一名册，否则别的页面搜不到它
+  upsertMany([b.customer], 'material')
   res.json({ code: 0, data: { id: r.lastInsertRowid } })
 })
 
@@ -438,10 +419,13 @@ router.put('/:id', (req, res) => {
     Number(req.params.id)
   ])
   triggerBackup('materials')
+  // 编辑时可能改客户名（或原值就是别处没有的名字）→ 一并进名册
+  upsertMany([b.customer ?? existing.customer], 'material')
 
   // 客户改名 → 整个客户目录整组迁移 + 同步该客户全部物料/记事
   let renameMsg = ''
   if (b.customer && b.customer !== existing.customer) {
+    upsertMany([b.customer], 'material')
     const info = renameCustomerFolder(existing.customer, b.customer)
     if (info) {
       renameMsg = `，客户「${existing.customer}」的资料已迁移到「${b.customer}」`

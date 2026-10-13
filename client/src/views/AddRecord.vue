@@ -128,7 +128,16 @@
             </van-cell>
             <input ref="specFileInput" type="file" hidden @change="onSpecUpload" />
           </div>
-          <van-field v-model="form.first_inquiry_customer" label="初次询价客户" placeholder="如：某某科技" />
+          <van-field v-model="form.first_inquiry_customer" label="初次询价客户" placeholder="如：某某科技"
+            @update:model-value="onCustomerInput" @focus="onCustomerFocus" @blur="onCustomerBlur" />
+          <!-- 客户名联想：走统一名册（客户物料/记事/地图/报价里录过的客户都能搜到）。
+               这里从前是纯文本框、没有任何联想，等于每次都要手打全名。 -->
+          <div class="cust-suggest" v-if="showCustomerSuggest && customerHints.length">
+            <div v-for="c in customerHints" :key="c.name" class="cs-item" @mousedown.prevent="pickCustomer(c.name)">
+              <span class="cs-name">{{ c.name }}</span>
+              <span class="cs-meta">{{ customerHintMeta(c) }}</span>
+            </div>
+          </div>
           <div class="remark-zone" @dragover.prevent @drop.prevent="onRemarkDrop" @paste="onRemarkPaste">
             <van-field v-model="form.remarks" label="备注" placeholder="其他备注（可粘贴图片/文件记录报价原始记录）" type="textarea" rows="2" autosize />
             <div v-if="(form.remark_images||[]).length" class="rimg-grid">
@@ -172,7 +181,7 @@ import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter, onBeforeRouteLeave } from 'vue-router'
 import { usePriceStore } from '../stores/price.js'
 import { showToast, showLoadingToast, closeToast, showConfirmDialog } from 'vant'
-import { http, uploadPriceImages, deletePriceImage, isLocalFileUrl, fileDisplayName } from '../utils/api.js'
+import { http, uploadPriceImages, deletePriceImage, isLocalFileUrl, fileDisplayName, suggestCustomers } from '../utils/api.js'
 
 const route = useRoute()
 const router = useRouter()
@@ -192,6 +201,39 @@ const form = ref({
   factory_code:'', quoter:'', standard_lead_time:'', min_package:'', spec_document:'',
   first_inquiry_customer:'', remarks:'', remark_images:[]
 })
+
+// ===== 客户名联想（统一名册）=====
+const customerHints = ref([])
+const showCustomerSuggest = ref(false)
+let customerTimer = null
+function onCustomerInput() {
+  clearTimeout(customerTimer)
+  const kw = String(form.value.first_inquiry_customer || '').trim()
+  showCustomerSuggest.value = true
+  if (!kw) { customerHints.value = []; return }
+  customerTimer = setTimeout(async () => {
+    try {
+      const r = await suggestCustomers(kw, 10)
+      // ⚠️ api.js 的响应拦截器 return res.data，所以 r 就是响应体：候选在 r.data，不是 r.data.data
+      customerHints.value = r?.data || []
+    } catch { customerHints.value = [] }
+  }, 300)
+}
+function onCustomerFocus() { if (customerHints.value.length) showCustomerSuggest.value = true }
+function onCustomerBlur() { setTimeout(() => { showCustomerSuggest.value = false }, 200) }
+function pickCustomer(name) {
+  form.value.first_inquiry_customer = name
+  showCustomerSuggest.value = false
+}
+/** 提示里显示「该客户在系统里有多少条记录」，帮用户区分同名/选对那个 */
+function customerHintMeta(c) {
+  const parts = []
+  if (c.material_count) parts.push(`物料 ${c.material_count}`)
+  if (c.quote_count) parts.push(`报价 ${c.quote_count}`)
+  if (c.note_count) parts.push(`记事 ${c.note_count}`)
+  if (c.map_count) parts.push(`地图 ${c.map_count}`)
+  return parts.join(' · ') || '仅名称'
+}
 
 // ===== 未保存检测 =====
 const formDirty = ref(false)
@@ -481,4 +523,11 @@ async function onSubmitNew() {
 .rimg-add { padding: 6px 14px; border: 1px dashed #c8c9cc; border-radius: 6px; background: #fff; color: var(--color-primary); font-size: 12px; cursor: pointer; }
 .rimg-add:hover { border-color: var(--color-primary); }
 .rimg-hint { font-size: 10px; color: #bbb; }
+
+/* 客户名联想下拉 */
+.cust-suggest { position: relative; z-index: 30; margin: -8px 16px 8px; background: #fff; border: 1px solid #e5e6eb; border-radius: 0 0 8px 8px; box-shadow: 0 6px 20px rgba(0,0,0,.1); max-height: 220px; overflow-y: auto; }
+.cust-suggest .cs-item { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 12px; font-size: 13px; color: #323233; cursor: pointer; }
+.cust-suggest .cs-item:hover { background: #f5f6f8; }
+.cust-suggest .cs-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cust-suggest .cs-meta { flex-shrink: 0; font-size: 11px; color: #969799; }
 </style>

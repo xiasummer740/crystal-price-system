@@ -21,6 +21,8 @@ import { triggerBackup, flushPending } from './utils/excelBackup.js'
 import * as A from './utils/customerArchive.js'
 import { syncArchive } from './utils/archiveSync.js'
 import * as logger from './utils/logger.js'
+// 客户名统一名册：/api/customers/* 是所有页面共用的客户名联想/下拉入口
+import { resolveSuggest, listAll, syncFromAllTables } from './utils/customerNames.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const app = express()
@@ -96,6 +98,18 @@ app.use('/api/logs', logsRouter)
 app.use('/api/map', mapRouter)
 app.use('/api/performance', performanceRouter)
 app.use('/api/materials', materialsRouter)
+
+// ===== 客户名统一入口（所有页面的联想/下拉都走这里）=====
+// 查询范围是「customers 名册 ∪ 记事 ∪ 客户物料 ∪ 报价 ∪ 地图」的并集，
+// 所以不管客户名是在哪个页面录进去的，这里都能搜到。
+// limit_as_list=1 时返回纯名字数组，方便直接塞进下拉。
+app.get('/api/customers/suggest', (req, res) => {
+  res.json({ code: 0, data: resolveSuggest(req.query.keyword, req.query.limit) })
+})
+app.get('/api/customers/list', (req, res) => {
+  const rows = listAll(req.query.limit)
+  res.json({ code: 0, data: req.query.limit_as_list === '1' ? rows.map(r => r.name) : rows })
+})
 
 // 导出 Excel
 app.get('/api/export', (req, res) => {
@@ -304,6 +318,16 @@ app.get('*', (req, res) => {
 
 // 初始化数据库
 await initDb()
+
+// 存量客户名回填：把 5 张表里已经出现过的客户名补进 customers 名册。
+// 幂等（只补新增），所以每次启动跑一遍是安全的 —— 这样即使某个旧入口漏写了名册，
+// 重启一次也能自愈。实测存量里两边差了 69 个名字，就是靠这一步补齐的。
+try {
+  const added = syncFromAllTables()
+  if (added > 0) console.log(`[customerNames] 客户名册回填 ${added} 个（来自记事/客户物料/报价/地图）`)
+} catch (e) {
+  console.warn('[customerNames] 回填失败（不影响启动）:', e.message)
+}
 
 // ===== 规格书去重清理（启动时执行一次）=====
 // 旧版本上传同名规格书会生成 "name (1).pdf"、"name (2).pdf" 等重复副本
