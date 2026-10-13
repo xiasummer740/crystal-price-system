@@ -14,7 +14,16 @@
 *.log
 *.tmp
 .agents/
-.claude/
+.claude/*
+!.claude/TODO.md
+!.claude/snapshot.md
+!.claude/PROJECT_SUMMARY.md
+!.claude/e2e-results.md
+!.claude/conventions.md
+!.claude/merged-checks.md
+!.claude/project-checks.md
+!.claude/memory/
+!.claude/skills/
 .claude/local/
 .crystal-marker
 .DS_Store
