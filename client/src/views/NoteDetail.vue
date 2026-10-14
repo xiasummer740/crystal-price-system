@@ -65,6 +65,17 @@
             <!-- 📄 内容展示（最新一段，不重复时间线） -->
             <div class="note-content" v-if="note.content" v-html="renderedContent"></div>
 
+            <!-- 🔗 关联物料（下单/备货/送样多少）—— 只有显式关联过的记事才会进对应物料的进展时间线 -->
+            <div class="mat-refs" v-if="materialRefs.length">
+              <div class="mat-refs-title">🔗 关联物料</div>
+              <div class="mat-ref" v-for="(r, i) in materialRefs" :key="i">
+                <span class="mat-act" :class="'act-' + actKey(r.action)">{{ r.action || '关联' }}</span>
+                <span class="mat-name">{{ r.name || r.jkx_code || '（物料）' }}</span>
+                <span v-if="r.quantity" class="mat-qty">{{ r.quantity }}{{ r.unit || '' }}</span>
+                <span v-if="r.jkx_code" class="mat-code">晶科鑫 {{ r.jkx_code }}</span>
+              </div>
+            </div>
+
             <!-- 📋 更新历史时间线 -->
             <div class="timeline" v-if="displayTimeline.length || (!displayTimeline.length && updateList.length)">
               <div class="divider" v-if="displayTimeline.length || updateList.length"></div>
@@ -184,6 +195,9 @@ import { getNote, deleteNote, updateNote, uploadNoteImages } from '../utils/api.
 const route = useRoute()
 const router = useRouter()
 const note = ref(null)
+// 关联物料（下单/备货/送样 + 数量）：后端已解析成数组，这里兜底一下旧数据
+const materialRefs = computed(() => (Array.isArray(note.value?.material_refs) ? note.value.material_refs : []))
+const actKey = (a) => ({ 下单: 'order', 备货: 'stock', 送样: 'sample', 报价: 'quote' }[a] || 'other')
 const showPreview = ref(false)
 const showProgressInput = ref(false)
 const progressContent = ref('')
@@ -666,6 +680,18 @@ async function copyCurrentImage() {
 .progress-upload-btn:hover { border-color: var(--color-primary); color: var(--color-primary); }
 
 .note-content { font-size: 14px; line-height: 1.8; color: #323233; word-break: break-word; }
+/* 关联物料行：一眼看出「哪个料 + 什么动作 + 多少」 */
+.mat-refs { margin-top: 12px; padding: 10px; background: #f7f8fa; border-radius: 8px; }
+.mat-refs-title { font-size: 12px; font-weight: 600; color: #323233; margin-bottom: 6px; }
+.mat-ref { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; padding: 4px 0; font-size: 12px; }
+.mat-act { color: #fff; border-radius: 4px; padding: 1px 6px; font-size: 11px; background: #8c8c8c; }
+.mat-act.act-order { background: #1677ff; }
+.mat-act.act-stock { background: #fa8c16; }
+.mat-act.act-sample { background: #13c2c2; }
+.mat-act.act-quote { background: #722ed1; }
+.mat-name { color: #323233; word-break: break-all; }
+.mat-qty { color: #e53935; font-weight: 600; }
+.mat-code { color: #969799; }
 .note-content :deep(code) { background: #f5f5f5; padding: 1px 4px; border-radius: 3px; font-size: 12px; }
 .note-content :deep(h1), .note-content :deep(h2), .note-content :deep(h3), .note-content :deep(h4) { margin: 12px 0 6px; }
 .note-content :deep(a) { color: var(--color-primary); }

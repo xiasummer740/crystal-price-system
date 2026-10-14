@@ -174,6 +174,13 @@ export async function initDb() {
   try { db.run('CREATE INDEX IF NOT EXISTS idx_notes_status ON notes(status)') } catch {}
   try { db.run('CREATE INDEX IF NOT EXISTS idx_notes_deleted ON notes(is_deleted)') } catch {}
   try { db.run("ALTER TABLE notes ADD COLUMN updates TEXT DEFAULT '[]'") } catch {}
+  // 记事里可以**显式关联**当前客户的物料（祥哥 2026-10-14 需求）：
+  // 「某个物料下单多少、备货多少、什么物料要送样品」—— 在记事里选到物料，数量写在结构化字段里。
+  // 存 JSON 数组：[{material_id,name,jkx_code,material_code,customer_code,action,quantity,unit,remark}]
+  // ⚠️ **连名字/料号一起存快照**：物料改名或被删掉之后，当时那条记事还看得懂记的是哪个料。
+  // ⚠️ 与「客户物料进展时间线」的关系：时间线**只收被显式关联的记事**（用户明确要求），
+  //    不关联的记事不会出现在任何物料的进展里。
+  try { db.run("ALTER TABLE notes ADD COLUMN material_refs TEXT DEFAULT '[]'") } catch {}
 
   // 客户名库（Excel 导入 + 手动录入，去重）
   db.run(`
@@ -369,6 +376,30 @@ export async function initDb() {
   try { db.run("ALTER TABLE customer_materials ADD COLUMN alternates TEXT DEFAULT '[]'") } catch {}
   // 兼容旧数据库：添加规格书列
   try { db.run("ALTER TABLE customer_materials ADD COLUMN spec_document TEXT DEFAULT ''") } catch {}
+
+  // 客户物料的**进展流水**（只追加，永不覆盖）。
+  //
+  // 为什么要有它：customer_materials.status 是就地覆盖的，updated_at 也会被后来的任何编辑冲掉 ——
+  // 祥哥 2026-10-14 提的问题正是这个：「之前是报价、后来发规格书、再送样、再下散单，
+  // 改完只看到最后结果，不知道什么时候走到哪一步」。历史上这些时间点已经追不回来了，
+  // 但从这张表建好那一刻起，每一步都有据可查（还能算每个阶段停留多久）。
+  //
+  // type 取值：created(建档) / status(状态流转) / price(报价变化) / cost_price(成本价变化) /
+  //           spec(规格书) / code(编码变更) / customer(客户名变更) / note(备注)
+  // old_value/new_value 存文本，方便前端直接展示「0.452 → 0.4746」。
+  db.run(`
+    CREATE TABLE IF NOT EXISTS material_events (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      material_id INTEGER NOT NULL,
+      type        TEXT    NOT NULL,
+      field       TEXT    DEFAULT '',
+      old_value   TEXT    DEFAULT '',
+      new_value   TEXT    DEFAULT '',
+      note        TEXT    DEFAULT '',
+      changed_at  DATETIME DEFAULT (datetime('now','localtime'))
+    )
+  `)
+  try { db.run('CREATE INDEX IF NOT EXISTS idx_material_events_mid ON material_events(material_id)') } catch {}
   // 兼容旧数据库：添加备注图片/文件列（JSON数组，微信粘贴报价原始记录）
   try { db.run("ALTER TABLE customer_materials ADD COLUMN remark_images TEXT DEFAULT '[]'") } catch {}
 

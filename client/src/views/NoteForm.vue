@@ -20,6 +20,9 @@
             </div>
           </div>
 
+          <!-- 关联物料：记「某物料下单/备货/送样多少」时挂上它（带动作+数量） -->
+          <MaterialRefsPicker v-model="form.material_refs" :customer="form.customer" />
+
           <van-field label="事项类型" is-link readonly :model-value="categoryLabel" placeholder="选择事项类型" @click="showCategoryPicker = true" />
 
           <van-field label="优先级" is-link readonly :model-value="priorityLabel" @click="showPriorityPicker = true" />
@@ -111,6 +114,8 @@ import { useRoute, useRouter } from 'vue-router'
 import { showToast, showConfirmDialog } from 'vant'
 import { getNote, createNote, updateNote, uploadNoteImages, deleteNoteImage, fetchCategories, fetchAllCustomerNames } from '../utils/api.js'
 import NoteCategories from './NoteCategories.vue'
+// 关联物料选择器（带动作+数量）—— 见 components/MaterialRefsPicker.vue
+import MaterialRefsPicker from '../components/MaterialRefsPicker.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -147,7 +152,10 @@ const form = reactive({
   reminder_at: '',
   priority: 2,
   status: 'todo',
-  is_pinned: false
+  is_pinned: false,
+  // 关联物料（祥哥 2026-10-14 需求）：记「某物料下单/备货/送样多少」时挂上它。
+  // 存的是带动作+数量的结构化数组，物料进展时间线里只收**被关联过**的记事。
+  material_refs: []
 })
 
 // 选择器状态
@@ -213,6 +221,8 @@ onMounted(async () => {
       form.priority = d.priority ?? 2
       form.status = d.status || 'todo'
       form.is_pinned = !!d.is_pinned
+      // 关联物料（可能是旧数据，字段不一定存在 → 兜底空数组）
+      form.material_refs = Array.isArray(d.material_refs) ? d.material_refs : []
       noteDate.value = (d.created_at || '').slice(0, 10)
       if (form.reminder_at) {
         reminderDate.value = form.reminder_at.slice(0, 10)
@@ -427,7 +437,9 @@ async function save() {
       reminder_at: form.reminder_at || null,
       priority: form.priority,
       status: form.status,
-      is_pinned: form.is_pinned
+      is_pinned: form.is_pinned,
+      // 关联物料：带动作（下单/备货/送样…）+ 数量；物料进展时间线只收被关联过的记事
+      material_refs: form.material_refs
     }
     if (isEdit.value) {
       await updateNote(route.params.id, data)
@@ -457,7 +469,8 @@ async function saveAndNew() {
       reminder_at: form.reminder_at || null,
       priority: form.priority,
       status: form.status,
-      is_pinned: form.is_pinned
+      is_pinned: form.is_pinned,
+      material_refs: form.material_refs
     }
     await createNote(data)
     showToast('已创建')
@@ -466,7 +479,7 @@ async function saveAndNew() {
     const keepCategory = form.category_id
     Object.assign(form, {
       title: '', customer: keepCustomer, category_id: keepCategory,
-      content: '', images: [], reminder_at: '', priority: 2, status: 'todo', is_pinned: false
+      content: '', images: [], reminder_at: '', priority: 2, status: 'todo', is_pinned: false, material_refs: []
     })
     originalForm.value = JSON.parse(JSON.stringify(form))
     hasChanged.value = false

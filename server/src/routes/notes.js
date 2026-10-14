@@ -12,6 +12,53 @@ function cleanNote(row) {
   if (row && row.title === '未命名') row.title = ''
   return row
 }
+
+// ===== 记事里「关联物料」（祥哥 2026-10-14 需求）=====
+// 用途：某个客户的记事里记「某物料下单 5000 / 备货 3000 / 要送样」，在记事里**选到**那个物料，
+//       数量/动作存成结构化字段（以后能按物料汇总），而不是只写在正文里靠人看。
+// ⚠️ 存的时候连 name / 料号一起存**快照** —— 物料改名或被删之后，这条记事仍看得懂记的是哪个料。
+// ⚠️ 与物料进展时间线的关系：时间线**只收被显式关联的记事**（用户明确要求：不关联的不进物料）。
+const REF_ACTIONS = ['下单', '备货', '送样', '报价', '其它']
+const MAX_REFS = 50
+
+export function normalizeRefs(raw) {
+  if (!Array.isArray(raw)) return []
+  const out = []
+  for (const r of raw) {
+    if (!r || typeof r !== 'object') continue
+    const mid = Number(r.material_id)
+    const name = String(r.name || '').trim()
+    // 既没有 id 也没有名字 → 这条不算关联（空行），直接丢掉而不是存个空壳
+    // ⚠️ 必须判 `mid > 0`：`Number.isInteger(0)` 是 true，只判 isInteger 的话
+    //    material_id=0 的空壳会被当成有效关联存下来（2026-10-14 被测试抓到的）
+    const hasId = Number.isInteger(mid) && mid > 0
+    if (!hasId && !name) continue
+    out.push({
+      material_id: hasId ? mid : 0,
+      name,
+      jkx_code: String(r.jkx_code || '').trim(),
+      material_code: String(r.material_code || '').trim(),
+      customer_code: String(r.customer_code || '').trim(),
+      action: REF_ACTIONS.includes(r.action) ? r.action : '其它',
+      quantity: String(r.quantity ?? '').trim(),
+      unit: String(r.unit || '').trim(),
+      remark: String(r.remark || '').trim()
+    })
+    if (out.length >= MAX_REFS) break
+  }
+  return out
+}
+
+/** 出参统一形状：material_refs 始终是数组（前端不用再 JSON.parse） */
+function withRefs(row) {
+  if (!row) return row
+  let refs = []
+  try {
+    const parsed = JSON.parse(row.material_refs || '[]')
+    refs = Array.isArray(parsed) ? parsed : []
+  } catch { refs = [] }
+  return { ...cleanNote(row), material_refs: refs }
+}
 import { exportNotesPackage, generateNoteTemplate, importNotesFromZip } from '../utils/export.js'
 import XLSX from 'xlsx'
 
@@ -178,7 +225,7 @@ router.get('/', (req, res) => {
     LIMIT ? OFFSET ?
   `, [...params, pg.pageSize, pg.offset])
 
-  res.json({ code: 0, data: { list: rows.map(cleanNote), total, page: pg.page, pageSize: pg.pageSize } })
+  res.json({ code: 0, data: { list: rows.map(withRefs), total, page: pg.page, pageSize: pg.pageSize } })
 })
 
 // 查询到期提醒（供 Electron 轮询）
@@ -192,7 +239,7 @@ router.get('/reminders', (_req, res) => {
       AND n.reminder_at <= datetime('now','localtime')
     ORDER BY n.reminder_at ASC
   `)
-  res.json({ code: 0, data: rows.map(cleanNote) })
+  res.json({ code: 0, data: rows.map(withRefs) })
 })
 
 // 标记已提醒
@@ -210,15 +257,15 @@ router.get('/:id', (req, res) => {
     WHERE n.id = ? AND n.is_deleted = 0
   `, [Number(req.params.id)])
   if (!row) return res.status(404).json({ code: 1, msg: '记录不存在' })
-  res.json({ code: 0, data: cleanNote(row) })
+  res.json({ code: 0, data: withRefs(row) })
 })
 
 // 新增
 router.post('/', (req, res) => {
   const b = req.body
   const r = execute(`
-    INSERT INTO notes (title, content, customer, category_id, images, reminder_at, priority, status, is_pinned)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO notes (title, content, customer, category_id, images, reminder_at, priority, status, is_pinned, material_refs)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `, [
     b.title || '',
     b.content || '',
@@ -228,7 +275,8 @@ router.post('/', (req, res) => {
     b.reminder_at || null,
     b.priority ?? 2,
     b.status || 'todo',
-    b.is_pinned ? 1 : 0
+    b.is_pinned ? 1 : 0,
+    JSON.stringify(normalizeRefs(b.material_refs))
   ])
   // 新录入的客户名进统一名册（记事里第一次出现的客户，别处也该搜得到）
   upsertMany([b.customer], 'note')
@@ -263,7 +311,7 @@ router.put('/:id', (req, res) => {
   }
 
   execute(`
-    UPDATE notes SET title=?, content=?, customer=?, category_id=?, images=?, reminder_at=?, priority=?, status=?, is_pinned=?, updates=?, updated_at=datetime('now','localtime')
+    UPDATE notes SET title=?, content=?, customer=?, category_id=?, images=?, reminder_at=?, priority=?, status=?, is_pinned=?, updates=?, material_refs=?, updated_at=datetime('now','localtime')
     WHERE id=?
   `, [
     b.title ?? existing.title,
@@ -276,6 +324,7 @@ router.put('/:id', (req, res) => {
     b.status ?? existing.status,
     b.is_pinned !== undefined ? (b.is_pinned ? 1 : 0) : existing.is_pinned,
     b._updates ?? existing.updates ?? '[]',
+    b.material_refs !== undefined ? JSON.stringify(normalizeRefs(b.material_refs)) : (existing.material_refs ?? '[]'),
     Number(req.params.id)
   ])
   // 编辑时改了客户名（或原值不在名册里）→ 补进统一名册

@@ -145,6 +145,8 @@
                 <td class="col-actions" :style="{ width: colWidths.actions + 'px', textAlign: colAligns.actions }">
                   <button v-if="item.spec_document" class="tbl-btn spec-btn" @click="openSpec(item.spec_document)" title="打开规格书">📄</button>
                   <button v-if="rimgCount(item)" class="tbl-btn spec-btn rimgs-btn" @click="previewRImgs(item)" title="备注图片">📷{{ rimgCount(item) > 1 ? rimgCount(item) : '' }}</button>
+                  <!-- 进展时间线：报价/改价、送样、规格书、状态流转，以及**被关联到这个料的记事** -->
+                  <button class="tbl-btn tl-btn" @click="openTimeline(item)" title="物料进展（报价变化/送样/规格书/状态流转）">⏱</button>
                   <button class="tbl-btn edit-btn-sm" @click="openForm(item)">✎</button>
                   <button class="tbl-btn del-btn-sm" @click="handleDelete(item)">🗑</button>
                 </td>
@@ -328,6 +330,8 @@
       <ImageContextMenu ref="ctxMenuRef" />
       <!-- 客户名册管理（删除零引用名字 / 把简写合并到正确全名） -->
       <CustomerRegistryManager v-model:show="showRegistry" @changed="loadCustomerList" />
+      <!-- 物料进展时间线（报价变化/送样/规格书/状态流转/被关联的记事） -->
+      <MaterialTimeline v-model:show="showTimeline" :material-id="timelineId" />
     </div>
   </transition>
 </template>
@@ -342,6 +346,8 @@ import { STATUS_FALLBACK, statusOrderFromConfig } from '../utils/materialStatus.
 import ImageContextMenu from '../components/ImageContextMenu.vue'
 // 客户名册管理弹窗（删除没人用的名字 / 把简写合并到正确全名）
 import CustomerRegistryManager from '../components/CustomerRegistryManager.vue'
+// 物料进展时间线弹窗（报价变化/送样/规格书/状态流转/被关联的记事）
+import MaterialTimeline from '../components/MaterialTimeline.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -354,6 +360,13 @@ const selectedCustomer = ref('')
 const customerQuery = ref('')
 // 客户名册管理弹窗（删除/合并）—— 见 components/CustomerRegistryManager.vue
 const showRegistry = ref(false)
+// 物料进展时间线弹窗 —— 见 components/MaterialTimeline.vue
+const showTimeline = ref(false)
+const timelineId = ref(0)
+function openTimeline(item) {
+  timelineId.value = Number(item.id) || 0
+  showTimeline.value = true
+}
 const showCustomerDropdown = ref(false)
 const customerList = ref([])
 const systemCustomers = ref([])
@@ -1221,6 +1234,7 @@ onUnmounted(() => {
 .rich-text :deep(.rt-hl) { color: #d4380d; font-weight: 700; background: rgba(250, 173, 20, .15); padding: 0 2px; border-radius: 2px; }
 .spec-btn { color: #8c5a1f; font-size: 15px; }
 .rimgs-btn { color: #1a6fb0; font-size: 13px; }
+.tl-btn { color: #722ed1; font-size: 13px; }
 .spec-btn-dim { color: #e0e0e0; font-size: 15px; cursor: not-allowed; }
 
 /* 高亮按钮 */

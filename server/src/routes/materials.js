@@ -9,6 +9,9 @@ import { STATUS_CONFIG } from '../utils/materialStatus.js'
 import { pageParams } from '../utils/paging.js'
 import { triggerBackup } from '../utils/excelBackup.js'
 import * as A from '../utils/customerArchive.js'
+// 物料进展：写流水（每次增改都对字段做 diff）+ 读时间线（聚合已有的报价/改价/送样/规格书）
+import { logEvent, logDiff, listEvents } from '../utils/materialEvents.js'
+import { buildTimeline } from '../utils/materialTimeline.js'
 // 客户名统一名册：读用并集（suggest/listAll），写用 upsert（任何录入点都进名册）
 import { upsertMany, resolveSuggestWithMaterialMatch, listAll } from '../utils/customerNames.js'
 
@@ -324,6 +327,21 @@ router.get('/:id', (req, res) => {
   res.json({ code: 0, data: parseAlternates(row) })
 })
 
+// 进展时间线（祥哥 2026-10-14 需求）：把已有数据聚合展示，**只读**
+// ⚠️ 记事不在里面 —— 记事是客户级沟通记录，物料时间线只看这个物料自己的硬事实（两边分开）
+router.get('/:id/timeline', (req, res) => {
+  const data = buildTimeline(Number(req.params.id))
+  if (!data) return res.status(404).json({ code: 1, msg: '记录不存在' })
+  res.json({ code: 0, data })
+})
+
+// 该物料自己的进展流水（不含聚合来的报价/送样）—— 排查与测试用
+router.get('/:id/events', (req, res) => {
+  const row = queryOne('SELECT id FROM customer_materials WHERE id = ?', [Number(req.params.id)])
+  if (!row) return res.status(404).json({ code: 1, msg: '记录不存在' })
+  res.json({ code: 0, data: listEvents(Number(req.params.id), req.query.limit) })
+})
+
 // 防重复：同客户下，客户物料编码/晶科鑫料号已存在则拦截（不同客户可以有相同料号）
 function findMaterialDuplicate(b, excludeId = null) {
   const customer = String(b.customer || '').trim()
@@ -377,6 +395,8 @@ router.post('/', (req, res) => {
   triggerBackup('materials')
   // 新录入的客户名要进统一名册，否则别的页面搜不到它
   upsertMany([b.customer], 'material')
+  // 建档本身也是进展的一步（时间线第一项）
+  logEvent(r.lastInsertRowid, 'created', { field: 'status', oldValue: '', newValue: b.status || '报价', note: '建档' })
   res.json({ code: 0, data: { id: r.lastInsertRowid } })
 })
 
@@ -421,6 +441,20 @@ router.put('/:id', (req, res) => {
   triggerBackup('materials')
   // 编辑时可能改客户名（或原值就是别处没有的名字）→ 一并进名册
   upsertMany([b.customer ?? existing.customer], 'material')
+
+  // 进展流水：按字段 diff，只记**真的变了**的（状态流转/改价/规格书/编码/客户名…）。
+  // ⚠️ 放在 UPDATE 之后：更新失败就不该留下一条「改过了」的假记录。
+  logDiff(Number(req.params.id), existing, {
+    status: b.status ?? existing.status,
+    price: b.price ?? existing.price,
+    cost_price: b.cost_price ?? existing.cost_price,
+    spec_document: b.spec_document !== undefined ? b.spec_document : (existing.spec_document || ''),
+    jkx_code: b.jkx_code ?? existing.jkx_code,
+    customer_code: b.customer_code ?? existing.customer_code,
+    material_code: b.material_code ?? existing.material_code,
+    customer: b.customer ?? existing.customer,
+    factory: b.factory ?? existing.factory
+  })
 
   // 客户改名 → 整个客户目录整组迁移 + 同步该客户全部物料/记事
   let renameMsg = ''

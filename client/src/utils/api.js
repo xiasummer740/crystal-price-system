@@ -397,6 +397,18 @@ export function fetchMaterialFactories(customer) {
   return http.get('/materials/factories/list', { params: { customer } })
 }
 
+// ===== 物料进展时间线（祥哥 2026-10-14 需求）=====
+// 把已有的报价/改价（price_logs）、送样、规格书、以及**被显式关联的记事**聚合成一条时间线。
+// 记事是客户级的、默认不进；只有用户主动关联过这个物料的那条才出现。
+// 详见 server/src/utils/materialTimeline.js 顶部注释。
+export function fetchMaterialTimeline(id) {
+  return http.get(`/materials/${id}/timeline`)
+}
+/** 该物料自己的进展流水（不含聚合来的报价/送样） */
+export function fetchMaterialEvents(id) {
+  return http.get(`/materials/${id}/events`)
+}
+
 // ===== 附件 URL 工具 =====
 
 // 本地文件 URL → 交给桌面端用系统程序打开；其余（http 外链）走浏览器。
