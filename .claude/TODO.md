@@ -1,74 +1,100 @@
 # 🛑 停工快照（手写，非自动生成）
 
-> 2026-10-14 续工 · 代码到 **2c44378**（与远端同步）· **打包卡点已解决**（本机实测 exit 0）
-> 现在只差「发版 v1.0.221」这一步，步骤见下方「打包通了之后要做的」
+> 2026-10-14 收工 · 代码到 **92aa066** · **v1.0.221 已发版**（三样资产齐全、在线更新实测可发现并下完）
+> 详细交接见根目录 `handoff-v1.0.221.md`
 
 ## ⏭️ 下个对话从这里接着干（最重要，先读这段）
 
-**代码全干完了、也全部推上 GitHub 了（远端 = 本地 = 2c44378）。打包环境也通了。唯一没做完的是「发版」。**
+**v1.0.221 全流程走完了**：打包环境打通 ✅ 开发 ✅ 单测 ✅ 真机验证 ✅ 发版 ✅ 在线更新实测 ✅。
+无半截活。本次发了三块内容：
 
-### ✅ 打包卡点已解决（2026-10-14 08:56 本机实测）
+1. **发版链路**（本机第一次成功发版）：winCodeSign 预置缓存绕法 + 发版脚本两处静默失败修复
+   （`System.Web.HttpUtility` 解析不了导致安装包**静默不上传**；`.ps1` 无 BOM 导致 PS 5.1 按 GBK 读、
+   一行都跑不了）。**发版脚本现在可直接用**：`npm run release -- 1.0.222`。
+2. **启动动画重做**：透明字标（815×254）· logo **严格居中窗口**（偏差 0.0px）·
+   闪屏出现在**主界面窗口的位置**（不再是屏幕正中，实测中心重合 0.0px）·
+   慢启动自解释三档文案 + 兜底提前（补上 `startServer` 堵住时的盲区）。
+3. **沿路量出的真缺陷**：入场动画 10px 位移、窗口小于卡片时滚动条挤偏 8.5px，都已修。
 
-原报错：`ERROR: Cannot create symbolic link : 客户端没有所需的特权 …\winCodeSign\…\darwin\10.12\lib\libcrypto.dylib`
+### 下次开工先问祥哥两件事
 
-- **根因（已复现证实）**：electron-builder 把「下载+解压」委托给 Go 版 `app-builder.exe`，
-  它**无条件**下 `winCodeSign` 工具包（版本 **2.6.0**，URL 实测为
-  `https://github.com/electron-userland/electron-builder-binaries/releases/download/winCodeSign-2.6.0/winCodeSign-2.6.0.7z`），
-  且解压时带 `-snl`（把符号链接建成真链接）⇒ 包内 2 个 macOS 软链
-  （`darwin/10.12/lib/{libcrypto,libssl}.dylib`）建不出来 ⇒ `exit status 2` ⇒ 整包中止。
-- 本机**未开**开发者模式（`AllowDevelopmentWithoutDevLicense` 缺失）、当前进程**非管理员**
-  ⇒ 实测 `New-Item -ItemType SymbolicLink` 报「此操作需要管理员权限」。**这不是项目配置问题**：
-  `sign:false` / `forceCodeSigning:false` 都**不能**阻止它下载该工具包。
-- **采用的解法 = 路 B（缓存预置，已落地并验通）**：把该工具包**排除 darwin** 解压到
-  electron-builder 期望的缓存目录 **`%LOCALAPPDATA%\electron-builder\Cache\winCodeSign\winCodeSign-2.6.0\`**
-  （判据：`app-builder.exe download-artifact --name winCodeSign` 直接打印该路径且 **exit 0、不再下载**）。
-  目录名必须是 `winCodeSign-2.6.0`（= 7z 的 basename）；**随机数字目录是失败残留，不认**。
-  解压后应有 **58 个文件**：`rcedit-x64.exe`、`windows-10\{x64,ia32}\signtool.exe` 齐备、**无 `darwin`**。
-  复现命令（换机器照抄）：
-  ```powershell
-  $repo="<repo>"; $cache="$env:LOCALAPPDATA\electron-builder\Cache\winCodeSign"
-  $seven="$repo\node_modules\7zip-bin\win\x64\7za.exe"
-  $arc=Get-ChildItem $cache -Filter *.7z | Select-Object -First 1   # 5.6MB，md5=06EA32242279AD33BABA1870CAA084D8
-  & $seven x -bd "-x!darwin" $arc.FullName "-o$cache\winCodeSign-2.6.0"
-  ```
-  （`-x!darwin` 是关键。**注意 `-snl` 语义相反**——它是"把符号链接存为链接"，用了照样失败。）
-- **实测结果**：`npm run package` **exit 0**，产出
-  `dist-exe\crystal-price-system-setup-1.0.220.exe`（119,230,217 B）+ `.blockmap` + `latest.yml`；
-  日志 `signing with signtool.exe … no signing info identified, signing is skipped`（跳过签名，符合预期）。
-- **路 A 仍更干净（未做，可选）**：开 Windows「开发者模式」后不必预置缓存。本机 `admin` 在
-  Administrators 组里（只是当前进程没提权），管理员 PowerShell：
-  `reg add "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\AppModelUnlock" /t REG_DWORD /f /v AllowDevelopmentWithoutDevLicense /d 1`
+1. **新版启动动画看着行不行**（标题在上、logo 居中；要换版式随时说）
+2. **启动还慢不慢** —— 本机装了三个杀软（火绒 + 电脑管家 + Defender），
+   慢了就把 `数据目录\logs\startup.log` 发来（现在日志里有「启动总耗时」）。
+
+### 遗留清单
+
+- ⚠️ 仓库里有 **2 个多余 Draft release**（1.0.220 / 1.0.221，均 0 资产），是 electron-builder
+  读到 `publish` 配置自动建的草稿；只对所有者可见、不影响在线更新。要清就**按 release id 删**，
+  别用 `gh release delete 1.0.221`（同 tag 会命中正式那条）。
+- ⚠️ **三个杀软**是「偶尔启动 30 秒以上」的根子（196 次启动里 17 次超 30 秒、最慢 164 秒）。
+  建议只留一个 + 给程序目录和数据目录加白名单。
+- 📌 生产备份在 `D:\dsh-workspace\晶振报价软件\生产数据备份-2026-10-14`（340.63 MB），确认无误后可删。
+- 📌 **生产库基线指纹已更新**：`data.db` md5 = `370934119739D404733EFE9E6CDA662A`、文件数 **1102**。
+  变更原因见 `dev-data\生产库基线指纹.txt` 里的说明（10/13 误写后删除导致 md5 变 + 应用生成的归档报告）。
+- 📌 每次 `npm run package` 之后记得 `git checkout -- dist-exe/latest.yml client/components.d.ts`
+  （打包会覆盖这两个跟踪文件）。
+
+---
+
+## ✅ v1.0.221 发版结果（2026-10-14）
+
+| 项 | 值 |
+|---|---|
+| tag → 提交 | `v1.0.221` → `92aa066`，线上 **Latest**、非草稿 |
+| 安装包 | `crystal-price-system-setup-1.0.221.exe` · 119,234,250 B |
+| blockmap | 121,216 B（必传，差量更新靠它） |
+| latest.yml | 378 B，`sha512`/`size` 与实传资产逐字节一致（本地复算过） |
+| 在线更新实测 | 1.0.220 沙箱实例 → 发现 1.0.221 → **差量下载 64%** → 下完 119,234,250 B → 页面「已下载完成 / 立即重启安装」+ 工具栏红点 |
+| 生产零污染 | `data.db` md5 `3709341197…`、文件数 1102，与基线一致 |
+
+---
+
+## 发版链路（本机已通，换机器照抄）
+
+`npm run release -- 1.0.222` 一把梭（bump → 打包 → tag → push → 上传三样资产）。前置：
+
+1. **GitHub 凭据**：`gh` 已装（winget）；token 在 Windows 凭据管理器里，脚本用 `gh auth token` 取。
+2. **winCodeSign 缓存**（换机器必做，否则打包卡在符号链接）：
+   `%LOCALAPPDATA%\electron-builder\Cache\winCodeSign\winCodeSign-2.6.0\`，
+   用 `7za x -bd "-x!darwin"` 解压（详见 `handoff-v1.0.221.md` 第一节）。
+3. **代理**：`$env:HTTP_PROXY="http://127.0.0.1:10808"; $env:HTTPS_PROXY="http://127.0.0.1:10808"`
+   （GitHub 直连不通；下载 Electron/NSIS 都走它）。
+
+---
+
+> 2026-09-28 的 v1.0.220 交接见根目录 `handoff-v1.0.220.md`。
+
+
+### ✅ 已全部完成（上一版列的四步待办）
+
+| 步骤 | 结果 |
+|---|---|
+| 备份祥哥数据 | ✅ `D:\dsh-workspace\晶振报价软件\生产数据备份-2026-10-14`（317 目录 / 1102 文件 / 340.63 MB；`data.db` md5 与源一致） |
+| 装 `gh` CLI + 登录 | ✅ `gh` 已装（winget 用户级，在 `%LOCALAPPDATA%\Microsoft\WinGet\Packages\GitHub.cli_…\bin`）；**不需要 `gh auth login`** —— Windows 凭据管理器里有旧 token，脚本 `gh auth token` 直接取到 |
+| `npm run release` | ✅ 一把梭跑通（bump → 打包 → tag → push → 上传三样） |
+| 沙箱验「检查更新」 | ✅ 用装着的 **1.0.220** 实测：发现 1.0.221 → **差量下载 64%** → 下完 119,234,250 B（与线上资产逐字节一致）→ 页面「已下载完成 / 立即重启安装」+ 工具栏红点 |
+
+> 打包卡点的完整根因与「换机器怎么补缓存」写在 `handoff-v1.0.221.md` 第一节；
+> 发版脚本两处静默失败（`System.Web.HttpUtility`、`.ps1` 缺 BOM）也已修并入库。
 
 ### ⚠️ 打包的两个副作用（每次打包后都要还原）
 
-`npm run package` 会**覆盖仓库里已跟踪的两个生成文件**，它们是「线上 v1.0.220 资产元数据」/「自动生成类型」，
-不该被本地构建结果顶掉 —— 打完包后执行：
+`npm run package` 会**覆盖仓库里已跟踪的两个生成文件**：`dist-exe/latest.yml`（线上资产元数据）
+和 `client/components.d.ts`（自动生成类型）。打完包执行：
 ```powershell
 git checkout -- dist-exe/latest.yml client/components.d.ts
 ```
-（本次实测：`latest.yml` 被改成新构建的 sha512/size=119230217，与已发布的 120451155 不符；已还原。）
+> 例外：**发版那次就该让它更新** —— 发版后单独提交一次「同步 latest.yml 元数据」（见 `92aa066` 那次的做法）。
 
-### 网络（已解决，每次打包都要带）
+### 网络（每次打包都要带代理）
 
-GitHub 被墙，`npm run package` 必须带代理环境变量：
+GitHub 被墙，`npm run package` / 发版都要带：
 ```powershell
 $env:HTTP_PROXY="http://127.0.0.1:10808"; $env:HTTPS_PROXY="http://127.0.0.1:10808"
 ```
-本机 10808 端口实测**在线**；Electron 二进制（33.4.11）本机缓存里已有。
+本机 10808 端口实测在线；Electron 二进制（33.4.11）与 NSIS 工具本机缓存里已有。
 注意 `ELECTRON_CACHE` 环境变量**不生效**（electron-builder 用自己的缓存目录结构）。
-
-### 打包通了之后要做的
-
-1. **先备份祥哥的数据**：`D:\software\晶振报价管理系统` → 复制一份留底（340MB）
-2. 装 `gh` CLI（`winget install GitHub.cli`）并 `gh auth login`（走手机设备码）
-   —— `scripts/release.ps1` 靠 `gh auth token` 建 Release
-3. `npm run release -- 1.0.221`（会：bump 版本 → 打包 → tag → push → 上传
-   **安装包 / blockmap / latest.yml** 三样，缺一在线更新就会失败）
-4. 在沙箱验证「检查更新」能发现 1.0.221
-
-> 📌 现在 `dist-exe\` 里的 `crystal-price-system-setup-1.0.220.exe`（119,230,217 B）是
-> **2026-10-14 08:56 的「打通打包」验证产物，不是一次发版**（版本号仍是 1.0.220，未 tag、未上传）。
-> 其余两个待发版改动（图片右键复制、客户名统一名册）都还没进正式版本，发 1.0.221 时才带出去。
 
 ### 数据安全（已逐条查证，可放心）
 
