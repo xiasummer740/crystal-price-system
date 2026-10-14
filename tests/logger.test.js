@@ -34,7 +34,7 @@ describe('logger 基本写入', () => {
     const files = logger.listLogFiles()
     assert.ok(files.length >= 1)
     const today = new Date().toISOString().slice(0, 10)
-    const found = files.find(f => f.name === `error-${today}.log`)
+    const found = files.find(f => f.name === `app-${today}.log`)
     assert.ok(found, '当日日志文件应存在')
     assert.ok(found.size > 0, '文件大小应大于 0')
   })
@@ -42,7 +42,7 @@ describe('logger 基本写入', () => {
   it('写入内容包含级别和模块标记', () => {
     logger.warn('warn-test', '这是一条警告')
     const today = new Date().toISOString().slice(0, 10)
-    const result = logger.readLogFile(`error-${today}.log`, 100)
+    const result = logger.readLogFile(`app-${today}.log`, 100)
     assert.equal(result.error, undefined, '读取不应出错')
     assert.ok(result.content.includes('[WARN]'), '应包含 WARN 级别')
     assert.ok(result.content.includes('[warn-test]'), '应包含模块名')
@@ -50,7 +50,7 @@ describe('logger 基本写入', () => {
 
   it('readLogFile 返回分页信息', () => {
     const today = new Date().toISOString().slice(0, 10)
-    const result = logger.readLogFile(`error-${today}.log`, 10)
+    const result = logger.readLogFile(`app-${today}.log`, 10)
     assert.ok(result.total > 0, 'total 应大于 0')
     assert.ok(result.showing > 0, 'showing 应大于 0')
     assert.ok(result.showing <= 10, '不超过请求行数')
@@ -60,7 +60,7 @@ describe('logger 基本写入', () => {
     logger.info('info-test', '信息消息', { extra: '数据' })
     logger.debug('debug-test', '调试消息', 123, true)
     const today = new Date().toISOString().slice(0, 10)
-    const result = logger.readLogFile(`error-${today}.log`, 200)
+    const result = logger.readLogFile(`app-${today}.log`, 200)
     assert.ok(result.content.includes('[INFO]'), '应包含 INFO')
     assert.ok(result.content.includes('[info-test]'), '应包含 info-test 模块')
   })
@@ -87,10 +87,23 @@ describe('logger 文件管理', () => {
   })
 
   it('获取日志文件路径', () => {
-    const today = `error-${new Date().toISOString().slice(0, 10)}.log`
+    const today = `app-${new Date().toISOString().slice(0, 10)}.log`
     const fp = logger.getLogFilePath(today)
     assert.ok(fp, '应返回路径')
     assert.ok(fs.existsSync(fp), '文件真实存在')
+  })
+
+  // 名字从 error-*.log 改成 app-*.log（2026-10-14）：写入用新名，但**读取/列表按 *.log 通配**，
+  // 所以历史文件必须继续能列出来、能读 —— 这条钉住「改名不丢历史日志」。
+  it('老的 error-*.log 仍能被列出并读取（改名不丢历史）', () => {
+    const legacy = path.join(tmpDir, 'logs', 'error-2020-01-01.log')
+    fs.writeFileSync(legacy, '[2020-01-01T00:00:00.000Z] [ERROR] [legacy] 历史日志\n', 'utf8')
+    const files = logger.listLogFiles()
+    assert.ok(files.some(f => f.name === 'error-2020-01-01.log'), '历史文件应出现在列表里')
+    const r = logger.readLogFile('error-2020-01-01.log', 10)
+    assert.equal(r.error, undefined, '历史文件应能读取')
+    assert.ok(r.content.includes('历史日志'), '内容应读得到')
+    assert.ok(logger.getLogFilePath('error-2020-01-01.log'), '历史文件路径应可获取（供下载）')
   })
 
   it('不存在的文件返回 null', () => {

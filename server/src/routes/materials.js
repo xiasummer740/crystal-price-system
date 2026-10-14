@@ -12,6 +12,8 @@ import * as A from '../utils/customerArchive.js'
 // 物料进展：写流水（每次增改都对字段做 diff）+ 读时间线（聚合已有的报价/改价/送样/规格书）
 import { logEvent, logDiff, listEvents } from '../utils/materialEvents.js'
 import { buildTimeline } from '../utils/materialTimeline.js'
+// 阶段停留时长 / 超期判定（祥哥 2026-10-14：「卡在送样 18 天」）
+import { dwellIndex, annotateDwell, computeStale, readStaleSettings, TERMINAL_STATUS } from '../utils/materialDwell.js'
 // 客户名统一名册：读用并集（suggest/listAll），写用 upsert（任何录入点都进名册）
 import { upsertMany, resolveSuggestWithMaterialMatch, listAll } from '../utils/customerNames.js'
 
@@ -145,7 +147,8 @@ router.get('/customers/search', (req, res) => {
 // 可点表头排序的列（白名单，防 SQL 注入：只放真实列名，前端传别的就退回默认排序）
 const SORTABLE_COLS = new Set([
   'date', 'customer_code', 'jkx_code', 'price', 'cost_price',
-  'material_code', 'material_name', 'factory', 'status', 'customer_desc', 'remark'
+  'material_code', 'material_name', 'factory', 'status', 'customer_desc', 'remark',
+  'dwell'   // 停留时长（不是真实列，见下面 DWELL_FROM 的说明）
 ])
 
 // —— 排序列表达式 ——
@@ -170,10 +173,19 @@ const STATUS_VALUE = `CASE TRIM(status) ${
   Object.entries(STATUS_CONFIG).map(([k, v]) => `WHEN '${k}' THEN ${v.order}`).join(' ')
 } ELSE 99 END`
 
+// ④ 停留时长：不是真实列，而是「最后一次状态事件时间，没有就用 updated_at」。
+//    排序要能在 SQL 里做，否则只能给当前页排序（翻页就乱）。
+const DWELL_FROM = `COALESCE(
+  (SELECT MAX(e.changed_at) FROM material_events e
+    WHERE e.material_id = customer_materials.id AND e.type IN ('status', 'created')),
+  updated_at)`
+
 const NUMERIC_SORT_COLS = new Set(['price', 'cost_price'])
 function sortExprOf(col) {
   if (NUMERIC_SORT_COLS.has(col)) return PRICE_VALUE(col)
   if (col === 'status') return STATUS_VALUE
+  // 停留越久排越前（DESC 时），所以取「距今多少天」；算不出来（updated_at 空）返回 NULL 沉底
+  if (col === 'dwell') return `(julianday('now','localtime') - julianday(${DWELL_FROM}))`
   return EMPTY_AS_NULL(col)
 }
 
@@ -211,7 +223,27 @@ router.get('/', (req, res) => {
     LIMIT ? OFFSET ?
   `, [...params, pg.pageSize, pg.offset]).map(parseAlternates)
 
+  // 每行补上停留时长（精确/估算两种口径，见 utils/materialDwell.js 顶部注释）
+  annotateDwell(rows)
+
   res.json({ code: 0, data: { list: rows, total, page: pg.page, pageSize: pg.pageSize } })
+})
+
+// 待跟进（超期）清单 —— ⚠️ 必须注册在 /:id 之前，否则 "stale" 会被当成 id
+// 阈值由用户自己设（默认全 0 = 不提醒，祥哥要求「可以不默认」）；「下批量」是终态不参与。
+router.get('/stale', (req, res) => {
+  const settings = readStaleSettings()
+  const rows = queryAll(`SELECT * FROM customer_materials WHERE is_deleted = 0`).map(parseAlternates)
+  annotateDwell(rows)
+  const result = computeStale(rows, settings)
+  // 清单里只留判断超期要用的字段，别把整行都塞回去
+  result.list = result.list.map(r => ({
+    id: r.id, customer: r.customer, material_name: r.material_name,
+    jkx_code: r.jkx_code, customer_code: r.customer_code, material_code: r.material_code,
+    status: r.status, price: r.price, dwell_days: r.dwell_days, dwell_from: r.dwell_from,
+    dwell_exact: r.dwell_exact, threshold: r.threshold
+  }))
+  res.json({ code: 0, data: { ...result, terminal_status: TERMINAL_STATUS } })
 })
 
 // 客户列表（供客户下拉/网格）
@@ -319,6 +351,117 @@ function parseAlternates(row) {
   try { row.remark_images = JSON.parse(row.remark_images || '[]') } catch { row.remark_images = [] }
   return row
 }
+
+// 月度汇总（客户 × 指标）—— ⚠️ 同样必须在 /:id 之前
+//
+// 口径分两类，**界面上必须分开标注**（祥哥问「这个月报价几个/送样几个/下单几个」）：
+//   · 能追溯历史：报价次数（material_prices.created_at）、改价次数（price_logs.changed_at）、
+//     送样登记（material_samples.created_at，该表**没有客户列** ⇒ 只能给全局数）
+//   · 自 v1.0.223（2026-10-14）起才有：状态推进次数（material_events）、
+//     记事里关联的下单/备货/送样数量（notes.material_refs）
+router.get('/monthly', (req, res) => {
+  const now = new Date()
+  const pad = (n) => String(n).padStart(2, '0')
+  const defStart = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-01`
+  const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
+  const defEnd = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(lastDay)}`
+  const start = String(req.query.start || defStart).slice(0, 10)
+  const end = String(req.query.end || defEnd).slice(0, 10)
+  const onlyCustomer = String(req.query.customer || '').trim()
+
+  const customers = new Map()
+  const bucket = (name) => {
+    const key = String(name || '').trim() || '(未填客户)'
+    if (onlyCustomer && key !== onlyCustomer) return null
+    if (!customers.has(key)) {
+      customers.set(key, {
+        customer: key, quotes: 0, price_changes: 0, advances: 0,
+        advance_by_status: {}, order_qty: 0, stock_qty: 0, sample_qty: 0, note_refs: 0
+      })
+    }
+    return customers.get(key)
+  }
+
+  // ① 报价次数（历史可追溯）
+  for (const r of queryAll(
+    `SELECT first_inquiry_customer AS c, COUNT(*) AS n FROM material_prices
+      WHERE is_deleted = 0 AND date(created_at) BETWEEN ? AND ? GROUP BY first_inquiry_customer`, [start, end]
+  )) { const b = bucket(r.c); if (b) b.quotes += r.n }
+
+  // ② 改价次数（历史可追溯）：price_logs 只存 record_id，回连报价记录拿客户
+  for (const r of queryAll(
+    `SELECT p.first_inquiry_customer AS c, COUNT(*) AS n FROM price_logs l
+       JOIN material_prices p ON p.id = l.record_id
+      WHERE date(l.changed_at) BETWEEN ? AND ? GROUP BY p.first_inquiry_customer`, [start, end]
+  )) { const b = bucket(r.c); if (b) b.price_changes += r.n }
+
+  // ③ 状态推进次数（自 v1.0.223 起才有）
+  for (const r of queryAll(
+    `SELECT m.customer AS c, e.new_value AS st, COUNT(*) AS n FROM material_events e
+       JOIN customer_materials m ON m.id = e.material_id
+      WHERE e.type = 'status' AND date(e.changed_at) BETWEEN ? AND ? GROUP BY m.customer, e.new_value`, [start, end]
+  )) {
+    const b = bucket(r.c)
+    if (!b) continue
+    b.advances += r.n
+    b.advance_by_status[r.st || '(未知)'] = (b.advance_by_status[r.st || '(未知)'] || 0) + r.n
+  }
+
+  // ④ 记事里关联的物料动作/数量（自 v1.0.223 起才有）
+  //    material_refs 是 JSON，SQL 里没法直接聚合 ⇒ 取回区间内的记事在 JS 里解析
+  //    （一个月几十上百条，解析开销可忽略）
+  for (const n of queryAll(
+    `SELECT customer, material_refs FROM notes
+      WHERE is_deleted = 0 AND material_refs IS NOT NULL AND material_refs != '[]'
+        AND date(created_at) BETWEEN ? AND ?`, [start, end]
+  )) {
+    const b = bucket(n.customer)
+    if (!b) continue
+    let refs = []
+    try { refs = JSON.parse(n.material_refs || '[]') } catch { continue }
+    if (!Array.isArray(refs)) continue
+    for (const r of refs) {
+      b.note_refs++
+      const qty = Number(String(r?.quantity ?? '').replace(/[^\d.-]/g, ''))
+      const n0 = Number.isFinite(qty) ? qty : 0
+      const act = String(r?.action || '')
+      if (act === '下单') b.order_qty += n0
+      else if (act === '备货') b.stock_qty += n0
+      else if (act === '送样') b.sample_qty += n0
+    }
+  }
+
+  // ⑤ 送样登记（历史可追溯，但**没有客户列** ⇒ 只能给全局数，界面上单独一行说明）
+  const sampleRegistered = queryOne(
+    `SELECT COUNT(*) AS n FROM material_samples WHERE is_deleted = 0 AND date(created_at) BETWEEN ? AND ?`, [start, end]
+  )?.n || 0
+
+  const rows = [...customers.values()].sort((a, b) =>
+    (b.quotes + b.price_changes + b.advances) - (a.quotes + a.price_changes + a.advances) || a.customer.localeCompare(b.customer, 'zh'))
+  const totals = rows.reduce((acc, r) => {
+    acc.quotes += r.quotes; acc.price_changes += r.price_changes; acc.advances += r.advances
+    acc.order_qty += r.order_qty; acc.stock_qty += r.stock_qty; acc.sample_qty += r.sample_qty; acc.note_refs += r.note_refs
+    return acc
+  }, { quotes: 0, price_changes: 0, advances: 0, order_qty: 0, stock_qty: 0, sample_qty: 0, note_refs: 0 })
+
+  res.json({
+    code: 0,
+    data: {
+      range: { start, end },
+      customers: rows,
+      totals,
+      samples_registered: sampleRegistered,
+      notes: [
+        '报价次数 = 报价记录里本月新增的条数（可追溯到历史）',
+        '改价次数 = 报价记录里本月发生字段变更的条数（可追溯到历史，最早 2026-06-10）',
+        `送样登记 = 样品登记表本月新增条数（可追溯，但该表没有客户列 ⇒ 只给全局数 ${sampleRegistered} 条）`,
+        '状态推进次数 = 本月把物料状态往下一阶段推进的次数（规格书/送样/下散单/下批量）',
+        '下单/备货/送样数量 = 记事里关联物料时填的数量合计',
+        '⚠️ 状态推进与记事数量自 2026-10-14（v1.0.223）起才开始记录，之前月份这两项为空属正常'
+      ]
+    }
+  })
+})
 
 // 详情
 router.get('/:id', (req, res) => {

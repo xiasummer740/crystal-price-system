@@ -79,8 +79,17 @@
 
       <!-- 已选择客户：物料表格 -->
       <template v-else>
+        <!-- 视图切换：列表 / 看板 / 月度汇总（祥哥 2026-10-14）—— 都放这一页，物料相关的东西不用到处找 -->
+        <div class="view-bar">
+          <button class="view-btn" :class="{ active: viewMode === 'list' }" @click="switchView('list')">列表</button>
+          <button class="view-btn" :class="{ active: viewMode === 'kanban' }" @click="switchView('kanban')">看板</button>
+          <button class="view-btn" :class="{ active: viewMode === 'monthly' }" @click="switchView('monthly')">月度汇总</button>
+          <button class="stale-btn" :class="{ on: staleCount > 0 }" title="待跟进：停在某个阶段太久没推进的物料（阈值自己设）"
+            @click="showStale = true">⏳ 待跟进{{ staleCount ? ' ' + staleCount : '' }}</button>
+        </div>
+
         <!-- 搜索栏 + 筛选 -->
-        <div class="filter-panel">
+        <div class="filter-panel" v-show="viewMode === 'list' || viewMode === 'kanban'">
           <div class="search-box">
             <input v-model="keyword" placeholder="搜索编码/料号/名称…" @input="onSearchDebounced" class="search-input" />
             <span v-if="keyword" class="search-clear" @click="keyword = ''; onSearch()">×</span>
@@ -100,7 +109,7 @@
           <div class="filter-btn" @click="showColSettings = true" title="设置每列文字的对齐方式">⚙ 列设置</div>
         </div>
 
-        <div class="table-wrap" ref="tableWrapRef">
+        <div class="table-wrap" ref="tableWrapRef" v-if="viewMode === 'list'">
           <table class="mat-table" :style="{ width: totalWidth + 'px' }">
             <thead>
               <tr>
@@ -138,6 +147,14 @@
                     {{ item.status }}
                   </span>
                 </td>
+                <!-- 停留：多久没推进到下一步。带 * = 按上次改动估算（该物料还没有状态变更记录） -->
+                <td class="col-dwell" :style="{ width: colWidths.dwell + 'px', textAlign: colAligns.dwell }">
+                  <span v-if="item.dwell_days != null" class="dwell-tag" :class="dwellClass(item)"
+                    :title="item.dwell_exact ? `自 ${item.dwell_from}（状态变更）算起` : `自 ${item.dwell_from}（上次改动）估算 —— 该物料还没有状态变更记录`">
+                    {{ item.dwell_days }} 天{{ item.dwell_exact ? '' : '*' }}
+                  </span>
+                  <span v-else>—</span>
+                </td>
                 <td class="cell-copy" :style="{ width: colWidths.customer_desc + 'px', textAlign: colAligns.customer_desc }" :title="item.customer_desc" @click="copyText(item.customer_desc)">
                   <span class="rich-text" v-html="renderRich(item.customer_desc)"></span>
                 </td>
@@ -155,7 +172,7 @@
           </table>
         </div>
 
-        <div class="pager" v-if="total > pageSize">
+        <div class="pager" v-if="viewMode === 'list' && total > pageSize">
           <button class="pg-btn" :disabled="page <= 1" @click="page = 1; load()">首页</button>
           <button class="pg-btn" :disabled="page <= 1" @click="page--; load()">‹</button>
           <span class="pg-info">{{ page }} / {{ totalPages }}</span>
@@ -163,6 +180,14 @@
           <button class="pg-btn" :disabled="page >= totalPages" @click="page = totalPages; load()">末页</button>
           <button class="pg-btn all-btn" @click="showAll" title="一页显示全部记录">全部</button>
         </div>
+
+        <!-- 看板：按状态分列（列顺序/配色都取自服务端下发，不写死） -->
+        <MaterialKanban v-if="viewMode === 'kanban'" :items="list" :status-order="statusOrder"
+          :status-config="statusColors" :loading="loading" :hide-customer="!!selectedCustomer"
+          @open="openForm" />
+
+        <!-- 月度汇总：客户 × 指标 -->
+        <MaterialMonthly v-if="viewMode === 'monthly'" />
       </template>
 
       <!-- 状态选择弹窗 -->
@@ -332,6 +357,9 @@
       <CustomerRegistryManager v-model:show="showRegistry" @changed="loadCustomerList" />
       <!-- 物料进展时间线（报价变化/送样/规格书/状态流转/被关联的记事） -->
       <MaterialTimeline v-model:show="showTimeline" :material-id="timelineId" />
+      <!-- 待跟进（超期提醒）：阈值自己设，默认不提醒 -->
+      <MaterialStalePanel v-model:show="showStale" :status-order="statusOrder" :status-config="statusColors"
+        @open="openFromStale" @changed="loadStaleCount" />
     </div>
   </transition>
 </template>
@@ -340,7 +368,7 @@
 import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { showToast, showConfirmDialog } from 'vant'
-import { fetchMaterials, createMaterial, updateMaterial, deleteMaterial, getMaterialStatusConfig, exportMaterials, importMaterialsExcel, searchAllCustomers, fetchMaterialCustomers, fetchMaterialFactories, uploadMaterialImages, deleteMaterialImage, isLocalFileUrl, fileDisplayName, http } from '../utils/api.js'
+import { fetchMaterials, createMaterial, updateMaterial, deleteMaterial, getMaterialStatusConfig, exportMaterials, importMaterialsExcel, searchAllCustomers, fetchMaterialCustomers, fetchMaterialFactories, uploadMaterialImages, deleteMaterialImage, isLocalFileUrl, fileDisplayName, fetchStaleMaterials, http } from '../utils/api.js'
 import { STATUS_FALLBACK, statusOrderFromConfig } from '../utils/materialStatus.js'
 // 图片预览右键菜单（复制图片 / 另存为）—— 客户端自带的右键菜单没有「复制图片」
 import ImageContextMenu from '../components/ImageContextMenu.vue'
@@ -348,6 +376,10 @@ import ImageContextMenu from '../components/ImageContextMenu.vue'
 import CustomerRegistryManager from '../components/CustomerRegistryManager.vue'
 // 物料进展时间线弹窗（报价变化/送样/规格书/状态流转/被关联的记事）
 import MaterialTimeline from '../components/MaterialTimeline.vue'
+// 按阶段看板 / 月度汇总 / 待跟进（超期提醒）—— 祥哥 2026-10-14
+import MaterialKanban from '../components/MaterialKanban.vue'
+import MaterialMonthly from '../components/MaterialMonthly.vue'
+import MaterialStalePanel from '../components/MaterialStalePanel.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -366,6 +398,51 @@ const timelineId = ref(0)
 function openTimeline(item) {
   timelineId.value = Number(item.id) || 0
   showTimeline.value = true
+}
+
+// ===== 视图切换（列表 / 看板 / 月度汇总）+ 待跟进面板（祥哥 2026-10-14）=====
+const viewMode = ref('list')
+const showStale = ref(false)
+const staleCount = ref(0)
+// 停留天数的颜色档：终态绿、≥60 红、≥30 橙、其余灰（阈值提醒另在「待跟进」里按阶段配）
+function dwellClass(item) {
+  if (item.is_terminal) return 'done'
+  const d = item.dwell_days ?? 0
+  if (d >= 60) return 'red'
+  if (d >= 30) return 'orange'
+  return 'grey'
+}
+async function loadStaleCount() {
+  try {
+    const r = await fetchStaleMaterials()
+    staleCount.value = r.data?.count || 0
+  } catch { staleCount.value = 0 }
+}
+// 视图切换：看板要「一屏看全」，所以切过去时临时把每页拉大（否则只有当前页的料上板，会误导）
+let savedPageSize = 0
+function switchView(mode) {
+  if (mode === viewMode.value) return
+  if (mode === 'kanban') {
+    if (!savedPageSize) savedPageSize = pageSize.value
+    if (pageSize.value < 500) pageSize.value = 500
+    viewMode.value = 'kanban'
+    load()
+    return
+  }
+  if (viewMode.value === 'kanban' && savedPageSize) {
+    pageSize.value = savedPageSize
+    savedPageSize = 0
+    viewMode.value = mode
+    load()
+    return
+  }
+  viewMode.value = mode
+}
+// 从「待跟进」面板点进某条 → 打开编辑弹窗（复用列表那套）
+function openFromStale(item) {
+  showStale.value = false
+  const found = list.value.find(x => Number(x.id) === Number(item.id))
+  openForm(found || item)
 }
 const showCustomerDropdown = ref(false)
 const customerList = ref([])
@@ -472,7 +549,7 @@ function showAll() {
 const COL_DEFAULTS = {
   date: 95, customer_code: 110, jkx_code: 175, price: 95, cost_price: 95,
   material_code: 150, material_name: 210, factory: 80, status: 75,
-  customer_desc: 150, remark: 120, actions: 95
+  customer_desc: 150, remark: 120, dwell: 90, actions: 125
 }
 const columns = [
   { key: 'date', label: '日期' },
@@ -484,6 +561,8 @@ const columns = [
   { key: 'material_name', label: '物料名称' },
   { key: 'factory', label: '工厂' },
   { key: 'status', label: '状态' },
+  // 停留：现在是「进入当前状态多久 / 多久没动静」——点表头可按停留排序（后端 sort=dwell）
+  { key: 'dwell', label: '停留' },
   { key: 'customer_desc', label: '客户描述' },
   { key: 'remark', label: '备注' },
   { key: 'actions', label: '操作' }
@@ -517,7 +596,7 @@ function resetColWidths() {
 const COL_ALIGN_DEFAULTS = {
   date: 'left', customer_code: 'left', jkx_code: 'left', price: 'left', cost_price: 'left',
   material_code: 'left', material_name: 'left', factory: 'left', status: 'center',
-  customer_desc: 'left', remark: 'left', actions: 'center'
+  customer_desc: 'left', remark: 'left', dwell: 'center', actions: 'center'
 }
 const ALIGN_OPTS = [
   { value: 'left', label: '左' },
@@ -1105,6 +1184,8 @@ onMounted(async () => {
     statusOrder.value = statusOrderFromConfig(r.data)
   } catch {}
   await loadCustomerList()
+  // 待跟进计数（未启用阈值时后端会返回 0，不会干扰界面）
+  loadStaleCount()
 })
 
 onUnmounted(() => {
@@ -1235,6 +1316,19 @@ onUnmounted(() => {
 .spec-btn { color: #8c5a1f; font-size: 15px; }
 .rimgs-btn { color: #1a6fb0; font-size: 13px; }
 .tl-btn { color: #722ed1; font-size: 13px; }
+/* 视图切换条（列表 / 看板 / 月度汇总 + 待跟进） */
+.view-bar { display: flex; align-items: center; gap: 8px; padding: 8px 16px 0; }
+.view-btn { height: 30px; padding: 0 14px; font-size: 12px; border: 1px solid #dcdee0; background: #fff; color: #323233; border-radius: 6px; cursor: pointer; }
+.view-btn.active { border-color: var(--color-primary); color: #fff; background: var(--color-primary); }
+.stale-btn { margin-left: auto; height: 30px; padding: 0 12px; font-size: 12px; border: 1px solid #ffd6d5; color: #e53935; background: #fff; border-radius: 6px; cursor: pointer; }
+.stale-btn.on { background: #fff1f0; font-weight: 600; }
+/* 停留天数：灰/橙/红/绿四档；带 * 表示按上次改动估算 */
+.col-dwell { font-size: 12px; }
+.dwell-tag { display: inline-block; padding: 1px 6px; border-radius: 4px; font-size: 11px; white-space: nowrap; }
+.dwell-tag.grey { color: #969799; background: #f2f3f5; }
+.dwell-tag.orange { color: #fa8c16; background: #fff7e6; }
+.dwell-tag.red { color: #e53935; background: #fff1f0; }
+.dwell-tag.done { color: #52c41a; background: #f6ffed; }
 .spec-btn-dim { color: #e0e0e0; font-size: 15px; cursor: not-allowed; }
 
 /* 高亮按钮 */

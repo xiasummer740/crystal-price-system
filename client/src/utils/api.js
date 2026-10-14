@@ -397,6 +397,25 @@ export function fetchMaterialFactories(customer) {
   return http.get('/materials/factories/list', { params: { customer } })
 }
 
+// ===== 阶段停留时长 / 待跟进 / 月度汇总（祥哥 2026-10-14）=====
+// 停留天数两种口径：有状态事件=精确，没有=按上次改动估算（界面必须能区分）。
+// 阈值由用户在「待跟进」面板里自己设，默认全 0 = 不提醒；「下批量」是终态不参与。
+export function fetchStaleMaterials() {
+  return http.get('/materials/stale')
+}
+/** 月度汇总（客户 × 指标）；start/end 为 YYYY-MM-DD，缺省=本月 */
+export function fetchMaterialMonthly(params) {
+  return http.get('/materials/monthly', { params })
+}
+/** 读取全部设置（app_settings KV） */
+export function fetchAppSettings() {
+  return http.get('/settings')
+}
+/** 保存设置（值会被转成字符串存） */
+export function saveAppSettings(obj) {
+  return http.post('/settings', obj)
+}
+
 // ===== 物料进展时间线（祥哥 2026-10-14 需求）=====
 // 把已有的报价/改价（price_logs）、送样、规格书、以及**被显式关联的记事**聚合成一条时间线。
 // 记事是客户级的、默认不进；只有用户主动关联过这个物料的那条才出现。

@@ -1,10 +1,14 @@
 /**
  * 文件日志工具 — 按日期轮转，多级别日志
  *
- * 日志目录: {DATA_DIR}/logs/error-YYYY-MM-DD.log
+ * 日志目录: {DATA_DIR}/logs/app-YYYY-MM-DD.log
  * 格式: [ISO时间戳] [级别] [模块] 消息\n
  *
  * 级别: ERROR > WARN > INFO > DEBUG
+ *
+ * ⚠️ 文件名历史沿革：2026-10-14 之前叫 `error-YYYY-MM-DD.log`，但里面**各级别都写**
+ * （INFO 也写），名字让人以为「天天报错」。现改为 `app-*.log`；
+ * **读取/列表/清空逻辑一律按 `*.log` 通配**，所以老的 error-*.log 继续能看、能下载、能删，无需迁移。
  */
 import path from 'path'
 import fs from 'fs'
@@ -27,7 +31,7 @@ function getLogDir() {
 /** 获取当天的日志文件路径 */
 function logFilePath() {
   const date = new Date().toISOString().slice(0, 10) // YYYY-MM-DD
-  return path.join(getLogDir(), `error-${date}.log`)
+  return path.join(getLogDir(), `app-${date}.log`)
 }
 
 /** 写一行日志 */
