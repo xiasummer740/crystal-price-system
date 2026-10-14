@@ -1,4 +1,4 @@
-﻿# ============================================================
+# ============================================================
 #  晶振系统 - 一键发布脚本
 #  用法: .\scripts\release.ps1 [版本号]
 #  或通过 npm: npm run release [-- 版本号]
@@ -266,8 +266,11 @@ $releaseBody = @"
 
 ### 安装
 
-- **安装版**：下载 `crystal-price-system-setup-v$NewVersion.exe`，双击安装
-- **便携版**：下载 `crystal-price-system-portable-v$NewVersion.exe`，双击直接运行
+- **安装版**：下载 `crystal-price-system-setup-$NewVersion.exe`，双击安装
+
+> 注：现只打 NSIS 安装版一个包（package.json 的 build.win.target 只列了 nsis），
+> 以前这里写的「便携版」并不存在，已删掉。
+> 在线更新要求同一次发布里 **安装包 + `.blockmap` + `latest.yml`** 三样齐全，缺一更新就会失败。
 
 ### 外网访问
 
@@ -304,7 +307,12 @@ if ($hasInstaller) {
     try {
         $uploadHeaders = $baseHeaders.Clone()
         $uploadHeaders['Content-Type'] = 'application/octet-stream'
-        $uploadUrlFull = "$uploadUrl`?name=" + [System.Web.HttpUtility]::UrlEncode($InstallerNameEN)
+        # ⚠️ 别用 [System.Web.HttpUtility]::UrlEncode：System.Web 在干净的 powershell 会话里
+        # **不一定加载**（2026-10-14 实测：-NoProfile 下直接 "Unable to find type"）。
+        # 而这一句包在 try/catch 里 ⇒ 安装包会**静默上传失败**，Release 看着建好了、
+        # 点最新版却没有安装包，在线更新直接废掉（v1.0.220 能传上去是靠会话里恰好加载了 System.Web，
+        # 那是运气不是设计）。[uri] 来自 System 命名空间，任何会话都在。
+        $uploadUrlFull = "$uploadUrl`?name=" + [uri]::EscapeDataString($InstallerNameEN)
         Invoke-RestMethod -Uri $uploadUrlFull -Method Post -Headers $uploadHeaders -InFile $InstallerENPath
         Write-Host "  [OK] 安装版已上传" -ForegroundColor Green
     } catch {
