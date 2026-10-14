@@ -33,13 +33,15 @@
 .vscode/
 client/dist/
 client/node_modules/
+# unplugin-vue-components 自动生成的类型声明：每次构建都会重写，跟踪它只会让工作区永远脏
+client/components.d.ts
 dist/
-dist-exe/
-dist-exe/*.blockmap
-dist-exe/*.exe
-dist-exe/.icon-ico/
-dist-exe/builder-debug.yml
-dist-exe/win-unpacked/
+# 打包产物不入库，**只留 latest.yml**（线上资产元数据，发版后单独提交）。
+# ⚠️ 必须写成 `dist-exe/*` 而不是 `dist-exe/`：父目录被整体忽略时，
+#    后面的 `!dist-exe/latest.yml` 再想包含里面的文件是**无效**的（Git 不会进被忽略的目录），
+#    于是每次 git add 都报 "paths are ignored" 警告。
+dist-exe/*
+!dist-exe/latest.yml
 node_modules/
 server/data.db
 server/data/

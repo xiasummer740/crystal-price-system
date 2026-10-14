@@ -14,8 +14,48 @@ const dbPath = path.join(dbDir, 'data.db')
 let SQL = null
 let db = null
 
+/**
+ * 每日一份**整库备份**（防「误操作 / 逻辑损坏」）。
+ *
+ * 为什么必须和 saveNow 的原子写**一起**有：原子写只防「写一半断电把文件写坏」，
+ * 防不了「今天手滑把一批数据改错/合并错了」——那种情况下磁盘上的库是完好的，
+ * 但没有历史副本就回不去。全公司数据都在这一个 data.db 里，只有 9/27 那次迁移前的手工备份是不够的。
+ *
+ * 位置：<数据目录>/备份/数据库日备/data-YYYY-MM-DD.db；保留最近 7 份，更早的自动删。
+ * 时机：initDb 里**读盘之后、任何迁移/写入之前**调用 ⇒ 备的是「上一次收工时的状态」，
+ *       正好是出事时想回到的那个点。
+ */
+function dailyDbBackup() {
+  try {
+    if (!fs.existsSync(dbPath)) return null          // 新库，还没东西可备
+    const dir = path.join(dataDir, '备份', '数据库日备')
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
+    // 用**本地日期**命名：与界面上看到的日期一致（UTC 会在晚上 8 点后跳到"明天"）
+    const d = new Date()
+    const pad = (n) => String(n).padStart(2, '0')
+    const today = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+    const dest = path.join(dir, `data-${today}.db`)
+    if (!fs.existsSync(dest)) {
+      fs.copyFileSync(dbPath, dest)
+      console.log(`[db] 已生成每日数据库备份: ${dest}`)
+    }
+    // 只保留最近 7 份（文件名带日期，按名字排就是按时间排）
+    const keep = fs.readdirSync(dir).filter(f => /^data-\d{4}-\d{2}-\d{2}\.db$/.test(f)).sort()
+    for (const f of keep.slice(0, Math.max(0, keep.length - 7))) {
+      try { fs.unlinkSync(path.join(dir, f)) } catch { /* 删不掉就留着，不影响主流程 */ }
+    }
+    return dest
+  } catch (e) {
+    // 备份失败不能让软件起不来；但也别静默 —— 写进日志便于排查
+    console.error('[db] 每日备份失败（不影响使用）:', e.message)
+    return null
+  }
+}
+
 export async function initDb() {
   if (db) return db
+  // 每日备份要在「读盘之后、任何迁移/写入之前」做 —— 备的是上次收工的状态
+  dailyDbBackup()
   // 用 locateFile 指定 WASM 路径，确保 Electron 打包后也能找到
   let wasmDir = path.join(__dirname, '..', '..', 'node_modules', 'sql.js', 'dist')
   // asarUnpack 解包后，WASM 文件在 .asar.unpacked 目录下
@@ -449,9 +489,33 @@ export function executeBatch(sql, params = []) {
 }
 
 // 立即保存到磁盘（数据库未初始化时抛错而非静默跳过）
+//
+// ⚠️ 必须**原子替换**：sql.js 是「整库导出」，一次写 858KB（生产实测）。
+// 直接 writeFileSync 覆盖原文件，如果正好断电/蓝屏/进程被杀，磁盘上就是一个**写了一半的库**
+// —— 全公司的数据都在这一个文件里，那等于全丢。
+// 做法：先写同目录的 .tmp，再 rename 覆盖（同盘 rename 是原子操作，要么旧文件、要么新文件）。
+// rename 失败（杀软临时占用/目标被打开）**不能**静默丢数据 ⇒ 重试几次，仍失败就退回直接写。
 export function saveNow() {
   if (!db) throw new Error('saveNow 调用时数据库尚未初始化')
-  const data = db.export()
-  fs.writeFileSync(dbPath, Buffer.from(data))
+  const data = Buffer.from(db.export())
+  const tmp = `${dbPath}.tmp`
+  try {
+    fs.writeFileSync(tmp, data)
+    for (let i = 0; i < 3; i++) {
+      try {
+        fs.renameSync(tmp, dbPath)
+        return
+      } catch (e) {
+        if (i === 2) throw e
+        // 同步阻塞一小会儿再重试：这是收尾路径，宁可慢一点也不要把数据写丢
+        const until = Date.now() + 60
+        while (Date.now() < until) { /* 忙等 60ms */ }
+      }
+    }
+  } catch (e) {
+    console.error('[db] 原子替换失败，退回直接写入:', e.message)
+    fs.writeFileSync(dbPath, data)
+    try { if (fs.existsSync(tmp)) fs.unlinkSync(tmp) } catch { /* 残留 tmp 无害 */ }
+  }
 }
 
