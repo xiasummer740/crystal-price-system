@@ -375,6 +375,24 @@ export function fetchAllCustomerNames() {
 export function fetchAllCustomersDetailed() {
   return http.get('/customers/list')
 }
+
+// ===== 客户名册管理（删除 / 合并）=====
+// 为什么需要：页面显示的是「名册 ∪ 各来源表」的**并集**，所以「只从名册删」没有用 ——
+// 源头还写着旧名字，页面照样显示、下次启动还会回填。后端因此规定：
+// 有引用时拒绝直接删（并告诉你被哪张表引用了几条），要改就用合并。
+// 详见 server/src/routes/customers.js 顶部注释。
+export function fetchCustomerRegistry(params) {
+  return http.get('/customers/manage', { params })
+}
+export function previewCustomerMerge(from, to) {
+  return http.post('/customers/merge-preview', { from, to })
+}
+export function mergeCustomerName(from, to) {
+  return http.post('/customers/merge', { from, to })
+}
+export function deleteCustomerName(name) {
+  return http.delete('/customers/' + encodeURIComponent(name))
+}
 export function fetchMaterialFactories(customer) {
   return http.get('/materials/factories/list', { params: { customer } })
 }

@@ -52,6 +52,11 @@
             </div>
           </div>
         </div>
+        <!-- 客户名册管理入口（祥哥 2026-10-14 反馈：出现「国润」「图科、」这类手打简写时，
+             界面上找不到任何地方能删 —— 因为页面显示的是并集，只删名册没用。
+             这个入口提供「删除（仅零引用）/ 合并到正确全名」，合并会把报价/客户物料/记事/地图
+             里的写法一起改掉。） -->
+        <button class="registry-btn" title="管理客户名册：删除没人用的名字 / 把简写合并到正确全名" @click="showRegistry = true">名册管理</button>
       </div>
 
       <!-- 未选择客户：显示客户列表入口 -->
@@ -321,6 +326,8 @@
       <!-- 主列表备注图片预览 -->
       <van-image-preview v-model:show="showListPreview" :images="listPreviewImgs" :start-position="listPreviewIdx" closeable close-on-click-overlay @change="listPreviewIdx = $event" @contextmenu="onPreviewCtx" />
       <ImageContextMenu ref="ctxMenuRef" />
+      <!-- 客户名册管理（删除零引用名字 / 把简写合并到正确全名） -->
+      <CustomerRegistryManager v-model:show="showRegistry" @changed="loadCustomerList" />
     </div>
   </transition>
 </template>
@@ -333,6 +340,8 @@ import { fetchMaterials, createMaterial, updateMaterial, deleteMaterial, getMate
 import { STATUS_FALLBACK, statusOrderFromConfig } from '../utils/materialStatus.js'
 // 图片预览右键菜单（复制图片 / 另存为）—— 客户端自带的右键菜单没有「复制图片」
 import ImageContextMenu from '../components/ImageContextMenu.vue'
+// 客户名册管理弹窗（删除没人用的名字 / 把简写合并到正确全名）
+import CustomerRegistryManager from '../components/CustomerRegistryManager.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -343,6 +352,8 @@ const isElectron = ref(!!window.electronAPI)
 // 客户选择
 const selectedCustomer = ref('')
 const customerQuery = ref('')
+// 客户名册管理弹窗（删除/合并）—— 见 components/CustomerRegistryManager.vue
+const showRegistry = ref(false)
 const showCustomerDropdown = ref(false)
 const customerList = ref([])
 const systemCustomers = ref([])
@@ -1111,6 +1122,9 @@ onUnmounted(() => {
 
 /* 客户选择栏 */
 .customer-bar { display: flex; gap: 8px; padding: 8px 16px; background: #fff; border-bottom: 1px solid #f0f0f0; flex-shrink: 0; }
+/* 名册管理入口：低调一点，别和「客户」选择框抢注意力 */
+.registry-btn { flex-shrink: 0; height: 38px; padding: 0 12px; font-size: 12px; color: #576b95; background: #f5f6f8; border: 1px solid transparent; border-radius: 8px; cursor: pointer; white-space: nowrap; transition: all .2s; }
+.registry-btn:hover { background: #fff; border-color: var(--color-primary); color: var(--color-primary); }
 .customer-select-wrap { position: relative; flex: 1; display: flex; align-items: center; gap: 6px; background: #f5f6f8; border-radius: 8px; padding: 0 10px; height: 38px; border: 1px solid transparent; transition: all .2s; }
 .customer-select-wrap.focused { border-color: var(--color-primary); background: #fff; box-shadow: 0 0 0 2px rgba(var(--color-primary-rgb),.1); }
 .cs-label { font-size: 12px; color: #888; white-space: nowrap; }

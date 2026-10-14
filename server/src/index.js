@@ -15,6 +15,7 @@ import logsRouter from './routes/logs.js'
 import mapRouter from './routes/map.js'
 import performanceRouter from './routes/performance.js'
 import materialsRouter from './routes/materials.js'
+import customersRouter from './routes/customers.js'
 import { exportToExcel, importFromExcel, generateTemplate, generateSampleTemplate, generateNoteTemplate } from './utils/export.js'
 import { initDb, saveNow, queryAll, execute } from './db.js'
 import { triggerBackup, flushPending } from './utils/excelBackup.js'
@@ -110,6 +111,14 @@ app.get('/api/customers/list', (req, res) => {
   const rows = listAll(req.query.limit)
   res.json({ code: 0, data: req.query.limit_as_list === '1' ? rows.map(r => r.name) : rows })
 })
+// 名册**管理**（删除/合并/列表）单独一个路由：
+//   GET    /api/customers/manage         名册条目 + 各来源引用计数（管理页用）
+//   POST   /api/customers/merge-preview  合并前预览（会动哪些表、几条、有无冲突）
+//   POST   /api/customers/merge          执行合并
+//   DELETE /api/customers/:name          删除名册条目（仅当任何来源表都没引用）
+// ⚠️ 挂在上面两个 app.get **之后**：Express 按注册顺序匹配，而本路由里没有 GET /list、
+//    GET /suggest 的处理器（/:name 只注册了 DELETE），所以不会抢走它们。
+app.use('/api/customers', customersRouter)
 
 // 导出 Excel
 app.get('/api/export', (req, res) => {
