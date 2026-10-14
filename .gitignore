@@ -50,4 +50,6 @@ startup.log
 Thumbs.db
 test-results/
 .playwright-mcp/
+# 启动动画验证器的中间产物（脚本每次自己生成；结论与截图另存到根目录做证据）
+tests/manual/_splash*
 

@@ -20,6 +20,12 @@ const BASE_PORT = 3266
 // 误报成「界面加载异常」，反倒吓人。90 秒对热启动仍是 90 倍余量，只有真卡死才够得着。
 const SPLASH_TIMEOUT_MS = 90000
 
+// 进程启动时刻。只用来在日志里标「这一趟启动到底花了多久」——
+// 2026-10-14 排查「偶尔卡在启动动画」时，靠它把 196 次启动的耗时拉出来对比：
+// 常态 4~20 秒，但 17 次超过 30 秒、最慢一次 164 秒（见下文 did-finish-load 那条日志）。
+const APP_START_TS = Date.now()
+const sinceStart = () => `${Date.now() - APP_START_TS}ms`
+
 // 强制禁用 GPU 硬件加速（解决此 Windows 预览版 GPU 崩溃问题）
 app.disableHardwareAcceleration()
 
@@ -518,7 +524,7 @@ function createWindow(port) {
   })
 
   mainWindow.webContents.on('did-finish-load', () => {
-    log('Page loaded successfully')
+    log(`Page loaded successfully（启动总耗时 ${sinceStart()}）`)
   })
   attachCrashRecovery(mainWindow, '主窗口')
   attachWindowOpenHandler(mainWindow)
@@ -541,28 +547,68 @@ function showSplash() {
     skipTaskbar: true,
     center: true
   })
-  const logoPath = path.join(__dirname, '..', 'client', 'dist', 'SJK-256.png')
-  // 打包后用 base64 内嵌（asar 内 file:// 不可访问）
+  // logo 优先用**透明字标** SJK.png（815×254，品牌字标）。
+  // 原先用的是 SJK-256.png：那是给 exe 图标用的 256×256 方块，alpha 全是 255（**完全不透明**），
+  // 塞进深色卡片里就是一个白色方块、里面的字标还很小。字标文件本来就在 client/public 下，
+  // 只是没人用它（2026-10-14 祥哥指出）。
+  // 打包后用 base64 内嵌（asar 内 file:// 不可访问）。两个都取不到就留空，别让闪屏崩掉。
+  const distDir = path.join(__dirname, '..', 'client', 'dist')
   let logoSrc = ''
-  try { logoSrc = 'data:image/png;base64,' + fs.readFileSync(logoPath).toString('base64') } catch { logoSrc = '' }
+  for (const name of ['SJK.png', 'SJK-256.png']) {
+    try {
+      logoSrc = 'data:image/png;base64,' + fs.readFileSync(path.join(distDir, name)).toString('base64')
+      break
+    } catch { /* 换下一个候选 */ }
+  }
+  if (!logoSrc) log('⚠️ 闪屏 logo 读取失败（SJK.png / SJK-256.png 都取不到），闪屏将只显示文字')
   const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
-    *{margin:0;padding:0}body{display:flex;align-items:center;justify-content:center;height:100vh;background:transparent;font-family:'Microsoft YaHei',sans-serif}
-    .wrap{text-align:center}
-    .card{background:linear-gradient(135deg,#1a1a2e,#16213e);border-radius:24px;padding:40px 48px;box-shadow:0 16px 48px rgba(0,0,0,.5);animation:fadeIn .8s cubic-bezier(.4,0,.2,1)}
-    img{width:96px;height:96px;border-radius:20px;box-shadow:0 6px 24px rgba(0,0,0,.3);margin-bottom:18px;animation:logoIn 1s cubic-bezier(.4,0,.2,1)}
-    h2{color:#e8e8e8;font-size:18px;font-weight:500;letter-spacing:3px;margin-bottom:14px;animation:textIn 1s cubic-bezier(.4,0,.2,1) .2s both}
-    .bar{width:180px;height:3px;background:rgba(255,255,255,.08);border-radius:2px;margin:0 auto;overflow:hidden;animation:barIn 1s ease .4s both}
+    *{margin:0;padding:0}
+    /* overflow:hidden 是为了「窗口比卡片还小时」也不出现滚动条 ——
+       实测（2026-10-14，480×260 窗口）：溢出产生的垂直滚动条会把内容挤偏 8.5px，
+       logo 就不在正中了。裁掉比挤偏好。（闪屏窗口实际是 420×340 > 卡片 324×276，本来溢不出） */
+    html,body{overflow:hidden;display:flex;align-items:center;justify-content:center;height:100vh;background:transparent;font-family:'Microsoft YaHei',sans-serif}
+    /* 卡片在窗口里居中 ⇒ 卡片的 50% 处就是窗口正中，logo 钉在这里才能「严格居中」。 */
+    .card{position:relative;width:324px;height:276px;background:linear-gradient(135deg,#1a1a2e,#16213e);border-radius:24px;box-shadow:0 16px 48px rgba(0,0,0,.5);animation:fadeIn .8s cubic-bezier(.4,0,.2,1)}
+    /* ⚠️ logo **必须严格居中于窗口**（祥哥 2026-10-14 明确要求）。
+       踩过的坑：原来是流式布局（img → h2 → 进度条 → 提示行），logo 会被下方那 141px 内容
+       顶到卡片偏上 50px（实测：logo 中心 y=120，窗口中心 y=170）。
+       改用绝对定位钉在卡片 50%/50%，上下都不再受其它元素高度影响。
+       又因为标题移到了 logo **上方**，上下内容才配平（否则卡片要么偏沉、要么上方留一大片空白）。 */
+    img{position:absolute;top:50%;left:50%;width:224px;height:auto;transform:translate(-50%,-50%);animation:logoIn 1s cubic-bezier(.4,0,.2,1)}
+    h2{position:absolute;top:52px;left:0;right:0;text-align:center;color:#e8e8e8;font-size:17px;font-weight:500;letter-spacing:3px;animation:textIn 1s cubic-bezier(.4,0,.2,1) .2s both}
+    .bar{position:absolute;top:50%;left:50%;width:180px;height:3px;background:rgba(255,255,255,.08);border-radius:2px;overflow:hidden;transform:translate(-50%,-50%) translateY(52px);animation:barIn 1s ease .4s both}
     .bar-inner{width:40%;height:100%;background:#4fc3f7;border-radius:2px;animation:load 1.8s ease .6s infinite}
-    @keyframes fadeIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
-    @keyframes logoIn{0%{opacity:0;transform:scale(.8)}50%{opacity:1;transform:scale(1.05)}100%{opacity:1;transform:scale(1)}}
+    .hint{position:absolute;top:50%;left:0;right:0;padding:0 22px;box-sizing:border-box;transform:translateY(66px);text-align:center;color:#8b93a7;font-size:11px;line-height:1.5;white-space:pre-line}
+    /* 只淡入、**不做位移**：原来带 translateY(10px)，那 0.8 秒里整卡下沉、logo 会偏下 10px
+       （2026-10-14 用居中验证器量出来的，偏差正好 10.00px）。祥哥要的是「logo 始终在正中」，
+       所以入场也不许位移。 */
+    @keyframes fadeIn{from{opacity:0}to{opacity:1}}
+    /* 关键帧里必须带上 translate(-50%,-50%) —— 缩放动画会**整条覆盖** transform，
+       漏了这句，logo 在动画那 1 秒里会跳到「以左上角对齐窗口中心」的错位状态。 */
+    @keyframes logoIn{0%{opacity:0;transform:translate(-50%,-50%) scale(.8)}50%{opacity:1;transform:translate(-50%,-50%) scale(1.05)}100%{opacity:1;transform:translate(-50%,-50%) scale(1)}}
     @keyframes textIn{from{opacity:0;letter-spacing:8px}to{opacity:1;letter-spacing:3px}}
     @keyframes barIn{from{opacity:0;width:0}to{opacity:1;width:180px}}
     @keyframes load{0%{width:0;margin-left:0}40%{width:70%;margin-left:15%}70%{width:30%;margin-left:60%}100%{width:0;margin-left:100%}}
   </style></head><body><div class="wrap"><div class="card">
-    <img src="${logoSrc}">
     <h2>晶振报价管理系统</h2>
+    <img src="${logoSrc}">
     <div class="bar"><div class="bar-inner"></div></div>
-  </div></div></body></html>`
+    <div class="hint" id="hint">正在启动…</div>
+  </div></div>
+  <script>
+    // 计时器**跑在闪屏自己的渲染进程里**，所以主进程被同步任务堵住时它照样在走。
+    // 这正是「卡在启动动画」最需要的东西：2026-10-14 那次启动，主进程从 2.2 秒起被堵了
+    // 近 18 秒、页面 164 秒才出来，主进程的兜底定时器跟着一起停摆 ——
+    // 用户面对的是一个一动不动、也看不出「还活着」的动画，只能强杀碰运气。
+    var t0 = Date.now();
+    var el = document.getElementById('hint');
+    setInterval(function () {
+      var s = Math.round((Date.now() - t0) / 1000);
+      if (s < 6) { el.textContent = '正在启动…'; return; }
+      if (s < 30) { el.textContent = '启动较慢（已 ' + s + ' 秒）…请稍候'; return; }
+      el.textContent = '启动较慢（已 ' + s + ' 秒），通常在等安全软件扫描，不是死机。\\n请再等一会儿；若一直停在这里，把「数据目录 / logs / startup.log」发给技术。';
+    }, 500);
+  </script></body></html>`
   splash.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`)
   splashWindow = splash
   return splash
@@ -1006,7 +1052,27 @@ app.whenReady().then(async () => {
   }
   // 就绪 → 关闪屏；超过 SPLASH_TIMEOUT_MS 还没就绪 → 也关。
   // 2026-09-27 那台电脑就是卡在这：窗口没就绪，闪屏永不关，用户只能强杀碰运气。
+  //
+  // ⚠️ 但它**武装得太晚**：下面这段要等 startServer() 返回、主窗口建好才跑。
+  // 而 startServer() 里是同步 import 服务模块 + 同步跑 syncArchive 迁移，全程堵死主进程 ——
+  // 2026-10-14 那次真机上这段堵了近 18 秒（见 startup.log：Loading URL → Reminder polling
+  // started 之间）。真要是卡在这一段，下面这些定时器**压根没被注册**，闪屏永远没人关。
+  // 所以再加一道从闪屏出现就开始计时的 earlyFallback（就绪后立刻 clearTimeout 让位）。
+  let earlyFallback = null
+  // 从闪屏出现就开始计时的那道兜底（见上面注释）。就绪后由 armSplashWatchdog 清掉。
+  earlyFallback = setTimeout(() => {
+    if (splashClosed) return
+    log(`⚠️ 启动超时：${SPLASH_TIMEOUT_MS}ms 内服务模块仍未就绪（启动总耗时 ${sinceStart()}）`)
+    closeSplash('服务就绪前超时')
+    dialog.showMessageBox({
+      type: 'warning',
+      title: '启动较慢',
+      message: `软件启动超过 ${SPLASH_TIMEOUT_MS / 1000} 秒仍未完成，已先关掉启动动画。`,
+      detail: '请再稍等；若始终看不到主界面，请关闭软件后重新打开。\n若多次如此，请把「数据目录 / logs / startup.log」发给技术。'
+    })
+  }, SPLASH_TIMEOUT_MS)
   const armSplashWatchdog = () => {
+    if (earlyFallback) { clearTimeout(earlyFallback); earlyFallback = null }
     if (!mainWindow) { log('⚠️ 主窗口不存在，闪屏兜底未武装（闪屏将无人关闭）'); return }
     mainWindow.once('ready-to-show', () => setTimeout(() => closeSplash('窗口就绪'), 400))
     // 第二条出口：页面载入完成。
