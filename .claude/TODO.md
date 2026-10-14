@@ -1,53 +1,61 @@
 # 🛑 停工快照（手写，非自动生成）
 
-> 2026-10-14 收工 · 代码到 **ab5c225**，发版停在 **打包环境**这一步
+> 2026-10-14 续工 · 代码到 **2c44378**（与远端同步）· **打包卡点已解决**（本机实测 exit 0）
+> 现在只差「发版 v1.0.221」这一步，步骤见下方「打包通了之后要做的」
 
 ## ⏭️ 下个对话从这里接着干（最重要，先读这段）
 
-**代码全干完了、也全部推上 GitHub 了（远端 = ab5c225，本地领先 0）。唯一没做完的是「发版」。**
+**代码全干完了、也全部推上 GitHub 了（远端 = 本地 = 2c44378）。打包环境也通了。唯一没做完的是「发版」。**
 
-### 发版卡在哪（已查明，不是代码问题）
+### ✅ 打包卡点已解决（2026-10-14 08:56 本机实测）
 
-`npm run package` 在 **Windows 打包**这一步失败：
+原报错：`ERROR: Cannot create symbolic link : 客户端没有所需的特权 …\winCodeSign\…\darwin\10.12\lib\libcrypto.dylib`
 
-```
-ERROR: Cannot create symbolic link : 客户端没有所需的特权
-  ...\electron-builder\Cache\winCodeSign\...\darwin\10.12\lib\libcrypto.dylib
-```
-
-- **根因**：electron-builder 在 Windows 上打包时**无条件**要下 `winCodeSign` 工具包（**即使我们不签名**）。
-  那个 7z 里含 **2 个 macOS 符号链接**（`darwin/10.12/lib/{libcrypto,libssl}.dylib`），
-  Windows 创建符号链接需要**管理员权限或「开发者模式」**，本机两者都没开 ⇒ 解压失败 ⇒ 整包中止。
-- **不是项目配置问题**：已在该机器上验证过 `sign:false` / `forceCodeSigning:false` 都**不能**阻止它下载。
-- **不是网络问题**（这条已解决）：GitHub 被墙，`npm run package` 必须带代理环境变量：
+- **根因（已复现证实）**：electron-builder 把「下载+解压」委托给 Go 版 `app-builder.exe`，
+  它**无条件**下 `winCodeSign` 工具包（版本 **2.6.0**，URL 实测为
+  `https://github.com/electron-userland/electron-builder-binaries/releases/download/winCodeSign-2.6.0/winCodeSign-2.6.0.7z`），
+  且解压时带 `-snl`（把符号链接建成真链接）⇒ 包内 2 个 macOS 软链
+  （`darwin/10.12/lib/{libcrypto,libssl}.dylib`）建不出来 ⇒ `exit status 2` ⇒ 整包中止。
+- 本机**未开**开发者模式（`AllowDevelopmentWithoutDevLicense` 缺失）、当前进程**非管理员**
+  ⇒ 实测 `New-Item -ItemType SymbolicLink` 报「此操作需要管理员权限」。**这不是项目配置问题**：
+  `sign:false` / `forceCodeSigning:false` 都**不能**阻止它下载该工具包。
+- **采用的解法 = 路 B（缓存预置，已落地并验通）**：把该工具包**排除 darwin** 解压到
+  electron-builder 期望的缓存目录 **`%LOCALAPPDATA%\electron-builder\Cache\winCodeSign\winCodeSign-2.6.0\`**
+  （判据：`app-builder.exe download-artifact --name winCodeSign` 直接打印该路径且 **exit 0、不再下载**）。
+  目录名必须是 `winCodeSign-2.6.0`（= 7z 的 basename）；**随机数字目录是失败残留，不认**。
+  解压后应有 **58 个文件**：`rcedit-x64.exe`、`windows-10\{x64,ia32}\signtool.exe` 齐备、**无 `darwin`**。
+  复现命令（换机器照抄）：
   ```powershell
-  $env:HTTP_PROXY="http://127.0.0.1:10808"; $env:HTTPS_PROXY="http://127.0.0.1:10808"
+  $repo="<repo>"; $cache="$env:LOCALAPPDATA\electron-builder\Cache\winCodeSign"
+  $seven="$repo\node_modules\7zip-bin\win\x64\7za.exe"
+  $arc=Get-ChildItem $cache -Filter *.7z | Select-Object -First 1   # 5.6MB，md5=06EA32242279AD33BABA1870CAA084D8
+  & $seven x -bd "-x!darwin" $arc.FullName "-o$cache\winCodeSign-2.6.0"
   ```
-  带上后 Electron 二进制那 110MB 能下（v1.0.220 用的 electron 33.4.11，
-  本机 `%LOCALAPPDATA%\electron\Cache` 里本来就有这个 zip）。
-  注意 `ELECTRON_CACHE` 环境变量**不生效**（electron-builder 用自己的缓存目录结构）。
+  （`-x!darwin` 是关键。**注意 `-snl` 语义相反**——它是"把符号链接存为链接"，用了照样失败。）
+- **实测结果**：`npm run package` **exit 0**，产出
+  `dist-exe\crystal-price-system-setup-1.0.220.exe`（119,230,217 B）+ `.blockmap` + `latest.yml`；
+  日志 `signing with signtool.exe … no signing info identified, signing is skipped`（跳过签名，符合预期）。
+- **路 A 仍更干净（未做，可选）**：开 Windows「开发者模式」后不必预置缓存。本机 `admin` 在
+  Administrators 组里（只是当前进程没提权），管理员 PowerShell：
+  `reg add "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\AppModelUnlock" /t REG_DWORD /f /v AllowDevelopmentWithoutDevLicense /d 1`
 
-### 下一步怎么做（两条路，任选）
+### ⚠️ 打包的两个副作用（每次打包后都要还原）
 
-**路 A（推荐，一次性）**：开 Windows「开发者模式」→ 之后打包不再卡
-- 这台机器 `admin` **在 Administrators 组里**（只是当前进程没提权），所以开得了
-- 管理员 PowerShell 跑：
-  ```powershell
-  reg add "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\AppModelUnlock" /t REG_DWORD /f /v AllowDevelopmentWithoutDevLicense /d 1
-  ```
-  或 设置 → 隐私和安全性 → 开发者选项 → 开发人员模式
-- 可能需要重启
-
-**路 B（已在本机验证可行的手工绕法）**：把 winCodeSign **排除掉 darwin 目录**手工解压到 electron-builder 的缓存里：
+`npm run package` 会**覆盖仓库里已跟踪的两个生成文件**，它们是「线上 v1.0.220 资产元数据」/「自动生成类型」，
+不该被本地构建结果顶掉 —— 打完包后执行：
 ```powershell
-$cache="$env:LOCALAPPDATA\electron-builder\Cache\winCodeSign"
-$seven="<repo>\node_modules\7zip-bin\win\x64\7za.exe"
-$arc=Get-ChildItem $cache -Filter *.7z | Select-Object -First 1
-$dest=Join-Path $cache ([IO.Path]::GetFileNameWithoutExtension($arc.Name))
-& $seven x -bd "-x!darwin" $arc.FullName "-o$dest"     # ← 实测退出码 0、Windows 工具齐备
+git checkout -- dist-exe/latest.yml client/components.d.ts
 ```
-（`-x!darwin` 是关键：排除那两个 macOS 软链就能干净解压。
-**注意 `-snl` 语义相反**——它是"把符号链接存为链接"，用了照样失败。）
+（本次实测：`latest.yml` 被改成新构建的 sha512/size=119230217，与已发布的 120451155 不符；已还原。）
+
+### 网络（已解决，每次打包都要带）
+
+GitHub 被墙，`npm run package` 必须带代理环境变量：
+```powershell
+$env:HTTP_PROXY="http://127.0.0.1:10808"; $env:HTTPS_PROXY="http://127.0.0.1:10808"
+```
+本机 10808 端口实测**在线**；Electron 二进制（33.4.11）本机缓存里已有。
+注意 `ELECTRON_CACHE` 环境变量**不生效**（electron-builder 用自己的缓存目录结构）。
 
 ### 打包通了之后要做的
 
@@ -57,6 +65,10 @@ $dest=Join-Path $cache ([IO.Path]::GetFileNameWithoutExtension($arc.Name))
 3. `npm run release -- 1.0.221`（会：bump 版本 → 打包 → tag → push → 上传
    **安装包 / blockmap / latest.yml** 三样，缺一在线更新就会失败）
 4. 在沙箱验证「检查更新」能发现 1.0.221
+
+> 📌 现在 `dist-exe\` 里的 `crystal-price-system-setup-1.0.220.exe`（119,230,217 B）是
+> **2026-10-14 08:56 的「打通打包」验证产物，不是一次发版**（版本号仍是 1.0.220，未 tag、未上传）。
+> 其余两个待发版改动（图片右键复制、客户名统一名册）都还没进正式版本，发 1.0.221 时才带出去。
 
 ### 数据安全（已逐条查证，可放心）
 
