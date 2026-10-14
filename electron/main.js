@@ -5,6 +5,7 @@ import http from 'http'
 import { execSync } from 'child_process'
 import { fileURLToPath } from 'url'
 import { loadUserConfig, saveUserConfig, loadFullConfig, saveFullConfig, setEphemeralConfig } from './config.js'
+import { computeSplashPosition } from './splashPosition.js'
 import { initUpdater, downloadUpdate, quitAndInstall, checkForUpdates, installOnQuit } from './updater.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -537,15 +538,33 @@ function createWindow(port) {
 
 // 启动动画闪屏
 function showSplash() {
+  const SPLASH_W = 420
+  const SPLASH_H = 340
+  // 闪屏出现的**位置**：主界面窗口将要出现的那块地方的正中间（祥哥 2026-10-14 要求）。
+  // 以前写的是 center:true ⇒ 永远钉在屏幕正中；用户把软件拖到别处/副屏时，
+  // 闪屏与软件窗口差出两三百像素，看着割裂。这里复用 createWindow 同一套坐标判据
+  // （save bounds + sanitizeBounds），保证「闪屏中心」= 「主窗口中心」。
+  let splashPos = {}
+  try {
+    splashPos = computeSplashPosition({
+      savedBounds: sanitizeBounds(loadFullConfig()?.mainWindow),
+      splashSize: { w: SPLASH_W, h: SPLASH_H },
+      primaryWorkArea: screen.getPrimaryDisplay().workArea
+    })
+    log(`闪屏位置: ${splashPos.x ?? '居中'},${splashPos.y ?? '居中'} ${SPLASH_W}x${SPLASH_H}`)
+  } catch (e) {
+    log('⚠️ 计算闪屏位置失败，交给 Electron 居中: ' + e.message)
+  }
   const splash = new BrowserWindow({
-    width: 420,
-    height: 340,
+    width: SPLASH_W,
+    height: SPLASH_H,
+    x: splashPos.x,
+    y: splashPos.y,
     frame: false,
     transparent: true,
     alwaysOnTop: true,
     resizable: false,
-    skipTaskbar: true,
-    center: true
+    skipTaskbar: true
   })
   // logo 优先用**透明字标** SJK.png（815×254，品牌字标）。
   // 原先用的是 SJK-256.png：那是给 exe 图标用的 256×256 方块，alpha 全是 255（**完全不透明**），

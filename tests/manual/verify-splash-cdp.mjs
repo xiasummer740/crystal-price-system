@@ -135,6 +135,35 @@ const dy = Math.abs(dom.logoCy - dom.winH / 2)
 check('logo 水平居中于窗口（≤1px）', dx <= 1, `偏差 ${dx.toFixed(1)}px（logo 中心 x=${dom.logoCx.toFixed(1)}，窗口中心 ${dom.winW / 2}）`)
 check('logo 垂直居中于窗口（≤1px）', dy <= 1, `偏差 ${dy.toFixed(1)}px（logo 中心 y=${dom.logoCy.toFixed(1)}，窗口中心 ${dom.winH / 2}）`)
 
+// ③ 闪屏窗口出现在**主界面窗口将要出现的位置**（祥哥 2026-10-14 要求，原来是永远钉屏幕正中）。
+// 判据不手填：从启动日志的 "Window bounds: x,y WxH" 读主窗口坐标（那行就是 createWindow 真正用的值），
+// 再和闪屏窗口自己的 screenX/screenY 比。日志里是「居中」时，主窗口由 Electron 居中 ⇒ 期望主显示器工作区正中。
+const win = await evaluate(`({ x: screenX, y: screenY, w: innerWidth, h: innerHeight,
+  availLeft: screen.availLeft, availTop: screen.availTop, availW: screen.availWidth, availH: screen.availHeight })`)
+let expected = null
+let why = ''
+try {
+  const logPath = path.join(process.env.DATA_DIR, 'logs', 'startup.log')
+  const logs = fs.readFileSync(logPath, 'utf8').split(/\r?\n/).filter(Boolean)
+  const line = [...logs].reverse().find(l => l.includes('Window bounds:'))
+  const m = line && line.match(/Window bounds: (\S+?),(\S+?) (\d+)x(\d+)/)
+  if (m && m[1] !== '居中' && m[2] !== '居中') {
+    expected = { cx: Number(m[1]) + Number(m[3]) / 2, cy: Number(m[2]) + Number(m[4]) / 2 }
+    why = `主窗口 ${m[1]},${m[2]} ${m[3]}x${m[4]}`
+  } else {
+    expected = { cx: win.availLeft + win.availW / 2, cy: win.availTop + win.availH / 2 }
+    why = `日志为「居中」⇒ 期望主显示器工作区正中`
+  }
+} catch (e) {
+  check('能读到启动日志（判据来源）', false, e.message)
+}
+if (expected) {
+  const scx = win.x + win.w / 2, scy = win.y + win.h / 2
+  const ex = Math.abs(scx - expected.cx), ey = Math.abs(scy - expected.cy)
+  check('闪屏出现在主窗口中心 · 水平（≤2px）', ex <= 2, `偏差 ${ex.toFixed(1)}px（闪屏中心 ${scx} vs 期望 ${expected.cx}；${why}）`)
+  check('闪屏出现在主窗口中心 · 垂直（≤2px）', ey <= 2, `偏差 ${ey.toFixed(1)}px（闪屏中心 ${scy} vs 期望 ${expected.cy}；${why}）`)
+}
+
 // ② 截图留证。
 // 等 1.2 秒再截：卡片的 fadeIn 是 0.8 秒淡入，DOM 一就绪就截会拍到「几乎全透明」的一片，
 // 存档里看不出长什么样（2026-10-14 实测：抢拍只有 6.3 KB，等动画走完是 46 KB）。
