@@ -40,8 +40,28 @@ export const DOCS_ROOT = path.join(DATA_ROOT, '公司资料')
 /** 分类预设（可自填） */
 export const DOC_CATEGORIES = ['开票资料', '营业执照', '开户许可证', '一般纳税人证明', '合同', '其它']
 
-/** 允许的扩展名（图片 / PDF / Word / Excel / 文本） */
-const ALLOWED_EXT = new Set(['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'pdf', 'doc', 'docx', 'xls', 'xlsx', 'txt', 'csv'])
+/**
+ * 允许的扩展名（祥哥 2026-10-15 追加要求后放宽）。
+ *
+ * 覆盖真实来源：
+ *   · 微信截图 / 手机拍照 → jpg png gif webp bmp **heic heif**（iPhone 默认就是 HEIC）
+ *   · 扫描件 / 电子发票 → **pdf**、**ofd**（国内电子发票常见格式）
+ *   · 办公文档 → doc docx xls xlsx **wps et dps**（WPS 三件套，国内办公室很多）
+ *   · 纯文本 → txt csv
+ *
+ * ⚠️ **故意不收 svg / html**：这两类会被 express.static 以同源方式打开，
+ * 里面的脚本能拿到页面同源的 localStorage（含接口 token）⇒ 客户发来的文件可变成 XSS 跳板。
+ * 图片/PDF 没有这个问题（PDF 由浏览器沙箱化查看器打开）。
+ */
+const ALLOWED_EXT = new Set([
+  'jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'heic', 'heif', 'tif', 'tiff',
+  'pdf', 'ofd',
+  'doc', 'docx', 'xls', 'xlsx', 'wps', 'et', 'dps', 'wpt',
+  'txt', 'csv'
+])
+
+/** 能在页面上**直接预览**的图片格式（HEIC/TIFF 浏览器解不了，只能存 + 交给系统程序打开） */
+const PREVIEWABLE_IMAGE = new Set(['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'])
 const MAX_SIZE = 20 * 1024 * 1024      // 20MB：开票资料/扫描件足够，再大就是拿错文件了
 
 /**
@@ -140,7 +160,9 @@ const shape = (r) => ({
   url: `/api/company-docs/file/${String(r.file_path || '').split('/').map(encodeURIComponent).join('/')}`,
   note: r.note || '',
   created_at: r.created_at || '',
-  is_image: ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'].includes(String(r.ext || '').toLowerCase())
+  // is_image 只对**浏览器能直接渲染**的图片为真：HEIC/TIFF 也允许上传（iPhone 拍照/扫描件常见），
+  // 但它们解不出来，界面要走「文件图标 + 用系统程序打开」，否则会显示成破图
+  is_image: PREVIEWABLE_IMAGE.has(String(r.ext || '').toLowerCase())
 })
 
 // ===== 列表：某归属下的所有资料 =====
@@ -206,8 +228,7 @@ router.get('/summary', (_req, res) => {
       customers: customers.map(r => ({ name: r.owner_name, doc_count: r.c, latest_at: r.latest_at || '' })),
       total: queryOne('SELECT COUNT(*) AS c FROM company_docs')?.c || 0,
       categories: DOC_CATEGORIES,
-      allowed_ext: [...ALLOWED_EXT],
-      max_size_mb: Math.round(MAX_SIZE / 1024 / 1024)
+      allowed_ext: [...ALLOWED_EXT],      max_size_mb: Math.round(MAX_SIZE / 1024 / 1024)
     }
   })
 })

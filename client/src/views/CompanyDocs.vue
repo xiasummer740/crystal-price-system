@@ -1,5 +1,17 @@
 <template>
-  <div class="cd-page">
+  <div class="cd-page"
+    @dragover.prevent="onDragOver"
+    @dragleave.prevent="onDragLeave"
+    @drop.prevent="onDrop">
+    <!-- 拖拽提示遮罩：微信里收到的图/PDF 直接拖进来最顺手 -->
+    <div v-if="dragging" class="drop-mask">
+      <div class="drop-box">
+        <div class="drop-icon">📥</div>
+        <div class="drop-text">松手就传到「{{ ownerName || '（请先选客户）' }}」</div>
+        <div class="drop-hint">图片 / PDF / OFD / Word / Excel（一次最多 9 个）</div>
+      </div>
+    </div>
+
     <!-- 文件预览（图片直接看，PDF/Word 用系统程序打开） -->
     <van-popup v-model:show="showPreview" position="center" round :style="{ width: '760px', maxWidth: '94vw' }">
       <div class="pv">
@@ -70,8 +82,9 @@
           <button class="up-btn" :disabled="!ownerName" @click="pickFiles('开票资料')">＋ 上传资料</button>
         </div>
         <p class="main-tip">
-          支持 <b>图片 / PDF / Word / Excel / txt</b>（单个不超过 {{ maxSizeMb }}MB，一次最多 9 个）。
-          开票时对方发来的「开票信息.jpg」直接传这儿，以后不用翻聊天记录。
+          支持 <b>图片 / PDF / OFD / Word / Excel / WPS / txt</b>（单个不超过 {{ maxSizeMb }}MB，一次最多 9 个）。
+          开票时对方发来的「开票信息.jpg」直接传这儿，以后不用翻聊天记录。<br />
+          💡 <b>可以把文件拖进来</b>，也可以 <b>Ctrl+V 直接粘贴截图</b>（微信截图后按 Ctrl+V 就行）。
         </p>
         <div v-if="!docs.length" class="main-empty">还没有资料 —— 点右上「＋ 上传资料」</div>
         <div v-else class="doc-grid">
@@ -163,7 +176,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { showConfirmDialog, showNotify, showSuccessToast } from 'vant'
 import {
@@ -255,11 +268,12 @@ async function loadSelfDocsAll() {
  * **挂到 DOM 再 click**：脱离文档的 input 在部分环境里 click() 不弹窗，
  * 而且真机验证脚本也需要能在 DOM 里找到它（否则没法喂文件）。
  */
+const ACCEPT = '.jpg,.jpeg,.png,.gif,.webp,.bmp,.heic,.heif,.tif,.tiff,.pdf,.ofd,.doc,.docx,.xls,.xlsx,.wps,.et,.dps,.txt,.csv'
 function makeFileInput(onFiles) {
   const input = document.createElement('input')
   input.type = 'file'
   input.multiple = true
-  input.accept = '.jpg,.jpeg,.png,.gif,.webp,.bmp,.pdf,.doc,.docx,.xls,.xlsx,.txt,.csv'
+  input.accept = ACCEPT
   input.style.display = 'none'
   input.onchange = () => {
     const files = [...(input.files || [])]
@@ -271,38 +285,71 @@ function makeFileInput(onFiles) {
   return input
 }
 
+/** 统一的「拿到文件 → 按当前归属上传」入口，拖拽/粘贴/选择三条路都走它（逻辑只有一份） */
+async function uploadFiles(files, ownerType, ownerNameVal, category) {
+  if (!ownerNameVal) { showNotify({ type: 'danger', message: '请先选择客户或主体' }); return }
+  try {
+    await uploadCompanyDocs({ ownerType, ownerName: ownerNameVal, category: category || '', files })
+    showSuccessToast(`已上传 ${files.length} 个文件`)
+    if (ownerType === 'self') await loadSelfDocsAll(); else await loadDocs()
+    await loadSummary()
+  } catch (e) {
+    showNotify({ type: 'danger', message: e?.response?.data?.msg || ('上传失败：' + e.message) })
+  }
+}
+
+// ===== 拖拽上传 =====
+const dragging = ref(false)
+let dragDepth = 0
+function onDragOver(e) {
+  // 只在真的拖了文件时才亮遮罩（拖选中文字不该触发）
+  if (!e.dataTransfer?.types?.includes('Files')) return
+  dragDepth++
+  dragging.value = true
+}
+function onDragLeave() {
+  dragDepth = Math.max(0, dragDepth - 1)
+  if (!dragDepth) dragging.value = false
+}
+function onDrop(e) {
+  dragDepth = 0
+  dragging.value = false
+  const files = [...(e.dataTransfer?.files || [])]
+  if (!files.length) return
+  // 拖到哪个 tab 就归到哪一类（客户资料 / 自己公司），归属用当前选中的
+  const type = tab.value === 'self' ? 'self' : 'customer'
+  uploadFiles(files, type, ownerName.value, type === 'self' ? (uploadCategory.value[currentCompanyId.value] || '营业执照') : '开票资料')
+}
+const currentCompanyId = computed(() => companies.value.find(c => c.name === ownerName.value)?.id || 0)
+
+// ===== 粘贴上传（微信截图 → Ctrl+V）=====
+function onPaste(e) {
+  const items = [...(e.clipboardData?.items || [])]
+  const files = []
+  for (const it of items) {
+    if (it.kind !== 'file') continue
+    const f = it.getAsFile()
+    if (f) files.push(f)
+  }
+  if (!files.length) return
+  e.preventDefault()
+  const type = tab.value === 'self' ? 'self' : 'customer'
+  if (!ownerName.value) return showNotify({ type: 'danger', message: '请先选择客户或主体，再粘贴' })
+  // 粘贴来的图多半是「开票资料」；自己公司则按卡片上选的分类
+  uploadFiles(files, type, ownerName.value, type === 'self' ? (uploadCategory.value[currentCompanyId.value] || '营业执照') : '开票资料')
+}
+
 function pickFiles(category) {
   if (!ownerName.value) return showNotify({ type: 'danger', message: '请先选择客户' })
   // ⚠️ 防呆：`@click="pickFiles"` 会把**点击事件对象**当参数传进来，
   //    于是分类被存成「[object PointerEvent]」（截图里抓到过）。只接受字符串。
   const cat = typeof category === 'string' ? category : ''
-  makeFileInput(async (files) => {
-    try {
-      await uploadCompanyDocs({ ownerType: 'customer', ownerName: ownerName.value, category: cat, files })
-      showSuccessToast(`已上传 ${files.length} 个文件`)
-      await loadDocs()
-      await loadSummary()
-    } catch (e) {
-      showNotify({ type: 'danger', message: e?.response?.data?.msg || ('上传失败：' + e.message) })
-    }
-  })
+  makeFileInput((files) => uploadFiles(files, 'customer', ownerName.value, cat))
 }
 
 /** 自己公司的上传（归属类型 self；分类取卡片上选的那个） */
 function pickSelfFiles(company) {
-  makeFileInput(async (files) => {
-    try {
-      await uploadCompanyDocs({
-        ownerType: 'self', ownerName: company.name,
-        category: uploadCategory.value[company.id] || '', files
-      })
-      showSuccessToast(`已上传 ${files.length} 个文件`)
-      await loadSelfDocsAll()
-      await loadSummary()
-    } catch (e) {
-      showNotify({ type: 'danger', message: e?.response?.data?.msg || ('上传失败：' + e.message) })
-    }
-  })
+  makeFileInput((files) => uploadFiles(files, 'self', company.name, uploadCategory.value[company.id] || '营业执照'))
 }
 
 function preview(d) { previewDoc.value = d; showPreview.value = true }
@@ -368,15 +415,24 @@ async function copyCompanyInfo(c) {
 }
 
 onMounted(async () => {
+  // 粘贴监听挂在 document 上：他截图后随手 Ctrl+V，不该要求先点某个输入框
+  document.addEventListener('paste', onPaste)
   await loadSummary()
   const c = String(route.query.customer || '').trim()
   if (c) { tab.value = 'customer'; await selectCustomer(c) }
   else if (customerOptions.value.length) await selectCustomer(customerOptions.value[0].name)
 })
+onUnmounted(() => { document.removeEventListener('paste', onPaste) })
 </script>
 
 <style scoped>
-.cd-page { display: flex; flex-direction: column; height: 100vh; background: #f7f8fa; }
+.cd-page { display: flex; flex-direction: column; height: 100vh; background: #f7f8fa; position: relative; }
+/* 拖拽提示遮罩：整页覆盖，松手即传 */
+.drop-mask { position: fixed; inset: 0; z-index: 3000; background: rgba(22,119,255,.08); border: 3px dashed var(--color-primary, #1989fa); display: flex; align-items: center; justify-content: center; pointer-events: none; }
+.drop-box { background: #fff; border-radius: 12px; padding: 28px 40px; text-align: center; box-shadow: 0 8px 30px rgba(0,0,0,.12); }
+.drop-icon { font-size: 40px; }
+.drop-text { margin-top: 8px; font-size: 15px; font-weight: 600; color: #323233; }
+.drop-hint { margin-top: 6px; font-size: 12px; color: #969799; }
 .cd-header { display: flex; align-items: center; gap: 10px; padding: 10px 16px; background: #fff; border-bottom: 1px solid #ebedf0; }
 .cd-header h3 { font-size: 16px; margin: 0; color: #323233; }
 .cd-sub { font-size: 12px; color: #969799; }

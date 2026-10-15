@@ -182,7 +182,31 @@ describe('公司资料 / 开票资料库', () => {
     assert.equal(r.status, 200)
   })
 
-  it('⑩ 缺少归属名要报错（不然文件会落到「未命名」里，谁也找不到）', async () => {
+  it('⑪ 新增格式：HEIC/OFD/WPS 收；svg/html 故意不收（同源 XSS 跳板）', async () => {
+    const q = (name, type = 'application/octet-stream') => ({
+      query: { owner_type: 'customer', owner_name: CUST, category: '开票资料' },
+      files: [{ name, buf: Buffer.from('x'), type }]
+    })
+    // 收：iPhone 照片、电子发票、WPS 三件套
+    for (const [name, ext] of [['IMG_1234.HEIC', 'heic'], ['发票.ofd', 'ofd'], ['对账单.wps', 'wps'], ['开票信息.et', 'et']]) {
+      const r = await upload(q(name))
+      assert.equal(r.status, 200, `${name} 应该被接受：${JSON.stringify(r.body)}`)
+      assert.equal(r.body.data[0].ext, ext, '扩展名要归一成小写')
+    }
+    // 不收：svg / html —— 它们会被 express.static 同源打开，脚本能读 localStorage 里的接口 token
+    for (const bad of ['攻击.svg', '钓鱼.html', '脚本.htm']) {
+      const r = await upload(q(bad, 'image/svg+xml'))
+      assert.equal(r.status, 400, `${bad} 必须拒绝`)
+      assert.match(r.body.msg, /不支持的文件类型/)
+    }
+    // HEIC 允许上传但**不能当图片预览**（浏览器解不了，标成图片会显示破图）
+    const heic = await upload(q('拍照.heic'))
+    assert.equal(heic.body.data[0].is_image, false, 'HEIC 不该标成可预览图片')
+    const png = await upload(q('截图.png', 'image/png'))
+    assert.equal(png.body.data[0].is_image, true, 'PNG 可以预览')
+  })
+
+  it('⑫ 缺少归属名要报错（不然文件会落到「未命名」里，谁也找不到）', async () => {
     const r = await request.get('/api/company-docs/docs').query({ owner_type: 'customer', owner_name: '' })
     assert.equal(r.status, 400)
   })

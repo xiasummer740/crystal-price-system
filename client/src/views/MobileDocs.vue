@@ -127,7 +127,7 @@ function pick() {
   const input = document.createElement('input')
   input.type = 'file'
   input.multiple = true
-  input.accept = '.jpg,.jpeg,.png,.gif,.webp,.bmp,.pdf,.doc,.docx,.xls,.xlsx,.txt,.csv'
+  input.accept = '.jpg,.jpeg,.png,.gif,.webp,.bmp,.heic,.heif,.tif,.tiff,.pdf,.ofd,.doc,.docx,.xls,.xlsx,.wps,.et,.dps,.txt,.csv'
   input.style.display = 'none'
   input.onchange = async () => {
     const files = [...(input.files || [])]

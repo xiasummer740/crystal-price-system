@@ -219,6 +219,72 @@ check('手机版页面能打开（有标题和两个 tab）', mobile.bar === '�
 check('手机版能看到同一份客户资料', mobile.items >= 1, `${mobile.items} 项 · ${mobile.owner}`)
 check('手机版有「自己公司」tab（开票资料要能复制）', mobile.tabs.includes('自己公司'), JSON.stringify(mobile.tabs))
 
+// ⑥ 拖拽上传：拖进来要亮提示遮罩，松手就传
+// ⚠️ 先切回**桌面版**页面：上一段验的是手机版（/mobile-docs），那里没有 .cd-page
+await safe(`location.hash = '#/company-docs?customer=' + encodeURIComponent(${JSON.stringify(CUSTOMER)}); true`)
+await sleep(3200)
+const dragFlow = await safe(`(async () => {
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  const page = document.querySelector('.cd-page');
+  const mk = (names) => { const dt = new DataTransfer();
+    for (const n of names) dt.items.add(new File([new Uint8Array([137,80,78,71])], n, { type: 'image/png' }));
+    return dt; };
+  const before = document.querySelectorAll('.doc-card').length;
+  page.dispatchEvent(new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer: mk(['拖进来的开票资料.png']) }));
+  await sleep(500);
+  const maskShown = !!document.querySelector('.drop-mask');
+  const maskText = (document.querySelector('.drop-text')?.textContent || '').trim();
+  page.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: mk(['拖进来的开票资料.png']) }));
+  await sleep(3500);
+  const after = document.querySelectorAll('.doc-card').length;
+  return { maskShown, maskText, before, after, titles: [...document.querySelectorAll('.doc-title')].map(e => e.textContent.trim()) };
+})()`)
+check('拖文件进来会亮「松手就传」提示', dragFlow.maskShown === true, dragFlow.maskText || '')
+check('拖拽松手后真的传上去了（份数 +1）', dragFlow.after === (dragFlow.before || 0) + 1, `${dragFlow.before} → ${dragFlow.after}`)
+check('拖拽上传的文件名正常（中文不乱码）', (dragFlow.titles || []).some(t => t.includes('拖进来的开票资料')), JSON.stringify((dragFlow.titles || []).slice(0, 3)))
+// 拖完遮罩要收掉，不然会一直挡着
+check('拖完提示遮罩自动消失', (await safe(`!document.querySelector('.drop-mask')`)) === true)
+
+// ⑦ 粘贴上传（微信截图 → Ctrl+V）
+const pasteFlow = await safe(`(async () => {
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  const before = document.querySelectorAll('.doc-card').length;
+  const dt = new DataTransfer();
+  dt.items.add(new File([new Uint8Array([137,80,78,71,13,10,26,10])], 'image.png', { type: 'image/png' }));
+  const ev = new Event('paste', { bubbles: true, cancelable: true });
+  Object.defineProperty(ev, 'clipboardData', { value: dt });   // ClipboardEvent 构造器里给不了 clipboardData
+  document.dispatchEvent(ev);
+  await sleep(3500);
+  const after = document.querySelectorAll('.doc-card').length;
+  const cats = [...document.querySelectorAll('.doc-cat')].map(e => e.textContent.trim());
+  return { before, after, cats };
+})()`)
+check('Ctrl+V 粘贴截图能上传（份数 +1）', pasteFlow.after === (pasteFlow.before || 0) + 1, `${pasteFlow.before} → ${pasteFlow.after}`)
+check('粘贴来的图归到「开票资料」分类', (pasteFlow.cats || []).includes('开票资料'), JSON.stringify(pasteFlow.cats))
+
+// ⑧ HEIC 允许上传，但要按「文件」显示（浏览器解不了，不能当破图）
+const heicFlow = await safe(`(async () => {
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  const upBtn = [...document.querySelectorAll('button')].find(b => b.textContent.includes('上传资料'));
+  upBtn.click();
+  await sleep(600);
+  const input = document.querySelector('input[type=file]');
+  const dt = new DataTransfer();
+  dt.items.add(new File([new Uint8Array([0,0,0,24,102,116,121,112,104,101,105,99])], 'IMG_照的营业执照.heic', { type: 'image/heic' }));
+  input.files = dt.files;
+  input.dispatchEvent(new Event('change', { bubbles: true }));
+  await sleep(3500);
+  const cards = [...document.querySelectorAll('.doc-card')].map(c => ({
+    title: c.querySelector('.doc-title')?.textContent?.trim(),
+    hasImg: !!c.querySelector('img'),
+    icon: (c.querySelector('.doc-icon')?.textContent || '').trim()
+  }));
+  const heic = cards.find(c => (c.title || '').includes('.heic'));
+  return { heic: heic || null };
+})()`)
+check('HEIC 能收下（iPhone 拍的照片）', !!heicFlow.heic, JSON.stringify(heicFlow.heic))
+check('HEIC 按文件显示而不是破图', heicFlow.heic && heicFlow.heic.hasImg === false && !!heicFlow.heic.icon, JSON.stringify(heicFlow.heic))
+
 console.log('\n================ 结果 ================')
 const failed = results.filter(r => !r.pass)
 console.log(`共 ${results.length} 项，通过 ${results.length - failed.length}，失败 ${failed.length}`)
