@@ -455,6 +455,45 @@ export async function initDb() {
   try { db.run("ALTER TABLE customers ADD COLUMN pay_remark TEXT DEFAULT ''") } catch {}           // 付款/对账备注
   try { db.run("ALTER TABLE customers ADD COLUMN profile_updated_at TEXT DEFAULT ''") } catch {}   // 资料最后修改时间
 
+  // ====== 公司资料 / 开票资料库（祥哥 2026-10-15 需求）======
+  // 主要存放**客户发来的**开票资料/证照（对方多半发图片、PDF、Word/Excel），
+  // 也放**自己公司的**营业执照/开票资料（支持多家抬头，见 company_profiles）。
+  // 文件本体在 <数据目录>/公司资料/{客户|自己公司}/<归属名>/ 下，这里只存元数据。
+  db.run(`
+    CREATE TABLE IF NOT EXISTS company_docs (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      owner_type  TEXT NOT NULL DEFAULT 'customer',   -- 'customer' 客户发来的 / 'self' 自己公司
+      owner_name  TEXT NOT NULL DEFAULT '',           -- 客户名 或 主体名
+      category    TEXT DEFAULT '',                    -- 分类：开票资料/营业执照/…
+      title       TEXT DEFAULT '',                    -- 显示名（默认取原始文件名）
+      file_name   TEXT DEFAULT '',                    -- 原始文件名（保留下来方便认人）
+      file_path   TEXT DEFAULT '',                    -- **相对** 公司资料/ 的路径（换目录后仍有效）
+      ext         TEXT DEFAULT '',
+      size        INTEGER DEFAULT 0,
+      mime        TEXT DEFAULT '',
+      note        TEXT DEFAULT '',
+      created_at  DATETIME DEFAULT (datetime('now','localtime'))
+    )
+  `)
+  try { db.run('CREATE INDEX IF NOT EXISTS idx_company_docs_owner ON company_docs(owner_type, owner_name)') } catch {}
+
+  // 自己公司主体（多家抬头）：开票资料字段，一家一行
+  db.run(`
+    CREATE TABLE IF NOT EXISTS company_profiles (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      name        TEXT NOT NULL UNIQUE,
+      tax_no      TEXT DEFAULT '',
+      address     TEXT DEFAULT '',
+      phone       TEXT DEFAULT '',
+      bank        TEXT DEFAULT '',
+      account     TEXT DEFAULT '',
+      remark      TEXT DEFAULT '',
+      is_default  INTEGER DEFAULT 0,
+      created_at  DATETIME DEFAULT (datetime('now','localtime')),
+      updated_at  DATETIME DEFAULT (datetime('now','localtime'))
+    )
+  `)
+
   return db
 }
 

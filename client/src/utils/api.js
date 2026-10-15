@@ -426,6 +426,38 @@ export function saveCustomerProfile(payload) {
   return http.post('/customers/profile', payload)
 }
 
+// ===== 公司资料 / 开票资料库（祥哥 2026-10-15）=====
+// 主要存**客户发来的**开票资料（图片/PDF/Word/Excel），也存自己公司的证照（支持多家抬头）。
+// 归属与分类走 query：multer 决定目录/文件名时就要知道归属，走 body 时字段可能还没解析到。
+export function fetchCompanyDocs(ownerType, ownerName) {
+  return http.get('/company-docs/docs', { params: { owner_type: ownerType, owner_name: ownerName } })
+}
+export function fetchCompanyDocsSummary() {
+  return http.get('/company-docs/summary')
+}
+export function deleteCompanyDoc(id) {
+  return http.delete(`/company-docs/docs/${id}`)
+}
+/** 上传（可多选）。onProgress 用于显示进度条 */
+export function uploadCompanyDocs({ ownerType, ownerName, category, files, onProgress }) {
+  const fd = new FormData()
+  for (const f of files) fd.append('files', f, f.name)
+  return http.post('/company-docs/upload', fd, {
+    params: { owner_type: ownerType, owner_name: ownerName, category: category || '' },
+    headers: { 'Content-Type': 'multipart/form-data' },
+    onUploadProgress: (e) => { if (onProgress && e.total) onProgress(Math.round((e.loaded / e.total) * 100)) }
+  })
+}
+export function fetchCompanyProfiles() {
+  return http.get('/company-docs/companies')
+}
+export function saveCompanyProfile(payload) {
+  return http.post('/company-docs/companies', payload)
+}
+export function deleteCompanyProfile(id) {
+  return http.delete(`/company-docs/companies/${id}`)
+}
+
 // ===== 物料进展时间线（祥哥 2026-10-14 需求）=====
 // 把已有的报价/改价（price_logs）、送样、规格书、以及**被显式关联的记事**聚合成一条时间线。
 // 记事是客户级的、默认不进；只有用户主动关联过这个物料的那条才出现。

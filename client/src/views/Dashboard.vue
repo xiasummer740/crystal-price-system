@@ -15,6 +15,7 @@
         <router-link to="/samples" class="nav-btn hide-mobile" style="margin-right:6px">样品登记</router-link>
         <router-link to="/trash" class="nav-btn hide-mobile" style="margin-right:6px;color:#e53935;border-color:#ffcdd2">回收站</router-link>
         <router-link to="/reports" class="nav-btn hide-mobile" style="background:#f9f0ff;color:#722ed1;border-color:#d3adf7">📊 汇报</router-link>
+        <router-link to="/company-docs" class="nav-btn hide-mobile" style="margin-right:6px;background:#fff7e6;color:#d46b08;border-color:#ffd591">🏢 公司资料</router-link>
         <router-link to="/mobile" class="nav-btn hide-mobile">手机版</router-link>
         <button class="nav-btn hide-mobile" style="margin-left:6px;background:#f6ffed;color:#52c41a;border-color:#b7eb8f" @click="openDataFolder">📁 数据目录</button>
         <!-- 移动端汉堡菜单 -->
@@ -36,6 +37,7 @@
           <router-link to="/samples" class="nav-btn mobile-nav-item" @click="showMobileMenu = false">样品登记</router-link>
           <router-link to="/trash" class="nav-btn mobile-nav-item" @click="showMobileMenu = false">回收站</router-link>
           <router-link to="/reports" class="nav-btn mobile-nav-item" @click="showMobileMenu = false">📊 汇报</router-link>
+          <router-link to="/company-docs" class="nav-btn mobile-nav-item" @click="showMobileMenu = false">🏢 公司资料</router-link>
           <button class="nav-btn mobile-nav-item" @click="showMobileMenu = false;openDataFolder()">📁 数据目录</button>
         </div>
       </div>

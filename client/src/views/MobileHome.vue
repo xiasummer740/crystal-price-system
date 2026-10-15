@@ -85,6 +85,8 @@
       <van-tabbar-item icon="desktop-o" to="/">PC后台</van-tabbar-item>
       <van-tabbar-item icon="map-marked" to="/map-addresses">🗺️ 地图</van-tabbar-item>
       <van-tabbar-item icon="orders-o" to="/mobile-materials">📦 物料</van-tabbar-item>
+      <!-- 公司资料：在外面开发票、出示营业执照时手机上就能看（祥哥 2026-10-15） -->
+      <van-tabbar-item icon="description" to="/mobile-docs">🏢 资料</van-tabbar-item>
     </van-tabbar>
 
     <!-- 地图 APP 选择 -->

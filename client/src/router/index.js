@@ -34,6 +34,10 @@ const routes = [
   { path: '/performance', name: 'Performance', component: () => import('../views/PerformanceReview.vue'), meta: { title: '绩效明细' } },
   { path: '/materials', name: 'Materials', component: () => import('../views/Materials.vue'), meta: { title: '客户物料' } },
   { path: '/trip-plans', name: 'TripPlans', component: () => import('../views/TripPlan.vue'), meta: { title: '行程规划' } },
+  // 公司资料 / 开票资料库：客户发来的开票资料（图片/PDF/Word/Excel）、自己公司的证照（支持多家抬头）
+  { path: '/company-docs', name: 'CompanyDocs', component: () => import('../views/CompanyDocs.vue'), meta: { title: '公司资料' } },
+  // 手机版同一份数据的只读/可传视图（在外面开发票时用手机就能看）
+  { path: '/mobile-docs', name: 'MobileDocs', component: () => import('../views/MobileDocs.vue'), meta: { title: '公司资料' } },
   { path: '/:pathMatch(.*)*', redirect: '/' }
 ]
 

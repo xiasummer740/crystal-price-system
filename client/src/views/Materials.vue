@@ -14,6 +14,9 @@
           <!-- 只在桌面端显示：手机浏览器没有「打开文件夹」这回事 -->
           <button v-if="isElectron" class="action-btn" :disabled="!selectedCustomer" @click="openCustomerDir"
             title="在资源管理器里打开该客户的资料文件夹（规格书 / 物料图片 / 记事）">📁 客户目录</button>
+          <!-- 该客户的开票资料/证照（祥哥 2026-10-15）：开票时通常就在这个客户的物料页上，给个直达入口 -->
+          <button class="action-btn" :disabled="!selectedCustomer" @click="openCustomerDocs"
+            title="该客户发来的开票资料 / 营业执照等（图片、PDF、Word、Excel）">📄 开票资料</button>
           <button class="add-btn" :disabled="!selectedCustomer" @click="openForm()">＋ 新增</button>
           <button class="close-btn" @click="goBack" title="关闭">✕</button>
         </div>
@@ -402,6 +405,12 @@ function onProfileLoaded(profile) {
   customerProfile.value = profile || null
 }
 const customerProfile = ref(null)
+
+/** 跳到「公司资料」页并直接定位到这个客户（开票资料/证照都存那儿） */
+function openCustomerDocs() {
+  if (!selectedCustomer.value) return
+  router.push({ path: '/company-docs', query: { customer: selectedCustomer.value } })
+}
 
 // 物料进展时间线弹窗 —— 见 components/MaterialTimeline.vue
 const showTimeline = ref(false)

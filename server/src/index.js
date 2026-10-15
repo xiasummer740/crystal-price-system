@@ -16,6 +16,7 @@ import mapRouter from './routes/map.js'
 import performanceRouter from './routes/performance.js'
 import materialsRouter from './routes/materials.js'
 import customersRouter from './routes/customers.js'
+import companyDocsRouter from './routes/companyDocs.js'
 import { exportToExcel, importFromExcel, generateTemplate, generateSampleTemplate, generateNoteTemplate } from './utils/export.js'
 import { initDb, saveNow, queryAll, execute } from './db.js'
 import { triggerBackup, flushPending } from './utils/excelBackup.js'
@@ -119,6 +120,8 @@ app.get('/api/customers/list', (req, res) => {
 // ⚠️ 挂在上面两个 app.get **之后**：Express 按注册顺序匹配，而本路由里没有 GET /list、
 //    GET /suggest 的处理器（/:name 只注册了 DELETE），所以不会抢走它们。
 app.use('/api/customers', customersRouter)
+// 公司资料 / 开票资料库（客户发来的开票资料、自己公司的证照；支持多家抬头）
+app.use('/api/company-docs', companyDocsRouter)
 
 // 导出 Excel
 app.get('/api/export', (req, res) => {
@@ -180,6 +183,11 @@ app.use('/api/uploads/prices', express.static(pricesUploadDir))
 const materialsUploadDir = path.join(process.env.DATA_DIR || path.join(__dirname, '..'), '客户物料图片库')
 if (!fs.existsSync(materialsUploadDir)) fs.mkdirSync(materialsUploadDir, { recursive: true })
 app.use('/api/uploads/materials', express.static(materialsUploadDir))
+
+// 公司资料 / 开票资料库（祥哥 2026-10-15）：客户发来的开票资料图片/PDF/Word/Excel，按归属分目录
+const companyDocsDir = path.join(process.env.DATA_DIR || path.join(__dirname, '..'), '公司资料')
+if (!fs.existsSync(companyDocsDir)) fs.mkdirSync(companyDocsDir, { recursive: true })
+app.use('/api/company-docs/file', express.static(companyDocsDir))
 
 // ===== 归档区（客户资料归档后的正式位置）=====
 // 客户管理/<客户>/{规格书,物料图片,记事/<日期>}、报价规格书/<品类>、报价备注图
