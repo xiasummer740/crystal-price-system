@@ -416,6 +416,16 @@ export function saveAppSettings(obj) {
   return http.post('/settings', obj)
 }
 
+// ===== 客户账期 / 对账付款资料（祥哥 2026-10-15）=====
+// 显示在「客户物料」页头选中客户那一行，入口也在那儿 + 名册管理。
+// 支持两种口径：结构化（每月对账日 + 账期天数，自动滚动）+ 手填「下次对账日」（优先）。
+export function fetchCustomerProfile(name) {
+  return http.get('/customers/profile', { params: { name } })
+}
+export function saveCustomerProfile(payload) {
+  return http.post('/customers/profile', payload)
+}
+
 // ===== 物料进展时间线（祥哥 2026-10-14 需求）=====
 // 把已有的报价/改价（price_logs）、送样、规格书、以及**被显式关联的记事**聚合成一条时间线。
 // 记事是客户级的、默认不进；只有用户主动关联过这个物料的那条才出现。

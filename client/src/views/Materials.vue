@@ -52,6 +52,9 @@
             </div>
           </div>
         </div>
+        <!-- 客户账期 / 对账付款 / 备注（祥哥 2026-10-15 要求显示在这里）。
+             显示与入口同一处：点这条就能改；名册管理里也能改（客户主数据的集中地）。 -->
+        <CustomerProfileBar :customer="selectedCustomer" @loaded="onProfileLoaded" />
         <!-- 客户名册管理入口（祥哥 2026-10-14 反馈：出现「国润」「图科、」这类手打简写时，
              界面上找不到任何地方能删 —— 因为页面显示的是并集，只删名册没用。
              这个入口提供「删除（仅零引用）/ 合并到正确全名」，合并会把报价/客户物料/记事/地图
@@ -376,6 +379,8 @@ import ImageContextMenu from '../components/ImageContextMenu.vue'
 import CustomerRegistryManager from '../components/CustomerRegistryManager.vue'
 // 物料进展时间线弹窗（报价变化/送样/规格书/状态流转/被关联的记事）
 import MaterialTimeline from '../components/MaterialTimeline.vue'
+// 客户账期条（显示在页头）
+import CustomerProfileBar from '../components/CustomerProfileBar.vue'
 // 按阶段看板 / 月度汇总 / 待跟进（超期提醒）—— 祥哥 2026-10-14
 import MaterialKanban from '../components/MaterialKanban.vue'
 import MaterialMonthly from '../components/MaterialMonthly.vue'
@@ -392,6 +397,12 @@ const selectedCustomer = ref('')
 const customerQuery = ref('')
 // 客户名册管理弹窗（删除/合并）—— 见 components/CustomerRegistryManager.vue
 const showRegistry = ref(false)
+// 客户账期条读完的回调（目前只留着备用：例如以后要在标题旁加「逾期」角标）
+function onProfileLoaded(profile) {
+  customerProfile.value = profile || null
+}
+const customerProfile = ref(null)
+
 // 物料进展时间线弹窗 —— 见 components/MaterialTimeline.vue
 const showTimeline = ref(false)
 const timelineId = ref(0)

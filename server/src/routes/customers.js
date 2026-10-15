@@ -24,6 +24,8 @@
 import { Router } from 'express'
 import { queryAll, queryOne, executeBatch, saveNow } from '../db.js'
 import { normalizeName, listAll } from '../utils/customerNames.js'
+// 客户账期/对账付款资料（祥哥 2026-10-15）：存在 customers 表上，见 utils/customerProfile.js 顶部说明
+import { readProfile, saveProfile, hasProfile, computeSchedule, PAYMENT_TERM_PRESETS } from '../utils/customerProfile.js'
 
 const router = Router()
 
@@ -90,7 +92,8 @@ function validate(req, res) {
 router.get('/manage', (req, res) => {
   const keyword = normalizeName(req.query.keyword || '')
   const union = listAll(5000)
-  const regRows = queryAll('SELECT name, source, created_at FROM customers')
+  const regRows = queryAll(`SELECT name, source, created_at, payment_terms, statement_day, payment_days, next_statement_date, pay_remark
+                              FROM customers`)
   const regMap = new Map(regRows.map(r => [r.name, r]))
 
   const data = union
@@ -108,7 +111,13 @@ router.get('/manage', (req, res) => {
         created_at: meta?.created_at || '',
         refs,
         ref_total: refTotal,
-        deletable: !!meta && refTotal === 0
+        deletable: !!meta && refTotal === 0,
+        // 账期资料（名册管理里显示一列，方便逐户巡检）
+        payment_terms: meta?.payment_terms || '',
+        pay_remark: meta?.pay_remark || '',
+        has_profile: hasProfile(r.name),
+        // 只有填过账期的才算日程，免得给 140 个客户都算一遍没意义的日期
+        schedule: hasProfile(r.name) ? computeSchedule(meta || {}) : null
       }
     })
     // 排序：可疑的排前面（短名、名字里带标点），其余按引用多的排 —— 方便一眼看到该清的
@@ -148,6 +157,25 @@ router.post('/merge', (req, res) => {
   changed.map = queryOne(`SELECT COUNT(*) AS c FROM ${MAP_TABLE} WHERE name = ?`, [to])?.c || 0
   // 名册：确保 to 在册、from 出册
   executeBatch('INSERT OR IGNORE INTO customers (name, source) VALUES (?, ?)', [to, 'merge'])
+  // 账期资料也要跟着走，否则「把简写并到全名」之后账期就找不到了。
+  // 策略：**目标行已填过就保留目标的**（判定它是更权威的那条），只有目标为空时才从源行搬过来。
+  try {
+    if (hasProfile(from) && !hasProfile(to)) {
+      executeBatch(
+        `UPDATE customers SET payment_terms = (SELECT payment_terms FROM customers WHERE name = ?),
+             statement_day = (SELECT statement_day FROM customers WHERE name = ?),
+             payment_days = (SELECT payment_days FROM customers WHERE name = ?),
+             next_statement_date = (SELECT next_statement_date FROM customers WHERE name = ?),
+             pay_remark = (SELECT pay_remark FROM customers WHERE name = ?),
+             profile_updated_at = (SELECT profile_updated_at FROM customers WHERE name = ?)
+           WHERE name = ?`,
+        [from, from, from, from, from, from, to]
+      )
+      changed.profile = 'moved'      // 账期资料已从 from 搬到 to
+    } else if (hasProfile(from)) {
+      changed.profile = 'kept-target' // 两边都填过：保留目标行的
+    }
+  } catch (e) { console.warn('[customers] 合并时搬迁账期资料失败（不影响合并）:', e.message) }
   executeBatch('DELETE FROM customers WHERE name = ?', [from])
   saveNow()
   res.json({ code: 0, msg: `已把「${from}」合并到「${to}」`, data: { from, to, merged: plan.total, tables: plan.tables } })
@@ -168,6 +196,14 @@ router.delete('/:name', (req, res) => {
       data: { name, refs }
     })
   }
+  // 填过账期/备注的也不许删：那些资料只挂在名册这一行上，删了就真没了（不像物料还能从回收站找）
+  if (hasProfile(name)) {
+    return res.status(409).json({
+      code: 1,
+      msg: `「${name}」上填过账期或备注资料，从名册删会把它们一起删掉。若确实要删，请先把账期资料清空（在「客户物料」页选中该客户 → 点页头的账期条修改），再回来删。`,
+      data: { name, has_profile: true }
+    })
+  }
   const r = executeBatch('DELETE FROM customers WHERE name = ?', [name])
   if (!r.changes) return res.status(404).json({ code: 1, msg: `名册里没有「${name}」` })
   saveNow()
@@ -177,6 +213,23 @@ router.delete('/:name', (req, res) => {
 // ===== ⑤ 顺带暴露统一列表（前端画「并集」用的同一份数据）=====
 router.get('/union-list', (req, res) => {
   res.json({ code: 0, data: listAll(req.query.limit) })
+})
+
+// ===== ⑥ 客户账期 / 对账付款资料（祥哥 2026-10-15）=====
+// ⚠️ 这两条必须注册在 `/:name` 之前 —— 否则 DELETE/GET 的 `/:name` 会先把 'profile' 吃掉
+//    （materials.js 的 /stale、/monthly 踩过同一个坑，见那里的注释）。
+router.get('/profile', (req, res) => {
+  const name = normalizeName(req.query.name || '')
+  if (!name) return res.status(400).json({ code: 1, msg: '缺少客户名' })
+  res.json({ code: 0, data: { ...readProfile(name), presets: PAYMENT_TERM_PRESETS } })
+})
+
+router.post('/profile', (req, res) => {
+  const name = normalizeName(req.body?.name || '')
+  if (!name) return res.status(400).json({ code: 1, msg: '缺少客户名' })
+  const r = saveProfile(name, req.body || {})
+  if (r.error) return res.status(400).json({ code: 1, msg: r.error })
+  res.json({ code: 0, data: { ...r.data, presets: PAYMENT_TERM_PRESETS }, msg: '已保存' })
 })
 
 export default router

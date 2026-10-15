@@ -443,6 +443,18 @@ export async function initDb() {
   // 兼容旧数据库：添加备注图片/文件列（JSON数组，微信粘贴报价原始记录）
   try { db.run("ALTER TABLE customer_materials ADD COLUMN remark_images TEXT DEFAULT '[]'") } catch {}
 
+  // ====== 客户的账期 / 对账付款信息（祥哥 2026-10-15 需求）======
+  // 显示在「客户物料」页头（选中的客户那一行），入口也在同一处 + 名册管理。
+  // 为什么加在 customers（名册表）而不是新建一张表：**改名合并、删除保护、客户并集
+  // 这三处逻辑本来就都在处理 customers** —— 放这里，合并时账期自动跟着走、并集自动包含、
+  // 名册管理顺手就能编辑；新建一张表则要在这三处各加一遍，更容易漏（历史教训）。
+  try { db.run("ALTER TABLE customers ADD COLUMN payment_terms TEXT DEFAULT ''") } catch {}       // 账期（预设或自填，如「月结30天」）
+  try { db.run('ALTER TABLE customers ADD COLUMN statement_day INTEGER DEFAULT 0') } catch {}      // 每月对账日 1-31（0=不设）
+  try { db.run('ALTER TABLE customers ADD COLUMN payment_days INTEGER DEFAULT 0') } catch {}       // 对账后多少天付款（0=不设）
+  try { db.run("ALTER TABLE customers ADD COLUMN next_statement_date TEXT DEFAULT ''") } catch {}  // 手填的「下次对账日」覆写 YYYY-MM-DD（空=按每月对账日自动算）
+  try { db.run("ALTER TABLE customers ADD COLUMN pay_remark TEXT DEFAULT ''") } catch {}           // 付款/对账备注
+  try { db.run("ALTER TABLE customers ADD COLUMN profile_updated_at TEXT DEFAULT ''") } catch {}   // 资料最后修改时间
+
   return db
 }
 

@@ -27,12 +27,22 @@
           <div class="crm-row-top">
             <div class="crm-name">{{ row.name }}</div>
             <div class="crm-actions">
+              <button class="mini" @click="openProfile(row)" title="填写账期 / 对账付款时间 / 备注">账期 ✎</button>
               <button class="mini" @click="startMerge(row)">合并到…</button>
-              <button class="mini danger" :disabled="!row.deletable" @click="doDelete(row)">删除</button>
+              <button class="mini danger" :disabled="!row.deletable || row.has_profile"
+                :title="row.has_profile ? '该客户填过账期/备注资料，删名册会连资料一起删；请先清空账期资料' : ''"
+                @click="doDelete(row)">删除</button>
             </div>
           </div>
           <div class="crm-meta">
             <span class="tag">{{ sourceLabel(row.source) }}</span>
+            <!-- 账期一列：客户主数据的集中地，方便逐户巡检；没填过的不显示，避免刷屏 -->
+            <span v-if="row.payment_terms" class="terms">账期 {{ row.payment_terms }}</span>
+            <span v-if="row.schedule && row.schedule.statement_date" class="terms"
+              :class="{ warn: row.schedule.manual_expired || row.schedule.due_passed_days > 0 }">
+              下次对账 {{ row.schedule.statement_date }}
+            </span>
+            <span v-if="row.has_profile" class="ref">有账期资料</span>
             <span v-if="row.refs.materials" class="ref">客户物料 {{ row.refs.materials }}</span>
             <span v-if="row.refs.quotes" class="ref">报价 {{ row.refs.quotes }}</span>
             <span v-if="row.refs.notes" class="ref">记事 {{ row.refs.notes }}</span>
@@ -60,6 +70,9 @@
           </div>
         </div>
       </div>
+
+      <!-- 账期 / 对账付款资料编辑（与「客户物料」页头那条是同一个组件，口径不会两边不一致） -->
+      <CustomerProfileEditor v-model:show="showProfile" :customer="profileCustomer" @saved="load" />
     </div>
   </van-popup>
 </template>
@@ -68,6 +81,7 @@
 import { ref, computed, watch } from 'vue'
 import { showConfirmDialog, showNotify, showSuccessToast } from 'vant'
 import { fetchCustomerRegistry, previewCustomerMerge, mergeCustomerName, deleteCustomerName, suggestCustomers } from '../utils/api.js'
+import CustomerProfileEditor from './CustomerProfileEditor.vue'
 
 const props = defineProps({ show: Boolean })
 const emit = defineEmits(['update:show', 'changed'])
@@ -80,6 +94,13 @@ const mergeFrom = ref('')
 const mergeTo = ref('')
 const preview = ref(null)
 const suggestions = ref([])
+// 账期资料编辑（名册管理里也能改 —— 客户主数据的集中地）
+const showProfile = ref(false)
+const profileCustomer = ref('')
+function openProfile(row) {
+  profileCustomer.value = row.name
+  showProfile.value = true
+}
 
 const SOURCE_LABEL = {
   manual: '手工录入',
@@ -213,6 +234,8 @@ if (typeof window !== 'undefined') window.__customerRegistry = { load, startMerg
 .crm-meta .tag { background: #eef4ff; color: #3b7ddd; border-radius: 4px; padding: 1px 5px; }
 .crm-meta .ref { color: #e08a00; }
 .crm-meta .ok { color: #07c160; }
+.crm-meta .terms { color: #1a6fb0; background: #f0f7ff; border-radius: 4px; padding: 1px 5px; }
+.crm-meta .terms.warn { color: #e53935; background: #fff1f0; }
 .crm-meta .time { color: #c8c9cc; margin-left: auto; }
 .crm-merge { margin-top: 8px; padding: 8px; background: #f7f8fa; border-radius: 8px; }
 .crm-sug { margin-top: 6px; font-size: 11px; color: #969799; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
