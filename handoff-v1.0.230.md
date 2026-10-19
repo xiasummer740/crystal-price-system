@@ -74,6 +74,14 @@
   - `suggest-materials-autofill.png`：选料号后带出物料名称
   - 还验了：下拉挂在 body、落在视口内、Esc 不会把新增弹窗一起关掉、提交后新记录进列表、
     客户物料编码只出当前客户的料号。
+- **打包版（win-unpacked / asar）实跑 5/5**：`--remote-debugging-port` + CDP 连进打包版窗口，
+  验证样品页能开、下拉出候选、SJK 在首位、选料号带出参数（截图 `suggest-packaged-app.png`）。
+  启动日志确认 `DATA_DIR: D:\temp\suggest-verify\data`（沙箱）、`Window bounds` 正常；
+  跑完核对生产配置：`user-config.json` 的 dataDir、`data-dir.txt`、生产 `data.db` md5
+  （`39D1245F3482C0E120607C6CBA1D77DE`）三项全未变。
+- 发版：`v1.0.230` → https://github.com/xiasummer740/crystal-price-system/releases/tag/v1.0.230
+  （安装包 119281505 B / blockmap / latest.yml 三样齐全，`latest.yml` 的 sha512 与实际安装包逐字节核对一致，
+  `releases/latest` 返回 v1.0.230）。
 
 ## 三、踩过的坑（下次别再踩）
 
