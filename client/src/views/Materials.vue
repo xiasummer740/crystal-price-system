@@ -238,11 +238,13 @@
               </div>
               <div class="form-field">
                 <label>客户物料编码</label>
-                <input v-model="form.customer_code" placeholder="客户物料编码" class="f-input" />
+                <SuggestField plain input-class="f-input" v-model="form.customer_code" :options="matOpts.customer_code"
+                  placeholder="客户物料编码（可联想）" />
               </div>
               <div class="form-field">
                 <label>晶科鑫料号</label>
-                <input v-model="form.jkx_code" placeholder="晶科鑫料号" class="f-input" />
+                <SuggestField plain input-class="f-input" v-model="form.jkx_code" :options="matOpts.codes"
+                  :drop-width="420" placeholder="晶科鑫料号（可联想）" @select="onPickMatCode" />
               </div>
               <div class="form-field">
                 <label>报价</label>
@@ -254,7 +256,8 @@
               </div>
               <div class="form-field">
                 <label>物料编码</label>
-                <input v-model="form.material_code" placeholder="物料编码" class="f-input" />
+                <SuggestField plain input-class="f-input" v-model="form.material_code" :options="matOpts.codes"
+                  :drop-width="420" placeholder="物料编码（可联想）" @select="onPickMatCode" />
               </div>
               <div class="form-field form-field-full">
                 <label class="f-label-with-btn">
@@ -265,7 +268,8 @@
               </div>
               <div class="form-field">
                 <label>工厂</label>
-                <input v-model="form.factory" placeholder="工厂" class="f-input" />
+                <SuggestField plain input-class="f-input" v-model="form.factory" :options="matOpts.factory"
+                  placeholder="工厂（可联想）" />
               </div>
               <div class="form-field">
                 <label>状态</label>
@@ -319,9 +323,11 @@
               </div>
               <p class="alt-hint">主料缺货时临时可用的相近物料（选填）</p>
               <div v-for="(alt, i) in form.alternates" :key="i" class="alt-row">
-                <input v-model="alt.material_code" placeholder="备选物料编码" class="f-input alt-input alt-code" />
+                <SuggestField plain input-class="f-input alt-input alt-code" v-model="alt.material_code"
+                  :options="matOpts.codes" :drop-width="360" placeholder="备选物料编码" @select="opt => onPickAltCode(alt, opt)" />
                 <input v-model="alt.material_name" placeholder="备选物料名称" class="f-input alt-input alt-name" />
-                <input v-model="alt.factory" placeholder="备选工厂" class="f-input alt-input alt-factory-input" />
+                <SuggestField plain input-class="f-input alt-input alt-factory-input" v-model="alt.factory"
+                  :options="matOpts.factory" placeholder="备选工厂" />
                 <input v-model="alt.cost_price" placeholder="备选成本价" class="f-input alt-input alt-price" />
                 <button class="alt-del-btn" @click="removeAlternate(i)" title="删除此备选">×</button>
               </div>
@@ -388,6 +394,8 @@ import CustomerProfileBar from '../components/CustomerProfileBar.vue'
 import MaterialKanban from '../components/MaterialKanban.vue'
 import MaterialMonthly from '../components/MaterialMonthly.vue'
 import MaterialStalePanel from '../components/MaterialStalePanel.vue'
+// 输入联想（料号/工厂等历史值，选料号自动带出名称/工厂）
+import SuggestField from '../components/SuggestField.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -1027,6 +1035,51 @@ const form = ref({
   customer_desc: '', remark: '', alternates: [], spec_document: '', remark_images: []
 })
 
+// ===== 输入联想（料号 / 工厂的历史值）=====
+// 数据来自 /api/suggest/form?scope=materials：报价表 + 客户物料里出现过的料号与工厂，
+// 按使用次数倒序（常用的先出现）。接口挂了不影响手打。
+const matSug = ref({ fields: {}, codes: [] })
+// 联想数据是「按客户」拉的（客户物料编码是每个客户自己的一套）。记下这批数据属于哪个客户，
+// 切换客户后、新数据还没回来之前，不要把上一个客户的料号当成当前客户的候选。
+const matSugCustomer = ref(null)
+const matOpts = computed(() => {
+  const f = matSug.value.fields || {}
+  const vals = k => (f[k] || []).map(v => ({ value: v.value, meta: v.count > 1 ? `${v.count} 次` : '' }))
+  const scopedOk = matSugCustomer.value === selectedCustomer.value
+  return {
+    codes: (matSug.value.codes || []).map(c => ({ value: c.code, meta: c.name || '', raw: c })),
+    factory: vals('factory'),
+    customer_code: scopedOk ? vals('customer_code') : []
+  }
+})
+// 请求序号：慢的旧请求回来时不能覆盖新请求的结果（打开表单会刷新一次，切换客户也会）
+let matSugSeq = 0
+async function loadMatSuggestions() {
+  const customer = selectedCustomer.value
+  const seq = ++matSugSeq
+  try {
+    const r = await http.get('/suggest/form', { params: { scope: 'materials', customer } })
+    if (seq !== matSugSeq) return
+    if (r?.data) {
+      matSug.value = r.data
+      matSugCustomer.value = customer
+    }
+  } catch { /* 联想失败不挡录入 */ }
+}
+// 选料号 → 带出名称/工厂（只填空项，不覆盖手填）
+function onPickMatCode(opt) {
+  const m = opt?.raw || {}
+  let n = 0
+  if (!String(form.value.material_name || '').trim() && m.name) { form.value.material_name = m.name; n++ }
+  if (!String(form.value.factory || '').trim() && m.factory_code) { form.value.factory = m.factory_code; n++ }
+  if (n) showToast(`已带出 ${n} 项（可再改）`)
+}
+function onPickAltCode(alt, opt) {
+  const m = opt?.raw || {}
+  if (!String(alt.material_name || '').trim() && m.name) alt.material_name = m.name
+  if (!String(alt.factory || '').trim() && m.factory_code) alt.factory = m.factory_code
+}
+
 function openForm(item) {
   if (item) {
     editing.value = item.id
@@ -1052,6 +1105,7 @@ function openForm(item) {
   }
   pendingImgDeletes.value = [] // 每次开表单都清空待删，避免上次残留
   showForm.value = true
+  loadMatSuggestions()
 }
 
 // 备选物料/工厂
@@ -1206,6 +1260,8 @@ onMounted(async () => {
   await loadCustomerList()
   // 待跟进计数（未启用阈值时后端会返回 0，不会干扰界面）
   loadStaleCount()
+  // 料号/工厂联想候选（打开表单时还会再刷新一次）
+  loadMatSuggestions()
 })
 
 onUnmounted(() => {

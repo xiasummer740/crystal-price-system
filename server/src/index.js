@@ -17,6 +17,7 @@ import performanceRouter from './routes/performance.js'
 import materialsRouter from './routes/materials.js'
 import customersRouter from './routes/customers.js'
 import companyDocsRouter from './routes/companyDocs.js'
+import suggestRouter from './routes/suggest.js'
 import { exportToExcel, importFromExcel, generateTemplate, generateSampleTemplate, generateNoteTemplate } from './utils/export.js'
 import { initDb, saveNow, queryAll, execute } from './db.js'
 import { triggerBackup, flushPending } from './utils/excelBackup.js'
@@ -100,6 +101,8 @@ app.use('/api/logs', logsRouter)
 app.use('/api/map', mapRouter)
 app.use('/api/performance', performanceRouter)
 app.use('/api/materials', materialsRouter)
+// 表单联想候选（录入页自动补全）：历史值按使用次数倒序 + 物料档案回填
+app.use('/api/suggest', suggestRouter)
 
 // ===== 客户名统一入口（所有页面的联想/下拉都走这里）=====
 // 查询范围是「customers 名册 ∪ 记事 ∪ 客户物料 ∪ 报价 ∪ 地图」的并集，

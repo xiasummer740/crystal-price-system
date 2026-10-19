@@ -17,6 +17,9 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     include: ['src/**/*.{test,spec}.{js,ts}'],
+    // Vant 的组件样式是 .css，externalize 掉会让 Node 直接 import CSS 报错；
+    // 交给 Vite 内联处理（vitest 会把 CSS 变空模块，组件逻辑照样测）
+    server: { deps: { inline: ['vant'] } },
   },
   plugins: [
     vue(),

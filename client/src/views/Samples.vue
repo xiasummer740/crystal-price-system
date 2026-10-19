@@ -138,20 +138,21 @@
     <van-popup v-model:show="showForm" position="right" :style="{ width:'88%', height:'100%' }" closeable>
       <div class="form-panel">
         <h3>{{ editingId?'编辑':'新增' }}样品</h3>
-        <van-field v-model="form.brand" label="品牌" placeholder="如：TXC" />
-        <van-field v-model="form.dimension" label="尺寸规格" placeholder="如：3.2×2.5mm" />
-        <van-field v-model="form.pin_count" label="PIN脚" placeholder="如：4PIN" />
-        <van-field v-model="form.frequency" label="频点" placeholder="如：32.768KHz" />
-        <van-field v-model="form.load_cap" label="负载" placeholder="如：12.5pF" />
-        <van-field v-model="form.voltage" label="电压" placeholder="如：3.3V" />
-        <van-field v-model="form.mode" label="模式" placeholder="如：基频" />
-        <van-field v-model="form.freq_tol" label="频偏" placeholder="如：±20ppm" />
-        <van-field v-model="form.material_code" label="物料编码" placeholder="物料编码" />
-        <van-field v-model="form.material_name" label="物料名称" placeholder="物料名称" />
-        <van-field v-model="form.material_spec" label="规格" placeholder="规格型号" />
+        <p class="form-hint">点输入框即可从历史数据里联想，敲字自动过滤；↑↓ 选择、Enter 确认、Esc 关闭。也可以直接手打新值。</p>
+        <SuggestField v-model="form.brand" label="品牌" placeholder="如：TXC" :options="opts.brand" />
+        <SuggestField v-model="form.dimension" label="尺寸规格" placeholder="如：3.2×2.5mm" :options="opts.dimension" />
+        <SuggestField v-model="form.pin_count" label="PIN脚" placeholder="如：4PIN" :options="opts.pin_count" />
+        <SuggestField v-model="form.frequency" label="频点" placeholder="如：32.768KHz" :options="opts.frequency" />
+        <SuggestField v-model="form.load_cap" label="负载" placeholder="如：12.5pF" :options="opts.load_cap" />
+        <SuggestField v-model="form.voltage" label="电压" placeholder="如：3.3V" :options="opts.voltage" />
+        <SuggestField v-model="form.mode" label="模式" placeholder="如：基频" :options="opts.mode" />
+        <SuggestField v-model="form.freq_tol" label="频偏" placeholder="如：±20ppm" :options="opts.freq_tol" />
+        <SuggestField v-model="form.material_code" label="物料编码" placeholder="物料编码（选已有料号会自动带出参数）" :options="opts.codes" @select="onPickCode" />
+        <SuggestField v-model="form.material_name" label="物料名称" placeholder="物料名称" :options="opts.material_name" />
+        <SuggestField v-model="form.material_spec" label="规格" placeholder="规格型号" :options="opts.material_spec" />
         <van-field v-model.number="form.price_with_tax" label="含税价" type="number" placeholder="含税价" @change="onPriceWithTaxChangeS" />
         <van-field v-model.number="form.cost_price" label="本价含税" type="number" placeholder="本价含税" @change="onCostPriceChangeS" />
-        <van-field v-model="form.factory_code" label="工厂" placeholder="工厂编号" />
+        <SuggestField v-model="form.factory_code" label="工厂" placeholder="工厂编号" :options="opts.factory_code" />
         <van-field v-model.number="form.stock_quantity" label="库存数量" type="digit" placeholder="0" />
         <van-field v-model="form.spec_document" label="规格书" placeholder="链接或路径" />
         <van-field v-model="form.remarks" label="备注" placeholder="备注" type="textarea" rows="2" autosize />
@@ -168,6 +169,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { http, importSamples } from '../utils/api.js'
 import { showToast, showConfirmDialog } from 'vant'
+import SuggestField from '../components/SuggestField.vue'
 
 const list = ref([])
 const total = ref(0)
@@ -227,6 +229,49 @@ function toggleAll(e) { checkedIds.value = e.target.checked ? list.value.map(r=>
 async function batchDelete() { if(!checkedIds.value.length)return;try { await showConfirmDialog({title:'批量删除',message:`确定删除已选中的 ${checkedIds.value.length} 条记录？`}) } catch { return }; try { await http.post('/samples/batch-delete',{ids:checkedIds.value}); checkedIds.value=[]; showToast('已删除'); reload() } catch(e) { showToast('删除失败: '+(e.message||'未知错误')) } }
 const form = ref({ material_code:'',material_name:'',material_spec:'',brand:'',dimension:'',pin_count:'',frequency:'',load_cap:'',voltage:'',mode:'',freq_tol:'',price_with_tax:null,cost_price:null,factory_code:'',stock_quantity:0,spec_document:'',remarks:'' })
 
+// ===== 表单联想候选（历史值 + 物料档案）=====
+// 后端一次返回「每个字段的历史值（用得多的在前）+ 物料档案（料号带名称/规格/参数）」，
+// 前端本地过滤，敲字零延迟；接口挂了也不挡手打（候选为空而已）。
+const sug = ref({ fields: {}, codes: [] })
+const opts = computed(() => {
+  const f = sug.value.fields || {}
+  const withCount = k => (f[k] || []).map(v => ({ value: v.value, meta: v.count > 1 ? `${v.count} 次` : '' }))
+  return {
+    codes: (sug.value.codes || []).map(c => ({ value: c.code, meta: c.name || '', raw: c })),
+    brand: withCount('brand'),
+    dimension: withCount('dimension'),
+    pin_count: withCount('pin_count'),
+    frequency: withCount('frequency'),
+    load_cap: withCount('load_cap'),
+    voltage: withCount('voltage'),
+    mode: withCount('mode'),
+    freq_tol: withCount('freq_tol'),
+    material_name: withCount('material_name'),
+    material_spec: withCount('material_spec'),
+    factory_code: withCount('factory_code')
+  }
+})
+let sugLoading = false
+async function loadFormSuggestions() {
+  if (sugLoading) return
+  sugLoading = true
+  try {
+    const r = await http.get('/suggest/form', { params: { scope: 'samples' } })
+    if (r?.data) sug.value = r.data
+  } catch { /* 联想失败不挡录入 */ } finally { sugLoading = false }
+}
+// 选已有料号 → 把空着的参数一次带出来（已填的不覆盖，尊重手改）
+const CODE_FILL_FIELDS = { material_name:'name', material_spec:'spec', brand:'brand', dimension:'dimension', pin_count:'pin_count', frequency:'frequency', load_cap:'load_cap', voltage:'voltage', mode:'mode', freq_tol:'freq_tol', factory_code:'factory_code' }
+function onPickCode(opt) {
+  const m = opt?.raw || {}
+  let n = 0
+  for (const [field, key] of Object.entries(CODE_FILL_FIELDS)) {
+    const cur = String(form.value[field] ?? '').trim()
+    if (!cur && m[key]) { form.value[field] = m[key]; n++ }
+  }
+  if (n) showToast(`已带出该料号的 ${n} 项参数`)
+}
+
 function fmtP(v) { return v!=null&&v!==''?'¥'+Number(v).toFixed(4):'-' }
 const autoTaxRateS = () => Number(localStorage.getItem('crystal_taxRate')) || 13
 function onPriceWithTaxChangeS() { const v = form.value.price_with_tax; if (v && !form.value.cost_price) { form.value.cost_price = parseFloat((v / (1 + autoTaxRateS()/100)).toFixed(4)) } }
@@ -275,15 +320,20 @@ let resizing=null
 function startResize(e,colIdx){if(!tableRef.value)return;const ths=tableRef.value.querySelectorAll('th');const th=ths[Number(colIdx)+1];if(!th)return;resizing={colIdx,startX:e.clientX,startW:th.offsetWidth||80,th};document.addEventListener('mousemove',onResize);document.addEventListener('mouseup',stopResize);document.body.style.cursor='col-resize';document.body.style.userSelect='none'}
 function onResize(e){if(!resizing)return;const diff=e.clientX-resizing.startX;const newW=Math.max(40,resizing.startW+diff);resizing.th.style.width=newW+'px';resizing.th.style.minWidth=newW+'px'}
 function stopResize(){resizing=null;document.removeEventListener('mousemove',onResize);document.removeEventListener('mouseup',stopResize);document.body.style.cursor='';document.body.style.userSelect=''}
-function openAdd(){editingId.value=null;form.value={material_code:'',material_name:'',material_spec:'',brand:'',dimension:'',pin_count:'',frequency:'',load_cap:'',voltage:'',mode:'',freq_tol:'',price_with_tax:null,cost_price:null,factory_code:'',stock_quantity:0,spec_document:'',remarks:''};showForm.value=true}
-function openEdit(item){editingId.value=item.id;form.value={...item};showForm.value=true}
+function openAdd(){
+  editingId.value=null
+  form.value={material_code:'',material_name:'',material_spec:'',brand:'',dimension:'',pin_count:'',frequency:'',load_cap:'',voltage:'',mode:'',freq_tol:'',price_with_tax:null,cost_price:null,factory_code:'',stock_quantity:0,spec_document:'',remarks:''}
+  showForm.value=true
+  loadFormSuggestions()
+}
+function openEdit(item){editingId.value=item.id;form.value={...item};showForm.value=true;loadFormSuggestions()}
 async function handleSave(){saving.value=true;try{if(editingId.value){await http.put(`/samples/${editingId.value}`,form.value);showToast('修改成功')}else{await http.post('/samples',form.value);showToast('新增成功')}showForm.value=false;reload()}catch(e){showToast('操作失败')}finally{saving.value=false}}
 async function handleDelete(item){try{await showConfirmDialog({title:'确认删除',message:`删除样品「${item.material_code||item.material_name}」？`})}catch{return};try{await http.delete(`/samples/${item.id}`);showToast('已删除');reload()}catch(e){showToast('删除失败: '+(e.message||'未知错误'))}}
 function downloadTemplate(){const a=document.createElement('a');a.href='/api/samples/template';a.download='样品导入模板.xlsx';a.click()}
 function handleImport(){fileInput.value?.click()}
 async function onFileChange(e){const f=e.target.files[0];if(!f)return;const d=new FormData();d.append('file',f);try{const r=await importSamples(d);showToast(r.msg||'导入成功');reload()}catch(e){showToast('导入失败: '+(e.message||''))};fileInput.value.value=''}
 function handleExport(){const p=new URLSearchParams();if(keyword.value)p.set('keyword',keyword.value);if(filterFactory.value)p.set('factory',filterFactory.value);if(filterBrand.value)p.set('brand',filterBrand.value);for(const [k,v] of Object.entries(columnFilters.value)) p.set(k,v);window.open('/api/samples/export?'+p.toString(),'_blank')}
-onMounted(()=>{loadOptions();reload()})
+onMounted(()=>{loadOptions();reload();loadFormSuggestions()})
 </script>
 
 <style scoped>
@@ -330,6 +380,7 @@ onMounted(()=>{loadOptions();reload()})
 .pg-info{font-size:12px;color:#888;padding:0 4px}
 .form-panel{padding:20px 16px;overflow-y:auto;height:100%}
 .form-panel h3{font-size:18px;margin-bottom:14px}
+.form-hint{font-size:11px;color:#969799;line-height:1.5;margin:-6px 0 10px}
 .form-btns{display:flex;gap:12px;margin-top:16px}
 /* 列筛选 */
 .col-filter{display:inline-block;color:#ccc;cursor:pointer;font-size:11px;margin-left:2px;padding:1px 3px;border-radius:2px;vertical-align:middle;position:relative;z-index:1}
