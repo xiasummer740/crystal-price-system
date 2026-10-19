@@ -52,7 +52,7 @@
             <th data-col="5">模式<span class="col-filter" @click.stop="openColFilter('mode','模式')">▾</span><span class="resize-handle" @mousedown.prevent="startResize($event,5)"></span></th>
             <th data-col="6">物料编码<span class="col-filter" @click.stop="openColFilter('material_code','物料编码')">▾</span><span class="resize-handle" @mousedown.prevent="startResize($event,6)"></span></th>
             <th data-col="7">物料名称<span class="col-filter" @click.stop="openColFilter('material_name','物料名称')">▾</span><span class="resize-handle" @mousedown.prevent="startResize($event,7)"></span></th>
-            <th data-col="8">本价含税<span class="resize-handle" @mousedown.prevent="startResize($event,8)"></span></th>
+            <th data-col="8">未税价<span class="resize-handle" @mousedown.prevent="startResize($event,8)"></span></th>
             <th data-col="9">工厂<span class="resize-handle" @mousedown.prevent="startResize($event,9)"></span></th>
             <th data-col="10">库存<span class="resize-handle" @mousedown.prevent="startResize($event,10)"></span></th>
             <th data-col="11">备注<span class="resize-handle" @mousedown.prevent="startResize($event,11)"></span></th>
@@ -150,8 +150,9 @@
         <SuggestField v-model="form.material_code" label="物料编码" placeholder="物料编码（选已有料号会自动带出参数）" :options="opts.codes" @select="onPickCode" />
         <SuggestField v-model="form.material_name" label="物料名称" placeholder="物料名称" :options="opts.material_name" />
         <SuggestField v-model="form.material_spec" label="规格" placeholder="规格型号" :options="opts.material_spec" />
-        <van-field v-model.number="form.price_with_tax" label="含税价" type="number" placeholder="含税价" @change="onPriceWithTaxChangeS" />
-        <van-field v-model.number="form.cost_price" label="本价含税" type="number" placeholder="本价含税" @change="onCostPriceChangeS" />
+        <van-field v-model.number="form.price_with_tax" label="含税价" type="number" placeholder="如：0.3200" @change="onPriceWithTaxChangeS" />
+        <van-field v-model.number="form.cost_price" label="未税价" type="number" placeholder="如：0.2832" @change="onCostPriceChangeS" />
+        <p class="form-hint">含税价 / 未税价按税率自动折算（当前 {{ taxRateS }}%）；另一个已有值时不会覆盖，可各自手改。</p>
         <SuggestField v-model="form.factory_code" label="工厂" placeholder="工厂编号" :options="opts.factory_code" />
         <van-field v-model.number="form.stock_quantity" label="库存数量" type="digit" placeholder="0" />
         <van-field v-model="form.spec_document" label="规格书" placeholder="链接或路径" />
@@ -207,8 +208,7 @@ const advFieldOptions = [
   {label:'物料编码',value:'material_code'},{label:'物料名称',value:'material_name'},{label:'物料规格',value:'material_spec'},
   {label:'品牌',value:'brand'},{label:'尺寸',value:'dimension'},{label:'频点',value:'frequency'},
   {label:'负载',value:'load_cap'},{label:'模式',value:'mode'},{label:'含税价',value:'price_with_tax'},
-  {label:'本价',value:'cost_price'},{label:'工厂',value:'factory_code'},{label:'库存',value:'stock_quantity'},{label:'备注',value:'remarks'}
-]
+  {label:'未税价',value:'cost_price'},{label:'工厂',value:'factory_code'},{label:'库存',value:'stock_quantity'},{label:'备注',value:'remarks'}]
 function applyAdvFilter() {
   const valid = advFilters.value.filter(f => f.field)
   advMultiFilter.value = valid.length ? JSON.stringify(valid) : ''
@@ -274,6 +274,7 @@ function onPickCode(opt) {
 
 function fmtP(v) { return v!=null&&v!==''?'¥'+Number(v).toFixed(4):'-' }
 const autoTaxRateS = () => Number(localStorage.getItem('crystal_taxRate')) || 13
+const taxRateS = ref(autoTaxRateS())
 function onPriceWithTaxChangeS() { const v = form.value.price_with_tax; if (v && !form.value.cost_price) { form.value.cost_price = parseFloat((v / (1 + autoTaxRateS()/100)).toFixed(4)) } }
 function onCostPriceChangeS() { const v = form.value.cost_price; if (v && !form.value.price_with_tax) { form.value.price_with_tax = parseFloat((v * (1 + autoTaxRateS()/100)).toFixed(4)) } }
 async function reload() { loadError.value=''; loading.value=true; try { const params={page:page.value,pageSize:pageSize.value,keyword:keyword.value,factory:filterFactory.value,brand:filterBrand.value,...columnFilters.value}; if(advMultiFilter.value) params.multiFilter=advMultiFilter.value; const r=await http.get('/samples',{params}); list.value=r.data.list; total.value=r.data.total } catch(e){ loadError.value='加载失败: '+(e.message||'未知错误') } finally{loading.value=false} }

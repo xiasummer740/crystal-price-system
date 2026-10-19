@@ -442,7 +442,7 @@ export function exportSamples(query = {}) {
   }
   const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : ''
   const rows = queryAll(`SELECT * FROM material_samples ${where} ORDER BY created_at DESC`, params)
-  const headers = ['登记时间','物料编码','物料名称','物料规格','品牌','尺寸','PIN脚','频点','负载','电压','模式','频偏','温度','含税价','本价含税','工厂','库存数量','规格书','备注']
+  const headers = ['登记时间','物料编码','物料名称','物料规格','品牌','尺寸','PIN脚','频点','负载','电压','模式','频偏','温度','含税价','未税价','工厂','库存数量','规格书','备注']
   const data = rows.map(r => [r.created_at,r.material_code,r.material_name,r.material_spec,r.brand,r.dimension,r.pin_count,r.frequency,r.load_cap,r.voltage,r.mode,r.freq_tol,r.temperature,r.price_with_tax,r.cost_price,r.factory_code,r.stock_quantity,r.spec_document,r.remarks])
   data.unshift(headers)
   const wb = XLSX.utils.book_new()
@@ -453,7 +453,7 @@ export function exportSamples(query = {}) {
 }
 
 export function generateSampleTemplate() {
-  const headers = ['登记时间','物料编码','物料名称','物料规格','品牌','尺寸','PIN脚','频点','负载','电压','模式','频偏','温度','含税价','本价含税','工厂','库存数量','规格书','备注']
+  const headers = ['登记时间','物料编码','物料名称','物料规格','品牌','尺寸','PIN脚','频点','负载','电压','模式','频偏','温度','含税价','未税价','工厂','库存数量','规格书','备注']
   const wb = XLSX.utils.book_new()
   const ws = XLSX.utils.aoa_to_sheet([headers])
   ws['!cols'] = headers.map(h => ({ wch: h.length*1.5+4 }))
@@ -641,6 +641,15 @@ export function importSamplesFromExcel(fileBuffer) {
   const wb = XLSX.read(fileBuffer, { type: 'buffer', cellDates: true })
   const ws = wb.Sheets[wb.SheetNames[0]]
   const rows = XLSX.utils.sheet_to_json(ws)
+  // 价格单元格：空白的必须存 NULL 而不是 0（Number('') === 0，会把「没报价」写成「报价 0 元」）；
+  // 顺带容忍千分位/货币符号（Excel 里常见 "¥0.32"、"1,000"）
+  const toPrice = (v) => {
+    if (v === null || v === undefined) return null
+    const s = String(v).replace(/[,\s¥￥$]/g, '')
+    if (s === '') return null
+    const n = Number(s)
+    return Number.isFinite(n) ? n : null
+  }
   const mapRow = (r) => ({
     created_at: parseExcelDate(r['登记时间'] ?? r['created_at']),
     updated_at: parseExcelDate(r['修改时间'] ?? r['updated_at']),
@@ -656,8 +665,9 @@ export function importSamplesFromExcel(fileBuffer) {
     mode: String(r['模式']??r['mode']??''),
     freq_tol: String(r['频偏']??r['freq_tol']??''),
     temperature: String(r['温度']??r['temperature']??''),
-    price_with_tax: (v => v != null ? Number(v) : null)(r['含税价']??r['price_with_tax']),
-    cost_price: (v => v != null ? Number(v) : null)(r['本价含税']??r['本价']??r['cost_price']),
+    price_with_tax: toPrice(r['含税价']??r['price_with_tax']),
+    // 「本价含税」是 v1.0.230 及以前导出的旧表头（实际存的是未税价）；旧文件仍然要能导入
+    cost_price: toPrice(r['未税价']??r['本价含税']??r['本价']??r['cost_price']),
     factory_code: String(r['工厂']??r['工厂编号']??r['factory_code']??''),
     stock_quantity: parseInt(r['库存数量']??r['stock_quantity']??0)||0,
     spec_document: String(r['规格书']??r['spec_document']??''),
