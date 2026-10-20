@@ -19,13 +19,22 @@ import customersRouter from './routes/customers.js'
 import companyDocsRouter from './routes/companyDocs.js'
 import suggestRouter from './routes/suggest.js'
 import { exportToExcel, importFromExcel, generateTemplate, generateSampleTemplate, generateNoteTemplate } from './utils/export.js'
-import { initDb, saveNow, queryAll, execute } from './db.js'
+import { initDb, saveNow, queryAll, execute, flushDeferredDailyDbBackup } from './db.js'
 import { triggerBackup, flushPending } from './utils/excelBackup.js'
 import * as A from './utils/customerArchive.js'
 import { syncArchive } from './utils/archiveSync.js'
 import * as logger from './utils/logger.js'
 // 客户名统一名册：/api/customers/* 是所有页面共用的客户名联想/下拉入口
 import { resolveSuggest, listAll, syncFromAllTables } from './utils/customerNames.js'
+
+// ===== 启动阶段计时（v1.0.232）=====
+// 主进程会把 getStartupPhases() 打出来的数字拼进 [startup] 一行摘要里，
+// 下次「启动为什么慢」直接看那一行就知道是 db / 归档 / 模板 哪一段。
+const _startupBegin = Date.now()
+const _startupPhases = { deferred_maintenance: process.env.DEFER_STARTUP_MAINTENANCE === '1' }
+export function getStartupPhases() { return { ..._startupPhases } }
+// Electron 启动路径：把「规格书去重清理」挪到主窗口显示之后（慢机器上它要扫整个规格书目录）
+const _deferMaintenance = process.env.DEFER_STARTUP_MAINTENANCE === '1'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const app = express()
@@ -337,17 +346,21 @@ app.get('*', (req, res) => {
 })
 
 // 初始化数据库
+let _phaseT = Date.now()
 await initDb()
+_startupPhases.db_init_ms = Date.now() - _phaseT
 
 // 存量客户名回填：把 5 张表里已经出现过的客户名补进 customers 名册。
 // 幂等（只补新增），所以每次启动跑一遍是安全的 —— 这样即使某个旧入口漏写了名册，
 // 重启一次也能自愈。实测存量里两边差了 69 个名字，就是靠这一步补齐的。
+_phaseT = Date.now()
 try {
   const added = syncFromAllTables()
   if (added > 0) console.log(`[customerNames] 客户名册回填 ${added} 个（来自记事/客户物料/报价/地图）`)
 } catch (e) {
   console.warn('[customerNames] 回填失败（不影响启动）:', e.message)
 }
+_startupPhases.customer_names_ms = Date.now() - _phaseT
 
 // ===== 规格书去重清理（启动时执行一次）=====
 // 旧版本上传同名规格书会生成 "name (1).pdf"、"name (2).pdf" 等重复副本
@@ -404,7 +417,49 @@ function cleanupDuplicateSpecs() {
     console.log('[spec-cleanup] 无重复规格书')
   }
 }
-try { cleanupDuplicateSpecs() } catch (e) { console.warn('[spec-cleanup] 清理失败:', e.message) }
+if (_deferMaintenance) {
+  // Electron 启动路径：这里只登记，真正扫描留到 runDeferredMaintenance()（主窗口显示之后）。
+  // 慢机器上 walk 整个规格书目录 + 可能的 saveNow 会堵住主界面好几秒。
+  _startupPhases.spec_cleanup = 'deferred'
+} else {
+  const t = Date.now()
+  try { cleanupDuplicateSpecs() } catch (e) { console.warn('[spec-cleanup] 清理失败:', e.message) }
+  _startupPhases.spec_cleanup_ms = Date.now() - t
+}
+
+/**
+ * 延后维护：每日数据库备份的写盘 + 规格书去重清理。
+ *
+ * 由 Electron 主进程在**主窗口显示之后**调用（v1.0.232），也可以单独调用来补跑。
+ * 幂等：同一次启动只会真正执行一次。
+ */
+let _deferredRan = false
+export function runDeferredMaintenance() {
+  if (_deferredRan) return { skipped: true }
+  _deferredRan = true
+  const t0 = Date.now()
+  const out = { daily_backup_ms: 0, spec_cleanup_ms: 0, total_ms: 0 }
+
+  let t = Date.now()
+  try {
+    const dest = flushDeferredDailyDbBackup()
+    if (dest) console.log(`[startup] 延后维护：每日数据库备份已写入 ${dest}`)
+  } catch (e) {
+    console.warn('[startup] 延后维护：每日备份失败（不影响使用）:', e.message)
+  }
+  out.daily_backup_ms = Date.now() - t
+
+  if (_deferMaintenance) {
+    t = Date.now()
+    try { cleanupDuplicateSpecs() } catch (e) { console.warn('[startup] 延后维护：规格书清理失败:', e.message) }
+    out.spec_cleanup_ms = Date.now() - t
+  }
+
+  out.total_ms = Date.now() - t0
+  _startupPhases.deferred_maintenance_ms = out.total_ms
+  console.log(`[startup] 延后维护完成 ${JSON.stringify(out)}`)
+  return out
+}
 
 // ===== 记事迁移：去掉「进行中」状态，已有进行中归到待办 =====
 // v1.0.208 起全局移除 in_progress，升级后一次性迁移历史数据
@@ -415,13 +470,16 @@ function migrateNotesDropInProgress() {
     console.log(`[notes-migrate] 已将 ${r.changes} 条「进行中」记事归到「待办」`)
   }
 }
+_phaseT = Date.now()
 try { migrateNotesDropInProgress() } catch (e) { console.warn('[notes-migrate] 迁移失败:', e.message) }
+_startupPhases.notes_migrate_ms = Date.now() - _phaseT
 
 // ===== 客户资料归档：把归档区对齐到数据库（取代旧的两个「规格书迁移」）=====
 // 旧迁移有个致命缺陷：靠「根目录还有没有源文件」决定要不要修，文件一旦搬走就永远跳过 ——
 // 它自己造成的错位永远修不回来，生产上 21 条<客户A>规格书 404 就是这么来的。
 // 新迁移以「数据库引用能不能落到真实文件」为准，所以能修自己的历史错误。
 // 幂等：已经搬过的，第二次启动是零成本空跑。另一台电脑装完自动整理走的就是这条路径。
+_phaseT = Date.now()
 try {
   const rep = syncArchive()
   const moved = Object.values(rep.migrated).reduce((a, b) => a + b, 0)
@@ -444,13 +502,18 @@ try {
   // 归档失败不能拖垮整个服务：搬迁是「先复制、确认后才删源」，源文件都还在，下次启动重试即可
   console.warn('[archive-sync] 归档失败:', e.message)
 }
+_startupPhases.archive_sync_ms = Date.now() - _phaseT
 
 // 预生成导入模板到模板文件夹
+_phaseT = Date.now()
 const templateDir = path.join(process.env.DATA_DIR || path.join(__dirname, '..'), '模板')
 if (!fs.existsSync(templateDir)) fs.mkdirSync(templateDir, { recursive: true })
 try { fs.writeFileSync(path.join(templateDir, '报价导入模板.xlsx'), generateTemplate()) } catch {}
 try { fs.writeFileSync(path.join(templateDir, '样品导入模板.xlsx'), generateSampleTemplate()) } catch {}
 try { fs.writeFileSync(path.join(templateDir, '记事导入模板.xlsx'), generateNoteTemplate()) } catch {}
+_startupPhases.template_write_ms = Date.now() - _phaseT
+
+_startupPhases.module_total_ms = Date.now() - _startupBegin
 
 // 导出 app 供 Electron 主进程使用
 export default app

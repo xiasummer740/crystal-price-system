@@ -13,19 +13,113 @@ const BASE_PORT = 3266
 // 闪屏兜底超时：正常就绪是一两秒的事。超过这么久还没就绪 = 出事了，
 // 宁可收掉动画让用户看到窗口（或至少能正常关闭），也别让人对着转圈干瞪眼。
 //
-// 为什么是 90 秒：2026-09-27 沙箱实测（同一台机器、同一份数据）——
-//   · 热启动（第 2、3 次）：建窗口到关闪屏 **1.0 秒**
-//   · 冷启动（第 1 次，文件缓存全冷）：同样的区间 **26.6 秒**
-//     （其中 `syncArchive` 迁移只占 0.7 秒，剩下 26 秒全是窗口/前端冷加载）
-// 原来设的 30 秒对冷启动只剩 3.4 秒余量；客户机比开发机慢，会把「只是慢」
-// 误报成「界面加载异常」，反倒吓人。90 秒对热启动仍是 90 倍余量，只有真卡死才够得着。
-const SPLASH_TIMEOUT_MS = 90000
+// 为什么是 45 秒（v1.0.232 从 90 秒降下来）：
+//   · 历史冷启动基线 26.6 秒（2026-09-27 沙箱实测，文件缓存全冷），45 秒仍有 1.7 倍余量；
+//   · 2026-10-20 祥哥机器上真实发生了一次 141 秒启动（2 核赛扬 + 火绒/GameViewer/微信
+//     把 CPU 占满），90 秒兜底等于让人对着动画干等 90 秒 —— 现在闪屏上有「直接进入」按钮，
+//     所以把兜底压到 45 秒：到点就把主窗口亮出来，别再让动画挡着。
+const SPLASH_TIMEOUT_MS = 45000
 
 // 进程启动时刻。只用来在日志里标「这一趟启动到底花了多久」——
 // 2026-10-14 排查「偶尔卡在启动动画」时，靠它把 196 次启动的耗时拉出来对比：
 // 常态 4~20 秒，但 17 次超过 30 秒、最慢一次 164 秒（见下文 did-finish-load 那条日志）。
 const APP_START_TS = Date.now()
 const sinceStart = () => `${Date.now() - APP_START_TS}ms`
+
+// ===== 启动阶段标点（v1.0.232）=====
+// 只记「时刻」，摘要时再算差值。任何新阶段要诊断，加一行 mark('xxx') 即可。
+const startupMarks = { processStart: APP_START_TS }
+function mark(name) { startupMarks[name] = Date.now() }
+function fmtMs(ms) {
+  if (ms == null || !Number.isFinite(ms)) return '—'
+  return ms >= 1000 ? (ms / 1000).toFixed(1) + 's' : Math.round(ms) + 'ms'
+}
+// 服务模块（server/src/index.js）导出的内部阶段计时 + 延后维护入口
+let getServerStartupPhases = null
+let runDeferredMaintenanceFn = null
+let _startupSummaryDone = false
+
+/** 阶段摘要追加到 logs/startup-phases.jsonl（一行一次启动，方便前后对比） */
+function appendStartupPhases(payload) {
+  if (!_logToDir) return
+  try {
+    fs.appendFileSync(path.join(_logToDir, 'startup-phases.jsonl'), JSON.stringify(payload) + '\n', 'utf8')
+  } catch (e) {
+    log('[startup] 阶段日志写入失败: ' + e.message)
+  }
+}
+
+/**
+ * 把这一趟启动的耗时按阶段打进日志（v1.0.232）。
+ * 下次祥哥问「为什么慢」，看 `[startup]` 那两行就知道卡在哪一段，不用再靠猜。
+ */
+function logStartupSummary(reason, complete = true) {
+  if (complete) {
+    if (_startupSummaryDone) return
+    _startupSummaryDone = true
+  }
+  const m = startupMarks
+  const seg = (a, b) => (m[a] != null && m[b] != null) ? Math.max(0, m[b] - m[a]) : null
+  const total = seg('processStart', 'pageLoaded') ?? (Date.now() - APP_START_TS)
+  const segments = {
+    electron_init: seg('processStart', 'appReady'),
+    data_dir: seg('appReady', 'dataDir'),
+    server_module: seg('dataDir', 'serverImported'),
+    http_listen: seg('serverImported', 'serverListening'),
+    window_create: seg('serverListening', 'windowCreated'),
+    first_page: seg('windowCreated', 'pageLoaded'),
+    splash_closed_at: m.splashClosed ? m.splashClosed - APP_START_TS : null
+  }
+  let server = {}
+  try { server = getServerStartupPhases?.() || {} } catch { /* 计时读不到不影响启动 */ }
+  const line = `[startup] ${reason} | 总计 ${fmtMs(total)}`
+    + ` | Electron初始化 ${fmtMs(segments.electron_init)}`
+    + ` | 数据目录 ${fmtMs(segments.data_dir)}`
+    + ` | 服务模块 ${fmtMs(segments.server_module)}`
+    + ` | 监听 ${fmtMs(segments.http_listen)}`
+    + ` | 建窗 ${fmtMs(segments.window_create)}`
+    + ` | 首屏 ${fmtMs(segments.first_page)}`
+    + ` | 闪屏关闭于 ${fmtMs(segments.splash_closed_at)}`
+  log(line)
+  log(`[startup] 服务内部 ${JSON.stringify(server)}`)
+  // 直接点名最慢的一段（≥5 秒才提，免得热启动也刷一行）
+  const worst = Object.entries(segments)
+    .filter(([k, v]) => k !== 'splash_closed_at' && typeof v === 'number' && v > 0)
+    .sort((a, b) => b[1] - a[1])[0]
+  if (worst && worst[1] >= 5000) log(`[startup] ⚠️ 最慢一段：${worst[0]} ${fmtMs(worst[1])}`)
+  appendStartupPhases({
+    ts: new Date().toISOString(),
+    version: app.getVersion(),
+    reason,
+    complete,
+    total_ms: total,
+    segments,
+    server
+  })
+}
+
+/**
+ * 主窗口显示后再跑「延后维护」（每日 DB 备份写盘 + 规格书去重清理）。
+ * 三条触发路径取最先到的：窗口就绪 / 页面载入 / 建窗后 15 秒兜底（防止页面永远不载入时备份丢掉）。
+ */
+let _deferredMaintenanceScheduled = false
+function scheduleDeferredMaintenance(why) {
+  if (_deferredMaintenanceScheduled) return
+  _deferredMaintenanceScheduled = true
+  setTimeout(() => {
+    if (!runDeferredMaintenanceFn) {
+      log(`[startup] 延后维护未执行（${why}）：服务模块没有提供入口`)
+      return
+    }
+    const t = Date.now()
+    try {
+      const r = runDeferredMaintenanceFn()
+      log(`[startup] 延后维护已执行（触发：${why}）${JSON.stringify(r || {})} 主进程等待 ${Date.now() - t}ms`)
+    } catch (e) {
+      log('[startup] 延后维护失败: ' + (e.stack || e.message))
+    }
+  }, 1200)
+}
 
 // 强制禁用 GPU 硬件加速（解决此 Windows 预览版 GPU 崩溃问题）
 app.disableHardwareAcceleration()
@@ -285,6 +379,21 @@ let serverPort = BASE_PORT
 let dbSaveNow = null
 let doFlushBackupPending = null
 let reminderInterval = null
+// 闪屏上的「直接进入」：按钮在闪屏自己的渲染进程里，通过 preload 发 IPC 过来。
+// 主进程被同步 import 堵住时，这个请求会排队，等主进程一空就跑。
+let _splashSkipRequested = false
+let _closeSplash = null   // whenReady 里赋值；ipcMain 处理器在模块级，够不着闭包里的 closeSplash
+ipcMain.on('splash:skip', () => {
+  _splashSkipRequested = true
+  log('用户点击「直接进入（跳过动画）」')
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    try { mainWindow.show() } catch (e) { log('跳过动画时 show() 失败: ' + e.message) }
+    if (_closeSplash) _closeSplash('用户跳过动画')
+  } else {
+    // 还没建窗：记下请求，createWindow 之后 armSplashWatchdog 会立刻兑现
+    log('主窗口尚未创建，已记下跳过请求（建窗后立即进入）')
+  }
+})
 
 // 启动日志（两阶段: DATA_DIR 未就绪时写 startup.log，就绪后写 DATA_DIR/logs/）
 let _logToDir = null
@@ -399,6 +508,7 @@ async function startServer() {
   process.env.DATA_DIR = dataDir
   switchLogTo(dataDir)
   log(`DATA_DIR: ${dataDir}`)
+  mark('dataDir')
 
   log('Starting server import...')
   // 必须在 import 之前设：index.js 靠它判断自己是不是被 Electron 托管。
@@ -406,10 +516,17 @@ async function startServer() {
   // 轻则每次启动都 EADDRINUSE 退到 3267（多起一个端口），
   // 重则 3266 被别的进程占用时 index.js 抛未捕获异常，应用卡死在闪屏、主窗口不出现。
   process.env.ELECTRON_MODE = 'true'
+  // v1.0.232：把「每日数据库备份写盘」和「规格书去重清理」挪出启动阻塞路径。
+  // 这两件事在慢机器上一次要 3~4 秒（备份 897KB + 扫整个规格书目录），而它们不影响
+  // 服务能不能起来 —— 现在只登记/跳过，等主窗口显示后再跑（见 scheduleDeferredMaintenance）。
+  process.env.DEFER_STARTUP_BACKUP = '1'
+  process.env.DEFER_STARTUP_MAINTENANCE = '1'
   let expressApp
   try {
     const mod = await import('../server/src/index.js')
     expressApp = mod.default
+    getServerStartupPhases = mod.getStartupPhases || null
+    runDeferredMaintenanceFn = mod.runDeferredMaintenance || null
     const { saveNow } = await import('../server/src/db.js')
     const { flushPending } = await import('../server/src/utils/excelBackup.js')
     dbSaveNow = saveNow
@@ -419,6 +536,7 @@ async function startServer() {
     throw new Error('服务模块加载失败: ' + e.message)
   }
   log('Server module imported')
+  mark('serverImported')
 
   let retryCount = 0
   const MAX_RETRIES = 30
@@ -510,12 +628,14 @@ function createWindow(port) {
   mainWindow.on('resize', debounceSave)
   mainWindow.on('move', debounceSave)
   mainWindow.once('ready-to-show', () => {
+    mark('readyToShow')
     log('Window ready to show')
     mainWindow.show()
   })
 
   mainWindow.webContents.on('did-fail-load', (_, code, desc) => {
     log(`Page load failed: ${code} - ${desc}`)
+    logStartupSummary('页面加载失败', false)
   })
   mainWindow.webContents.on('did-navigate', (_, url) => {
     log(`Navigated to: ${url}`)
@@ -525,7 +645,12 @@ function createWindow(port) {
   })
 
   mainWindow.webContents.on('did-finish-load', () => {
+    mark('pageLoaded')
     log(`Page loaded successfully（启动总耗时 ${sinceStart()}）`)
+    // v1.0.232：一行看全各阶段耗时（同时写 logs/startup-phases.jsonl）
+    logStartupSummary('页面加载完成', true)
+    // 窗口/页面都好了，再做「延后维护」（每日备份写盘 + 规格书去重清理）
+    scheduleDeferredMaintenance('页面载入')
   })
   attachCrashRecovery(mainWindow, '主窗口')
   attachWindowOpenHandler(mainWindow)
@@ -564,7 +689,14 @@ function showSplash() {
     transparent: true,
     alwaysOnTop: true,
     resizable: false,
-    skipTaskbar: true
+    skipTaskbar: true,
+    webPreferences: {
+      // 只为了让「直接进入」按钮能把点击发回主进程（v1.0.232）
+      preload: path.join(__dirname, 'splash-preload.cjs'),
+      nodeIntegration: false,
+      contextIsolation: true,
+      sandbox: false
+    }
   })
   // logo 优先用**透明字标** SJK.png（815×254，品牌字标）。
   // 原先用的是 SJK-256.png：那是给 exe 图标用的 256×256 方块，alpha 全是 255（**完全不透明**），
@@ -608,11 +740,19 @@ function showSplash() {
     @keyframes textIn{from{opacity:0;letter-spacing:8px}to{opacity:1;letter-spacing:3px}}
     @keyframes barIn{from{opacity:0;width:0}to{opacity:1;width:180px}}
     @keyframes load{0%{width:0;margin-left:0}40%{width:70%;margin-left:15%}70%{width:30%;margin-left:60%}100%{width:0;margin-left:100%}}
+    /* 「直接进入」按钮：默认淡入，别在 1 秒就启动完的热启动里闪一下 */
+    #skip{position:absolute;left:50%;bottom:10px;transform:translateX(-50%);background:transparent;
+      border:1px solid rgba(255,255,255,.22);color:#8b93a7;font-size:10.5px;padding:3px 11px;
+      border-radius:11px;cursor:pointer;font-family:inherit;white-space:nowrap;transition:all .2s;
+      opacity:0;animation:skipIn .4s ease 2s forwards}
+    #skip:hover{color:#fff;border-color:#4fc3f7;background:rgba(79,195,247,.12)}
+    @keyframes skipIn{to{opacity:1}}
   </style></head><body><div class="wrap"><div class="card">
     <h2>晶振报价管理系统</h2>
     <img src="${logoSrc}">
     <div class="bar"><div class="bar-inner"></div></div>
     <div class="hint" id="hint">正在启动…</div>
+    <button id="skip" type="button">直接进入（跳过动画）</button>
   </div></div>
   <script>
     // 计时器**跑在闪屏自己的渲染进程里**，所以主进程被同步任务堵住时它照样在走。
@@ -624,9 +764,15 @@ function showSplash() {
     setInterval(function () {
       var s = Math.round((Date.now() - t0) / 1000);
       if (s < 6) { el.textContent = '正在启动…'; return; }
-      if (s < 30) { el.textContent = '启动较慢（已 ' + s + ' 秒）…请稍候'; return; }
-      el.textContent = '启动较慢（已 ' + s + ' 秒），通常在等安全软件扫描，不是死机。\\n请再等一会儿；若一直停在这里，把「数据目录 / logs / startup.log」发给技术。';
+      if (s < 20) { el.textContent = '启动较慢（已 ' + s + ' 秒）…请稍候'; return; }
+      el.textContent = '启动较慢（已 ' + s + ' 秒），通常在等安全软件扫描，不是死机。\\n可以点「直接进入」先打开窗口，或再等一会儿；\\n若一直停在这里，把「数据目录 / logs / startup.log」发给技术。';
     }, 500);
+    // 「直接进入（跳过动画）」→ preload 暴露的 splashAPI → 主进程收到后亮窗口、收闪屏
+    var skipBtn = document.getElementById('skip');
+    skipBtn.addEventListener('click', function () {
+      try { if (window.splashAPI && window.splashAPI.skip) window.splashAPI.skip(); } catch (e) {}
+      el.textContent = '正在进入主界面…（窗口还在加载）';
+    });
   </script></body></html>`
   splash.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`)
   splashWindow = splash
@@ -1059,6 +1205,7 @@ ipcMain.handle('update:diagnose', () => {
 
 app.whenReady().then(async () => {
   log('App ready')
+  mark('appReady')
   const splash = showSplash()
   // 闪屏只从这里关。以前三处各调一次 splash.close()，先关的那次之后
   // 再调就是「访问已销毁的窗口」抛错。统一走 closeSplash + 幂等开关。
@@ -1066,9 +1213,11 @@ app.whenReady().then(async () => {
   const closeSplash = (why) => {
     if (splashClosed) return
     splashClosed = true
+    mark('splashClosed')
     log(`关闭闪屏（${why}）`)
     try { if (!splash.isDestroyed()) splash.close() } catch (e) { log('splash.close 失败: ' + e.message) }
   }
+  _closeSplash = closeSplash
   // 就绪 → 关闪屏；超过 SPLASH_TIMEOUT_MS 还没就绪 → 也关。
   // 2026-09-27 那台电脑就是卡在这：窗口没就绪，闪屏永不关，用户只能强杀碰运气。
   //
@@ -1081,6 +1230,7 @@ app.whenReady().then(async () => {
   // 从闪屏出现就开始计时的那道兜底（见上面注释）。就绪后由 armSplashWatchdog 清掉。
   earlyFallback = setTimeout(() => {
     if (splashClosed) return
+    logStartupSummary('服务就绪前超时', false)
     log(`⚠️ 启动超时：${SPLASH_TIMEOUT_MS}ms 内服务模块仍未就绪（启动总耗时 ${sinceStart()}）`)
     closeSplash('服务就绪前超时')
     dialog.showMessageBox({
@@ -1093,7 +1243,16 @@ app.whenReady().then(async () => {
   const armSplashWatchdog = () => {
     if (earlyFallback) { clearTimeout(earlyFallback); earlyFallback = null }
     if (!mainWindow) { log('⚠️ 主窗口不存在，闪屏兜底未武装（闪屏将无人关闭）'); return }
-    mainWindow.once('ready-to-show', () => setTimeout(() => closeSplash('窗口就绪'), 400))
+    // 用户在闪屏上点过「直接进入」：不再等 ready-to-show，立刻把窗口亮出来收掉动画
+    if (_splashSkipRequested) {
+      try { mainWindow.show() } catch (e) { log('⚠️ 跳过动画 show() 失败: ' + e.message) }
+      closeSplash('用户已请求跳过')
+    }
+    mainWindow.once('ready-to-show', () => setTimeout(() => {
+      closeSplash('窗口就绪')
+      // 窗口出来了就可以做延后维护了（每日备份写盘 + 规格书清理）
+      scheduleDeferredMaintenance('窗口就绪')
+    }, 400))
     // 第二条出口：页面载入完成。
     // 2026-09-27 复现：ready-to-show 会**永远不触发** —— 同一台机器上写个 12 行的
     // Electron 小程序（只 loadURL 一段 data:text/html），did-finish-load 267ms 就到，
@@ -1110,6 +1269,7 @@ app.whenReady().then(async () => {
     }, 600))
     setTimeout(() => {
       if (splashClosed) return
+      logStartupSummary('闪屏兜底超时', false)
       log(`⚠️ 闪屏兜底超时：主窗口 ${SPLASH_TIMEOUT_MS}ms 内未就绪，强制收掉闪屏`)
       // 这是最后一道兜底 —— 它要是也失败，窗口就永远不出现。别空 catch，
       // 否则复盘的人会以为「窗口显示了只是白屏」，方向整个跑偏。
@@ -1133,6 +1293,7 @@ app.whenReady().then(async () => {
     // tryListen 自动处理 EADDRINUSE，不预先强杀旧进程以防打断退出保存
     const { port } = await startServer()
     serverPort = port
+    mark('serverListening')
     log(`服务就绪，用时 ${Date.now() - t0}ms`)
     const menu = Menu.buildFromTemplate([
       { label: '文件', submenu: [
@@ -1149,7 +1310,10 @@ app.whenReady().then(async () => {
     ])
     Menu.setApplicationMenu(menu)
     createWindow(port)
+    mark('windowCreated')
     armSplashWatchdog()
+    // 延后维护的兜底：页面若一直载不进来（CPU 被安全软件占满），备份也不能丢
+    setTimeout(() => scheduleDeferredMaintenance('建窗后 15 秒兜底'), 15000)
     // 初始化升级（必须在 ready-to-show 外，和 xnowpost 一致）
     initUpdater(mainWindow)
     // 启动记事提醒轮询

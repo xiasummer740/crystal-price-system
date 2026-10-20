@@ -24,26 +24,41 @@ let db = null
  * 位置：<数据目录>/备份/数据库日备/data-YYYY-MM-DD.db；保留最近 7 份，更早的自动删。
  * 时机：initDb 里**读盘之后、任何迁移/写入之前**调用 ⇒ 备的是「上一次收工时的状态」，
  *       正好是出事时想回到的那个点。
+ *
+ * v1.0.232 起，Electron 启动路径改成「读盘时只记住内容、窗口显示后再写盘」
+ * （DEFER_STARTUP_BACKUP=1）：897KB 的写盘在慢机器上要 3~4 秒，不该堵着主界面。
+ * 记的是**读盘那一刻的字节**，所以内容仍是「上次收工时的状态」，不会备到迁移后的库。
  */
-function dailyDbBackup() {
+let pendingDailyBackup = null
+
+/** 今天的备份目标路径（本地日期：与界面日期一致，UTC 会在晚上 8 点后跳到"明天"） */
+function dailyBackupDest() {
+  const d = new Date()
+  const pad = (n) => String(n).padStart(2, '0')
+  const today = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+  return path.join(dataDir, '备份', '数据库日备', `data-${today}.db`)
+}
+
+/** 只保留最近 7 份（文件名带日期，按名字排就是按时间排） */
+function pruneDailyBackups(dir) {
   try {
-    if (!fs.existsSync(dbPath)) return null          // 新库，还没东西可备
-    const dir = path.join(dataDir, '备份', '数据库日备')
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
-    // 用**本地日期**命名：与界面上看到的日期一致（UTC 会在晚上 8 点后跳到"明天"）
-    const d = new Date()
-    const pad = (n) => String(n).padStart(2, '0')
-    const today = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
-    const dest = path.join(dir, `data-${today}.db`)
-    if (!fs.existsSync(dest)) {
-      fs.copyFileSync(dbPath, dest)
-      console.log(`[db] 已生成每日数据库备份: ${dest}`)
-    }
-    // 只保留最近 7 份（文件名带日期，按名字排就是按时间排）
     const keep = fs.readdirSync(dir).filter(f => /^data-\d{4}-\d{2}-\d{2}\.db$/.test(f)).sort()
     for (const f of keep.slice(0, Math.max(0, keep.length - 7))) {
       try { fs.unlinkSync(path.join(dir, f)) } catch { /* 删不掉就留着，不影响主流程 */ }
     }
+  } catch { /* 目录读不了就算了 */ }
+}
+
+function dailyDbBackup() {
+  try {
+    if (!fs.existsSync(dbPath)) return null          // 新库，还没东西可备
+    const dest = dailyBackupDest()
+    fs.mkdirSync(path.dirname(dest), { recursive: true })
+    if (!fs.existsSync(dest)) {
+      fs.copyFileSync(dbPath, dest)
+      console.log(`[db] 已生成每日数据库备份: ${dest}`)
+    }
+    pruneDailyBackups(path.dirname(dest))
     return dest
   } catch (e) {
     // 备份失败不能让软件起不来；但也别静默 —— 写进日志便于排查
@@ -52,10 +67,49 @@ function dailyDbBackup() {
   }
 }
 
+/** 延后备份：只记住读盘时的那份字节，写盘留到窗口显示后（见 flushDeferredDailyDbBackup） */
+function captureDailyDbBackup(fileBuffer) {
+  try {
+    if (!fileBuffer) return
+    const dest = dailyBackupDest()
+    if (fs.existsSync(dest)) return                  // 今天已经备过
+    // 必须复制一份：sql.js 打开数据库时会改内存里的页头（PRAGMA journal_mode=WAL 等），
+    // 直接存原 Buffer 引用的话，延后写盘时拿到的就是「改过之后」的字节，不再是读盘那一刻的状态。
+    pendingDailyBackup = { dest, data: Buffer.from(fileBuffer) }
+  } catch (e) {
+    console.error('[db] 每日备份（延后）登记失败:', e.message)
+  }
+}
+
+/**
+ * 把 initDb 时记下的那份备份真正写到磁盘。
+ * 由 /api 启动流程在「主窗口显示之后」调用（Electron 主进程），或由测试直接调。
+ * @returns {string|null} 备份文件路径
+ */
+export function flushDeferredDailyDbBackup() {
+  if (!pendingDailyBackup) return null
+  const { dest, data } = pendingDailyBackup
+  pendingDailyBackup = null
+  try {
+    fs.mkdirSync(path.dirname(dest), { recursive: true })
+    if (!fs.existsSync(dest)) {
+      fs.writeFileSync(dest, data)
+      console.log(`[db] 已生成每日数据库备份（延后写入）: ${dest}`)
+    }
+    pruneDailyBackups(path.dirname(dest))
+    return dest
+  } catch (e) {
+    console.error('[db] 每日备份失败（不影响使用）:', e.message)
+    return null
+  }
+}
+
 export async function initDb() {
   if (db) return db
-  // 每日备份要在「读盘之后、任何迁移/写入之前」做 —— 备的是上次收工的状态
-  dailyDbBackup()
+  // 每日备份要在「读盘之后、任何迁移/写入之前」做 —— 备的是上次收工的状态。
+  // Electron 启动路径（DEFER_STARTUP_BACKUP=1）只登记不写盘，内容取自下面读到的 fileBuffer。
+  const deferBackup = process.env.DEFER_STARTUP_BACKUP === '1'
+  if (!deferBackup) dailyDbBackup()
   // 用 locateFile 指定 WASM 路径，确保 Electron 打包后也能找到
   let wasmDir = path.join(__dirname, '..', '..', 'node_modules', 'sql.js', 'dist')
   // asarUnpack 解包后，WASM 文件在 .asar.unpacked 目录下
@@ -65,6 +119,8 @@ export async function initDb() {
   // 从文件加载已有数据库，否则创建新库
   if (fs.existsSync(dbPath)) {
     const fileBuffer = fs.readFileSync(dbPath)
+    // 先登记备份（内部会复制一份），再交给 sql.js 打开 —— 保证备的是「读盘那一刻」的字节
+    if (deferBackup) captureDailyDbBackup(fileBuffer)
     db = new SQL.Database(fileBuffer)
   } else {
     db = new SQL.Database()
