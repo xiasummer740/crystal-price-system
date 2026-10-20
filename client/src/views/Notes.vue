@@ -80,7 +80,6 @@
                     {{ item.category_name }}
                   </span>
                   <span v-if="item.is_pinned" class="card-pin">📌</span>
-                  <span v-if="item.reminder_at && !item.is_reminded" class="card-reminder-icon">⏰</span>
                 </div>
                 <h4 class="card-title" v-if="item.title">{{ item.title }}</h4>
                 <p class="card-desc" v-if="item.content">{{ contentPreview(item.content) }}</p>
@@ -91,6 +90,10 @@
                     {{ {todo:'待办',done:'已完成',follow_up:'跟进后续'}[item.status] || '待办' }}
                   </span>
                   <span v-if="hasAttachments(item)" class="card-img-count">📎 {{ attachmentCount(item) }}</span>
+                  <span v-if="item.reminder_at" class="note-reminder" :class="{ overdue: isReminderOverdue(item) }">
+                    <span class="note-reminder-time" :title="'提醒时间：' + item.reminder_at">⏰ {{ fmtReminder(item.reminder_at) }}</span>
+                    <button type="button" class="note-reminder-clear" @click.stop="clearReminder(item)" title="清除本条提醒（不删除记事）">清除</button>
+                  </span>
                   <span class="card-edit" @click.stop="router.push('/notes/edit/'+item.id)" title="编辑">✎</span>
                 </div>
               </div>
@@ -137,7 +140,10 @@
                 <div class="kanban-title" v-if="item.title">{{ item.title }}</div>
                 <div class="kanban-meta">
                   <span v-if="item.customer">{{ item.customer }}</span>
-                  <span v-if="item.reminder_at && !item.is_reminded">⏰</span>
+                  <span v-if="item.reminder_at" class="note-reminder" :class="{ overdue: isReminderOverdue(item) }">
+                    <span class="note-reminder-time" :title="'提醒时间：' + item.reminder_at">⏰ {{ fmtReminder(item.reminder_at) }}</span>
+                    <button type="button" class="note-reminder-clear" @click.stop="clearReminder(item)" title="清除本条提醒（不删除记事）">清除</button>
+                  </span>
                 </div>
               </div>
             </div>
@@ -310,6 +316,36 @@ function attachmentCount(item) {
 }
 function goDetail(item) {
   router.push('/notes/' + item.id)
+}
+
+/** 'YYYY-MM-DD HH:MM:SS' → 'MM-DD HH:MM'（卡片上只显示够用的部分） */
+function fmtReminder(t) {
+  if (!t) return ''
+  return String(t).slice(5, 16)
+}
+/** 提醒时间已过、还没标记已提醒 → 红色区分，别让人以为还是「未来的提醒」 */
+function isReminderOverdue(item) {
+  if (!item || !item.reminder_at || item.is_reminded) return false
+  const d = new Date(String(item.reminder_at).replace(' ', 'T'))
+  return !isNaN(d.getTime()) && d.getTime() < Date.now()
+}
+/**
+ * 卡片上的快捷「清除」：只清这条记事的定时提醒，不删除记事。
+ * 走专用接口（只改 reminder_at/is_reminded），回写整条记事既慢又可能覆盖别人刚改的内容。
+ */
+async function clearReminder(item) {
+  if (!item || !item.reminder_at) return
+  try {
+    await http.post(`/notes/${item.id}/clear-reminder`)
+    // 列表与看板共用同一份 store.list，就地改掉即可，不必整页 reload（会闪一下）
+    item.reminder_at = null
+    item.is_reminded = 0
+    showToast('已清除提醒')
+    // 正在按「待提醒」筛选时，这条已经不满足条件 → 重新拉一次
+    if (store.filters.reminder === 'pending') load()
+  } catch (e) {
+    showToast('清除失败: ' + (e.message || '未知错误'))
+  }
 }
 function addNoteFor(customer) {
   if (customer) router.push('/notes/add?customer=' + encodeURIComponent(customer))
@@ -597,6 +633,12 @@ onUnmounted(() => {
 .card-cat { font-size: 10px; padding: 1px 6px; border-radius: 3px; font-weight: 500; }
 .card-pin { font-size: 12px; margin-left: auto; }
 .card-reminder-icon { font-size: 11px; margin-left: auto; opacity: .7; }
+/* 提醒胶囊 + 快捷清除（v1.0.233）：只在有定时提醒的卡片上出现，点「清除」直接去掉提醒，不进编辑页 */
+.note-reminder { display: inline-flex; align-items: center; gap: 1px; margin-left: auto; padding: 1px 2px 1px 6px; border: 1px solid #ffe7ba; background: #fff7e6; color: #d46b08; border-radius: 10px; font-size: 11px; line-height: 1.35; white-space: nowrap; }
+.note-reminder.overdue { background: #fff1f0; border-color: #ffccc7; color: #cf1322; }
+.note-reminder-time { white-space: nowrap; }
+.note-reminder-clear { border: none; background: transparent; color: inherit; font-family: inherit; font-size: 11px; line-height: 1.3; cursor: pointer; padding: 1px 5px; border-radius: 8px; opacity: .9; }
+.note-reminder-clear:hover { background: rgba(0, 0, 0, .07); opacity: 1; }
 .card-title { font-size: 15px; font-weight: 600; color: #1a1a2e; margin: 0 0 6px; word-break: break-word; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .card-desc { font-size: 12px; color: #999; margin: 0 0 10px; line-height: 1.5; word-break: break-word; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .card-time { font-size: 10px; color: #ccc; margin: 0 0 6px; }
@@ -643,7 +685,9 @@ onUnmounted(() => {
 .kanban-card-header { display: flex; align-items: center; gap: 4px; margin-bottom: 4px; }
 .kanban-cat { font-size: 10px; font-weight: 500; }
 .kanban-title { font-size: 13px; font-weight: 500; color: #323233; word-break: break-word; }
-.kanban-meta { font-size: 10px; color: #bbb; margin-top: 4px; display: flex; gap: 6px; }
+.kanban-meta { font-size: 10px; color: #bbb; margin-top: 4px; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.kanban-meta .note-reminder { font-size: 10px; }
+.kanban-meta .note-reminder-clear { font-size: 10px; }
 
 /* ====== 加载覆盖层 ====== */
 .loading-area { flex: 1; display: flex; align-items: center; justify-content: center; }

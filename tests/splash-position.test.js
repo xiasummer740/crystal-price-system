@@ -12,7 +12,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { computeSplashPosition } from '../electron/splashPosition.js'
 
-const SPLASH = { w: 420, h: 340 }
+const SPLASH = { w: 420, h: 384 }
 const PRIMARY = { x: 0, y: 0, width: 1920, height: 1040 }
 
 test('有保存坐标时：闪屏中心 == 主窗口中心', () => {
@@ -26,7 +26,7 @@ test('有保存坐标时：闪屏中心 == 主窗口中心', () => {
   const mainCy = 113 + 900 / 2    // 563
   assert.equal(pos.x + SPLASH.w / 2, mainCx)
   assert.equal(pos.y + SPLASH.h / 2, mainCy)
-  assert.deepEqual(pos, { x: 599, y: 393 })
+  assert.deepEqual(pos, { x: 599, y: 371 })
 })
 
 test('主窗口被挪到副屏（负坐标）也照样对齐', () => {
@@ -51,7 +51,7 @@ test('坐标被 sanitizeBounds 丢弃（只剩宽高）⇒ 同样退回主显示
     splashSize: SPLASH,
     primaryWorkArea: PRIMARY
   })
-  assert.deepEqual(pos, { x: 750, y: 350 })
+  assert.deepEqual(pos, { x: 750, y: 328 })
 })
 
 test('宽高缺失时按主窗口默认尺寸 1400x900 算中心', () => {

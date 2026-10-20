@@ -664,7 +664,9 @@ function createWindow(port) {
 // 启动动画闪屏
 function showSplash() {
   const SPLASH_W = 420
-  const SPLASH_H = 340
+  // v1.0.233：卡片加高到 320（原 276）。闪屏底部要同时容下「启动较慢」的 3 行提示 + 「直接进入」按钮，
+  // 原尺寸下提示文字会压到按钮上（祥哥 2026-10-20 截图指出）。
+  const SPLASH_H = 384
   // 闪屏出现的**位置**：主界面窗口将要出现的那块地方的正中间（祥哥 2026-10-14 要求）。
   // 以前写的是 center:true ⇒ 永远钉在屏幕正中；用户把软件拖到别处/副屏时，
   // 闪屏与软件窗口差出两三百像素，看着割裂。这里复用 createWindow 同一套坐标判据
@@ -716,20 +718,22 @@ function showSplash() {
     *{margin:0;padding:0}
     /* overflow:hidden 是为了「窗口比卡片还小时」也不出现滚动条 ——
        实测（2026-10-14，480×260 窗口）：溢出产生的垂直滚动条会把内容挤偏 8.5px，
-       logo 就不在正中了。裁掉比挤偏好。（闪屏窗口实际是 420×340 > 卡片 324×276，本来溢不出） */
+       logo 就不在正中了。裁掉比挤偏好。（闪屏窗口实际是 420×384 > 卡片 324×320，本来溢不出） */
     html,body{overflow:hidden;display:flex;align-items:center;justify-content:center;height:100vh;background:transparent;font-family:'Microsoft YaHei',sans-serif}
     /* 卡片在窗口里居中 ⇒ 卡片的 50% 处就是窗口正中，logo 钉在这里才能「严格居中」。 */
-    .card{position:relative;width:324px;height:276px;background:linear-gradient(135deg,#1a1a2e,#16213e);border-radius:24px;box-shadow:0 16px 48px rgba(0,0,0,.5);animation:fadeIn .8s cubic-bezier(.4,0,.2,1)}
+    .card{position:relative;width:324px;height:320px;background:linear-gradient(135deg,#1a1a2e,#16213e);border-radius:24px;box-shadow:0 16px 48px rgba(0,0,0,.5);animation:fadeIn .8s cubic-bezier(.4,0,.2,1)}
     /* ⚠️ logo **必须严格居中于窗口**（祥哥 2026-10-14 明确要求）。
        踩过的坑：原来是流式布局（img → h2 → 进度条 → 提示行），logo 会被下方那 141px 内容
        顶到卡片偏上 50px（实测：logo 中心 y=120，窗口中心 y=170）。
        改用绝对定位钉在卡片 50%/50%，上下都不再受其它元素高度影响。
        又因为标题移到了 logo **上方**，上下内容才配平（否则卡片要么偏沉、要么上方留一大片空白）。 */
     img{position:absolute;top:50%;left:50%;width:224px;height:auto;transform:translate(-50%,-50%);animation:logoIn 1s cubic-bezier(.4,0,.2,1)}
-    h2{position:absolute;top:52px;left:0;right:0;text-align:center;color:#e8e8e8;font-size:17px;font-weight:500;letter-spacing:3px;animation:textIn 1s cubic-bezier(.4,0,.2,1) .2s both}
-    .bar{position:absolute;top:50%;left:50%;width:180px;height:3px;background:rgba(255,255,255,.08);border-radius:2px;overflow:hidden;transform:translate(-50%,-50%) translateY(52px);animation:barIn 1s ease .4s both}
+    h2{position:absolute;top:56px;left:0;right:0;text-align:center;color:#e8e8e8;font-size:17px;font-weight:500;letter-spacing:3px;animation:textIn 1s cubic-bezier(.4,0,.2,1) .2s both}
+    .bar{position:absolute;top:50%;left:50%;width:180px;height:3px;background:rgba(255,255,255,.08);border-radius:2px;overflow:hidden;transform:translate(-50%,-50%) translateY(46px);animation:barIn 1s ease .4s both}
     .bar-inner{width:40%;height:100%;background:#4fc3f7;border-radius:2px;animation:load 1.8s ease .6s infinite}
-    .hint{position:absolute;top:50%;left:0;right:0;padding:0 22px;box-sizing:border-box;transform:translateY(66px);text-align:center;color:#8b93a7;font-size:11px;line-height:1.5;white-space:pre-line}
+    /* 提示行：从卡片中线往下 60px 起，最多 3 行（文案已控制在 3 行内）；
+       按钮钉在卡片底部 12px。两者之间留出 20px 左右空隙，不会再叠在一起。 */
+    .hint{position:absolute;top:50%;left:0;right:0;padding:0 18px;box-sizing:border-box;transform:translateY(60px);text-align:center;color:#8b93a7;font-size:10.5px;line-height:1.5;white-space:pre-line}
     /* 只淡入、**不做位移**：原来带 translateY(10px)，那 0.8 秒里整卡下沉、logo 会偏下 10px
        （2026-10-14 用居中验证器量出来的，偏差正好 10.00px）。祥哥要的是「logo 始终在正中」，
        所以入场也不许位移。 */
@@ -740,8 +744,9 @@ function showSplash() {
     @keyframes textIn{from{opacity:0;letter-spacing:8px}to{opacity:1;letter-spacing:3px}}
     @keyframes barIn{from{opacity:0;width:0}to{opacity:1;width:180px}}
     @keyframes load{0%{width:0;margin-left:0}40%{width:70%;margin-left:15%}70%{width:30%;margin-left:60%}100%{width:0;margin-left:100%}}
-    /* 「直接进入」按钮：默认淡入，别在 1 秒就启动完的热启动里闪一下 */
-    #skip{position:absolute;left:50%;bottom:10px;transform:translateX(-50%);background:transparent;
+    /* 「直接进入」按钮：默认淡入，别在 1 秒就启动完的热启动里闪一下。
+       bottom 12px，和上面的提示行（最多 3 行）分开，别再叠字（v1.0.233 修）。 */
+    #skip{position:absolute;left:50%;bottom:12px;transform:translateX(-50%);background:transparent;
       border:1px solid rgba(255,255,255,.22);color:#8b93a7;font-size:10.5px;padding:3px 11px;
       border-radius:11px;cursor:pointer;font-family:inherit;white-space:nowrap;transition:all .2s;
       opacity:0;animation:skipIn .4s ease 2s forwards}
@@ -765,7 +770,7 @@ function showSplash() {
       var s = Math.round((Date.now() - t0) / 1000);
       if (s < 6) { el.textContent = '正在启动…'; return; }
       if (s < 20) { el.textContent = '启动较慢（已 ' + s + ' 秒）…请稍候'; return; }
-      el.textContent = '启动较慢（已 ' + s + ' 秒），通常在等安全软件扫描，不是死机。\\n可以点「直接进入」先打开窗口，或再等一会儿；\\n若一直停在这里，把「数据目录 / logs / startup.log」发给技术。';
+      el.textContent = '启动较慢（已 ' + s + ' 秒），不是死机，可能在等安全软件扫描。\\n点「直接进入」可先打开窗口；一直停着请把 logs/startup.log 发给技术。';
     }, 500);
     // 「直接进入（跳过动画）」→ preload 暴露的 splashAPI → 主进程收到后亮窗口、收闪屏
     var skipBtn = document.getElementById('skip');

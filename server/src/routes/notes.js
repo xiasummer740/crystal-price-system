@@ -248,6 +248,17 @@ router.post('/:id/reminded', (req, res) => {
   res.json({ code: 0, msg: '已标记提醒' })
 })
 
+// 清除提醒（v1.0.233：列表/看板卡片上的快捷按钮用）
+// 只动 reminder_at / is_reminded，不碰正文/图片/分类/历史 —— 为了去个提醒把整条记事回写一遍，
+// 既慢又可能把别人刚改的内容覆盖掉。幂等：本来就没提醒也返回成功。
+router.post('/:id/clear-reminder', (req, res) => {
+  const id = Number(req.params.id)
+  const existing = queryOne('SELECT id FROM notes WHERE id = ? AND is_deleted = 0', [id])
+  if (!existing) return res.status(404).json({ code: 1, msg: '记录不存在' })
+  execute("UPDATE notes SET reminder_at = NULL, is_reminded = 0, updated_at = datetime('now','localtime') WHERE id = ?", [id])
+  res.json({ code: 0, msg: '提醒已清除' })
+})
+
 // 详情
 router.get('/:id', (req, res) => {
   const row = queryOne(`
