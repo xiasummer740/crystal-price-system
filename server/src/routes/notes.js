@@ -41,7 +41,8 @@ export function normalizeRefs(raw) {
       customer_code: String(r.customer_code || '').trim(),
       action: REF_ACTIONS.includes(r.action) ? r.action : '其它',
       quantity: String(r.quantity ?? '').trim(),
-      unit: String(r.unit || '').trim(),
+      // 单位固定 PCS（v1.0.234）：旧记事里的空单位按 PCS 存，新记事前端也只会传 PCS
+      unit: String(r.unit || 'PCS').trim(),
       remark: String(r.remark || '').trim()
     })
     if (out.length >= MAX_REFS) break

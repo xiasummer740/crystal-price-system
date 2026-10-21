@@ -71,7 +71,7 @@
               <div class="mat-ref" v-for="(r, i) in materialRefs" :key="i">
                 <span class="mat-act" :class="'act-' + actKey(r.action)">{{ r.action || '关联' }}</span>
                 <span class="mat-name">{{ r.name || r.jkx_code || '（物料）' }}</span>
-                <span v-if="r.quantity" class="mat-qty">{{ r.quantity }}{{ r.unit || '' }}</span>
+                <span v-if="r.quantity" class="mat-qty">{{ r.quantity }} {{ r.unit || 'PCS' }}</span>
                 <span v-if="r.jkx_code" class="mat-code">晶科鑫 {{ r.jkx_code }}</span>
               </div>
             </div>

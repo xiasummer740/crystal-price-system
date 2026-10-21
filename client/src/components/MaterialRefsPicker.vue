@@ -55,7 +55,8 @@
             <option v-for="a in ACTIONS" :key="a" :value="a">{{ a }}</option>
           </select>
           <input class="mrp-qty" v-model="row.quantity" placeholder="数量" />
-          <input class="mrp-unit" v-model="row.unit" placeholder="单位" />
+          <!-- 单位固定 PCS（v1.0.234，祥哥：不用每次手打） -->
+          <span class="mrp-unit mrp-unit-fixed" title="单位固定为 PCS">PCS</span>
         </div>
       </div>
 
@@ -115,7 +116,9 @@ function fromModel(v) {
     material_id: Number(r?.material_id) || 0,
     action: ACTIONS.includes(r?.action) ? r.action : '下单',
     quantity: String(r?.quantity ?? ''),
-    unit: String(r?.unit || ''),
+    // 单位固定 PCS：旧数据里别的单位（颗/只/…）在编辑时也统一成 PCS，
+    // 这样界面上不再出现一个「看起来能改、其实每次都要手打」的输入框。
+    unit: 'PCS',
     query: r?.name || r?.jkx_code || '',
     name: r?.name || '', jkx_code: r?.jkx_code || '', material_code: r?.material_code || '', customer_code: r?.customer_code || ''
   }))
@@ -137,7 +140,7 @@ function sync() {
         customer_code: m?.customer_code || r.customer_code || '',
         action: r.action || '下单',
         quantity: String(r.quantity || '').trim(),
-        unit: String(r.unit || '').trim()
+        unit: 'PCS'
       }
     })
   emit('update:modelValue', out)
@@ -182,7 +185,7 @@ function clearRow(i) {
   openIndex.value = i
 }
 function addRow() {
-  rows.value.push({ material_id: 0, action: '下单', quantity: '', unit: '', query: '' })
+  rows.value.push({ material_id: 0, action: '下单', quantity: '', unit: 'PCS', query: '' })
   openIndex.value = rows.value.length - 1
 }
 function removeRow(i) {
@@ -246,9 +249,10 @@ watch(rows, () => { sync() }, { deep: true })
 
 .mrp-sel { flex: 1; min-width: 0; height: 32px; font-size: 12px; color: #323233; border: 1px solid #dcdee0; border-radius: 6px; padding: 0 6px; background: #fff; }
 .mrp-sel.small { flex: 0 0 88px; }
-.mrp-qty, .mrp-unit { height: 32px; font-size: 12px; border: 1px solid #dcdee0; border-radius: 6px; padding: 0 8px; }
+.mrp-qty, .mrp-unit { height: 32px; font-size: 12px; border: 1px solid #dcdee0; border-radius: 6px; padding: 0 8px; box-sizing: border-box; }
 .mrp-qty { flex: 1; min-width: 0; }
-.mrp-unit { flex: 0 0 68px; }
+/* 单位是固定值（PCS），做成不可编辑的灰底块：一眼看出「不用填」，也不会被误改 */
+.mrp-unit { flex: 0 0 68px; display: inline-flex; align-items: center; justify-content: center; padding: 0; background: #f5f6f8; color: #646566; font-weight: 600; letter-spacing: .3px; }
 .mrp-del { flex: 0 0 30px; height: 32px; border: 1px solid #ffd6d5; background: #fff; color: #e53935; border-radius: 6px; cursor: pointer; }
 .mrp-add { margin-top: 8px; width: 100%; height: 32px; font-size: 12px; color: var(--color-primary, #1989fa); background: #fff; border: 1px dashed #b8d4ff; border-radius: 6px; cursor: pointer; }
 .mrp-add:disabled { opacity: .5; cursor: not-allowed; }
