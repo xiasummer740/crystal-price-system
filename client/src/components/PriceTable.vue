@@ -83,12 +83,14 @@
       <select class="ps-select" :value="pageSize" @change="$emit('pageSizeChange', Number($event.target.value))">
         <option v-for="s in [20,50,100,200,500,1000,5000,10000]" :key="s" :value="s">{{ s }}条/页</option>
       </select>
+      <button v-if="hasCustomWidths" class="pg-btn colw-reset" @click="resetColWidths"
+        title="把列宽恢复默认（同时清掉记住的宽度）">↺ 重置列宽</button>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { showToast } from 'vant'
 import { isLocalFileUrl } from '../utils/api.js'
@@ -144,9 +146,86 @@ function previewRImgs(item) {
 const shellRef = ref(null)
 const tableRef = ref(null)
 let resizeCol = -1
-function startResize(e, col) { resizeCol = col; document.addEventListener('mousemove', onResize); document.addEventListener('mouseup', stopResize) }
-function onResize(e) { if (resizeCol<0||!tableRef.value) return; const ths = tableRef.value.querySelectorAll('th'); if (ths[resizeCol]) ths[resizeCol].style.width = Math.max(40, e.clientX - ths[resizeCol].getBoundingClientRect().left) + 'px' }
-function stopResize() { resizeCol = -1; document.removeEventListener('mousemove', onResize); document.removeEventListener('mouseup', stopResize) }
+let resizeTh = null
+
+// ===== 列宽自定义（v1.0.236）=====
+// 两个必须守住的点：
+//   1. 表的第 1 个 <th> 是复选框列（没有 data-col），所以**绝不能按 ths[索引] 取列** ——
+//      v1.0.235 及以前就是这么写的，拖「登记时间」实际把复选框列拉成几百像素，
+//      整个表被顶到屏幕外（祥哥 2026-10-21 截图）。改成按 data-col 精确取。
+//   2. 拖完的宽度记进 localStorage，刷新/重开软件还在；底部出现「↺ 重置列宽」可一键还原。
+const COL_WIDTH_KEY = 'crystal_prices_colWidths'
+const hasCustomWidths = ref(false)
+
+function colTh(col) {
+  return tableRef.value?.querySelector(`th[data-col="${col}"]`) || null
+}
+function applyWidth(th, px) {
+  if (!th) return
+  th.style.width = px + 'px'
+  th.style.minWidth = px + 'px'
+}
+function loadColWidths() {
+  try {
+    const map = JSON.parse(localStorage.getItem(COL_WIDTH_KEY) || '{}')
+    let any = false
+    for (const [col, px] of Object.entries(map || {})) {
+      const n = Number(px)
+      if (!Number.isFinite(n) || n < 40) continue
+      const th = colTh(col)
+      if (!th) continue
+      applyWidth(th, n)
+      any = true
+    }
+    hasCustomWidths.value = any
+  } catch { /* 存坏了就当没存过，别影响表格 */ }
+}
+function saveColWidths() {
+  const map = {}
+  tableRef.value?.querySelectorAll('th[data-col]').forEach(th => {
+    const w = Math.round(th.getBoundingClientRect().width)
+    if (w >= 40) map[th.dataset.col] = w
+  })
+  try {
+    localStorage.setItem(COL_WIDTH_KEY, JSON.stringify(map))
+    hasCustomWidths.value = true
+  } catch {}
+}
+function resetColWidths() {
+  tableRef.value?.querySelectorAll('th[data-col]').forEach(th => {
+    th.style.width = ''
+    th.style.minWidth = ''
+  })
+  try { localStorage.removeItem(COL_WIDTH_KEY) } catch {}
+  hasCustomWidths.value = false
+  showToast('已恢复默认列宽')
+}
+
+function startResize(e, col) {
+  resizeCol = col
+  resizeTh = colTh(col)
+  if (!resizeTh) return
+  // 拖拽时别选中文字、别让光标闪
+  document.body.style.cursor = 'col-resize'
+  document.body.style.userSelect = 'none'
+  document.addEventListener('mousemove', onResize)
+  document.addEventListener('mouseup', stopResize)
+}
+function onResize(e) {
+  if (!resizeTh) return
+  const left = resizeTh.getBoundingClientRect().left
+  applyWidth(resizeTh, Math.max(40, Math.round(e.clientX - left)))
+}
+function stopResize() {
+  document.removeEventListener('mousemove', onResize)
+  document.removeEventListener('mouseup', stopResize)
+  document.body.style.cursor = ''
+  document.body.style.userSelect = ''
+  if (resizeTh) saveColWidths()
+  resizeTh = null
+  resizeCol = -1
+}
+onMounted(() => loadColWidths())
 function openColFilter(col, label) { emit('openColFilter', col, label) }
 </script>
 
