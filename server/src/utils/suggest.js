@@ -181,6 +181,32 @@ export function codeCandidates(scope, { keyword = '', limit = 400 } = {}) {
     }
   }
 
+  // 这颗料还被哪些客户用过（v1.0.235）：客户物料表里同一个 jkx_code / material_code 的客户名。
+  // 用途：在「物料编码」联想下拉里直接看出「这颗料是不是别家也在用」，不用再切页面查。
+  // 数据量很小（客户物料几百条），一次查完在内存里按料号聚合即可。
+  try {
+    const rows = queryAll(`SELECT customer, jkx_code, material_code FROM customer_materials
+                           WHERE is_deleted = 0 AND customer IS NOT NULL AND customer != ''`)
+    const byCode = new Map()
+    for (const r of rows) {
+      const customer = String(r.customer || '').trim()
+      if (!customer) continue
+      for (const rawCode of [r.jkx_code, r.material_code]) {
+        const code = String(rawCode || '').trim()
+        if (!code) continue
+        if (!byCode.has(code)) byCode.set(code, new Set())
+        byCode.get(code).add(customer)
+      }
+    }
+    for (const item of map.values()) {
+      const set = byCode.get(item.code)
+      item.customers = set ? [...set].sort((a, b) => a.localeCompare(b, 'zh')) : []
+      item.customer_count = item.customers.length
+    }
+  } catch {
+    for (const item of map.values()) { item.customers = []; item.customer_count = 0 }
+  }
+
   const kw = String(keyword || '').trim().toLowerCase()
   let list = [...map.values()]
   if (kw) list = list.filter(it => it.code.toLowerCase().includes(kw) || String(it.name || '').toLowerCase().includes(kw))

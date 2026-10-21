@@ -70,6 +70,8 @@ before(async () => {
   insertCustomerMaterial({ customer: '客户A', customer_code: 'CA-1', jkx_code: 'P1', factory: 'F09' })
   insertCustomerMaterial({ customer: '客户B', customer_code: 'CB-1', jkx_code: 'P9', name: '别的物料', factory: 'F10' })
   insertCustomerMaterial({ customer: '客户B', customer_code: '', jkx_code: 'P8', name: '已删除料号', deleted: true })
+  // 客户C 也用 P1：用来验证「哪些客户用过这颗料」（多客户、去重）
+  insertCustomerMaterial({ customer: '客户C', customer_code: 'CC-1', jkx_code: 'P1', name: 'C 家的叫法', factory: 'F11' })
 
   const suggestRouter = (await import('../server/src/routes/suggest.js')).default
   const app = express()
@@ -207,6 +209,23 @@ describe('GET /api/suggest/codes', () => {
     const res = await get('/codes?scope=materials')
     assert.equal(res.body.data.some(c => c.code === 'P8'), false)
   })
+
+  it('料号带出「哪些客户也用过」（按客户去重、按名字排序）', async () => {
+    const res = await get('/codes?scope=materials&kw=P1')
+    const p1 = res.body.data.find(c => c.code === 'P1')
+    assert.ok(p1, '应包含 P1')
+    // 客户A 有两行同料号，只能算一家
+    assert.deepEqual(p1.customers, ['客户A', '客户C'])
+    assert.equal(p1.customer_count, 2)
+  })
+
+  it('没有客户物料记录的料号：customers 是空数组（前端不渲染小字）', async () => {
+    const res = await get('/codes?scope=samples&kw=P2')
+    const p2 = res.body.data.find(c => c.code === 'P2')
+    assert.ok(p2, '应包含 P2')
+    assert.deepEqual(p2.customers, [])
+    assert.equal(p2.customer_count, 0)
+  })
 })
 
 describe('客户物料编码按客户隔离', () => {
@@ -218,7 +237,7 @@ describe('客户物料编码按客户隔离', () => {
   it('不带 customer 时返回全部客户的料号', async () => {
     const res = await get('/field/customer_code?scope=materials')
     const values = res.body.data.map(x => x.value).sort()
-    assert.deepEqual(values, ['CA-1', 'CB-1'])
+    assert.deepEqual(values, ['CA-1', 'CB-1', 'CC-1'])
   })
 
   it('空客户编码不进候选', async () => {

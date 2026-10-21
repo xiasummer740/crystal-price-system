@@ -43,6 +43,7 @@
         >
           <span class="sf-text" v-html="renderLabel(opt)"></span>
           <span v-if="opt.meta" class="sf-meta">{{ opt.meta }}</span>
+          <span v-if="opt.note" class="sf-note" :title="opt.noteTitle || opt.note">{{ opt.note }}</span>
         </div>
         <div v-if="!shown.length" class="sf-empty">没有匹配项，可直接输入</div>
         <template v-else>
@@ -108,13 +109,16 @@ const normalized = computed(() => (props.options || [])
     if (o == null) return null
     if (typeof o === 'string' || typeof o === 'number') {
       const v = String(o)
-      return { value: v, label: v, meta: '', raw: o, i }
+      return { value: v, label: v, meta: '', note: '', noteTitle: '', raw: o, i }
     }
     const value = String(o.value ?? o.label ?? '')
     return {
       value,
       label: o.label != null ? String(o.label) : value,
       meta: o.meta != null ? String(o.meta) : '',
+      // 第三段小字（v1.0.235）：目前用来显示「哪些客户也用过这颗料」，title 里放完整名单
+      note: o.note != null ? String(o.note) : '',
+      noteTitle: o.noteTitle != null ? String(o.noteTitle) : '',
       raw: o.raw != null ? o.raw : o,
       i
     }
@@ -355,6 +359,19 @@ defineExpose({
   font-size: 11px;
   color: #969799;
 }
+/* 第三段：客户使用情况（v1.0.235），完整名单放 title */
+.sf-note {
+  flex-shrink: 0;
+  max-width: 30%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  color: #576b95;
+  background: #f0f5ff;
+  border-radius: 8px;
+  padding: 1px 6px;
+}
 .sf-hit { color: var(--color-primary, #1989fa); font-weight: 600; }
 .sf-empty, .sf-more, .sf-tip {
   padding: 6px 12px;
@@ -370,6 +387,7 @@ defineExpose({
 @media (max-width: 768px) {
   .sf-item { min-height: 42px; font-size: 14px; padding: 8px 14px; }
   .sf-meta { font-size: 12px; }
+  .sf-note { font-size: 12px; }
   .sf-empty, .sf-more { font-size: 12px; }
   .sf-tip { display: none; }
 }

@@ -171,6 +171,7 @@ import { ref, computed, onMounted } from 'vue'
 import { http, importSamples } from '../utils/api.js'
 import { showToast, showConfirmDialog } from 'vant'
 import SuggestField from '../components/SuggestField.vue'
+import { customerUsageNote } from '../utils/customerShort.js'
 
 const list = ref([])
 const total = ref(0)
@@ -237,7 +238,10 @@ const opts = computed(() => {
   const f = sug.value.fields || {}
   const withCount = k => (f[k] || []).map(v => ({ value: v.value, meta: v.count > 1 ? `${v.count} 次` : '' }))
   return {
-    codes: (sug.value.codes || []).map(c => ({ value: c.code, meta: c.name || '', raw: c })),
+    codes: (sug.value.codes || []).map(c => {
+      const { note, noteTitle } = customerUsageNote(c.customers)
+      return { value: c.code, meta: c.name || '', note, noteTitle, raw: c }
+    }),
     brand: withCount('brand'),
     dimension: withCount('dimension'),
     pin_count: withCount('pin_count'),

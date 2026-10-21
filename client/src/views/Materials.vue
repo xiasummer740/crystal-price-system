@@ -244,7 +244,7 @@
               <div class="form-field">
                 <label>晶科鑫料号</label>
                 <SuggestField plain input-class="f-input" v-model="form.jkx_code" :options="matOpts.codes"
-                  :drop-width="420" placeholder="晶科鑫料号（可联想）" @select="onPickMatCode" />
+                  :drop-width="560" placeholder="晶科鑫料号（可联想）" @select="onPickMatCode" />
               </div>
               <div class="form-field">
                 <label>报价</label>
@@ -257,7 +257,7 @@
               <div class="form-field">
                 <label>物料编码</label>
                 <SuggestField plain input-class="f-input" v-model="form.material_code" :options="matOpts.codes"
-                  :drop-width="420" placeholder="物料编码（可联想）" @select="onPickMatCode" />
+                  :drop-width="560" placeholder="物料编码（可联想）" @select="onPickMatCode" />
               </div>
               <div class="form-field form-field-full">
                 <label class="f-label-with-btn">
@@ -324,7 +324,7 @@
               <p class="alt-hint">主料缺货时临时可用的相近物料（选填）</p>
               <div v-for="(alt, i) in form.alternates" :key="i" class="alt-row">
                 <SuggestField plain input-class="f-input alt-input alt-code" v-model="alt.material_code"
-                  :options="matOpts.codes" :drop-width="360" placeholder="备选物料编码" @select="opt => onPickAltCode(alt, opt)" />
+                  :options="matOpts.codes" :drop-width="420" placeholder="备选物料编码" @select="opt => onPickAltCode(alt, opt)" />
                 <input v-model="alt.material_name" placeholder="备选物料名称" class="f-input alt-input alt-name" />
                 <SuggestField plain input-class="f-input alt-input alt-factory-input" v-model="alt.factory"
                   :options="matOpts.factory" placeholder="备选工厂" />
@@ -396,6 +396,8 @@ import MaterialMonthly from '../components/MaterialMonthly.vue'
 import MaterialStalePanel from '../components/MaterialStalePanel.vue'
 // 输入联想（料号/工厂等历史值，选料号自动带出名称/工厂）
 import SuggestField from '../components/SuggestField.vue'
+// 客户名简称 + 「哪些客户也用过这颗料」的小字（v1.0.235）
+import { customerUsageNote } from '../utils/customerShort.js'
 
 const route = useRoute()
 const router = useRouter()
@@ -1047,7 +1049,11 @@ const matOpts = computed(() => {
   const vals = k => (f[k] || []).map(v => ({ value: v.value, meta: v.count > 1 ? `${v.count} 次` : '' }))
   const scopedOk = matSugCustomer.value === selectedCustomer.value
   return {
-    codes: (matSug.value.codes || []).map(c => ({ value: c.code, meta: c.name || '', raw: c })),
+    // 第三段小字：这颗料还有哪些客户用过（v1.0.235，鼠标悬停看完整名单）
+    codes: (matSug.value.codes || []).map(c => {
+      const { note, noteTitle } = customerUsageNote(c.customers)
+      return { value: c.code, meta: c.name || '', note, noteTitle, raw: c }
+    }),
     factory: vals('factory'),
     customer_code: scopedOk ? vals('customer_code') : []
   }
