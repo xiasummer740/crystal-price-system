@@ -156,6 +156,7 @@ let resizeTh = null
 //   2. 拖完的宽度记进 localStorage，刷新/重开软件还在；底部出现「↺ 重置列宽」可一键还原。
 const COL_WIDTH_KEY = 'crystal_prices_colWidths'
 const hasCustomWidths = ref(false)
+let tableFixed = false
 
 function colTh(col) {
   return tableRef.value?.querySelector(`th[data-col="${col}"]`) || null
@@ -165,9 +166,37 @@ function applyWidth(th, px) {
   th.style.width = px + 'px'
   th.style.minWidth = px + 'px'
 }
+/**
+ * 切到「固定表格布局」。
+ * 为什么必须切：auto 布局下，单元格内容是 nowrap，列的最小宽度 = 内容宽度 ——
+ * 所以「只能往大拉、拉不小」（v1.0.236 祥哥反馈）。fixed 布局才会老老实实按指定宽度显示，
+ * 超出部分用省略号。切换时先把当前每列的实际宽度钉住，避免列宽跳一下。
+ */
+function ensureFixedLayout() {
+  if (tableFixed || !tableRef.value) return
+  tableRef.value.querySelectorAll('th[data-col]').forEach(th => {
+    applyWidth(th, Math.round(th.getBoundingClientRect().width))
+  })
+  tableRef.value.classList.add('dt-fixed')
+  tableFixed = true
+  syncTableWidth()
+}
+/** 一列当前应有的宽度：优先用我们写进去的 style（不受表格 auto/fixed 重算影响） */
+function widthPx(th) {
+  const s = parseFloat(th.style.width)
+  return Number.isFinite(s) ? Math.round(s) : Math.round(th.getBoundingClientRect().width)
+}
+/** fixed 布局下表格宽度 = 各列宽度之和；不跟着同步的话表尾会留白/挤压 */
+function syncTableWidth() {
+  if (!tableFixed || !tableRef.value) return
+  let total = 0
+  tableRef.value.querySelectorAll('th').forEach(th => { total += widthPx(th) })
+  tableRef.value.style.width = total + 'px'
+}
 function loadColWidths() {
   try {
     const map = JSON.parse(localStorage.getItem(COL_WIDTH_KEY) || '{}')
+    const allThs = tableRef.value ? [...tableRef.value.querySelectorAll('th[data-col]')] : []
     let any = false
     for (const [col, px] of Object.entries(map || {})) {
       const n = Number(px)
@@ -178,12 +207,25 @@ function loadColWidths() {
       any = true
     }
     hasCustomWidths.value = any
+    if (!any) return
+    // 有完整记忆就直接按 fixed 渲染，**不要**再走一遍 auto 量宽 ——
+    // auto 布局会被 nowrap 内容撑回去，每次刷新宽度都会漂几像素。
+    const savedCount = Object.keys(map || {}).length
+    if (savedCount >= allThs.length) {
+      tableRef.value.classList.add('dt-fixed')
+      tableFixed = true
+      let total = 32
+      allThs.forEach(th => { total += Number.parseFloat(th.style.width) || 0 })
+      tableRef.value.style.width = total + 'px'
+    } else {
+      ensureFixedLayout()
+    }
   } catch { /* 存坏了就当没存过，别影响表格 */ }
 }
 function saveColWidths() {
   const map = {}
   tableRef.value?.querySelectorAll('th[data-col]').forEach(th => {
-    const w = Math.round(th.getBoundingClientRect().width)
+    const w = widthPx(th)
     if (w >= 40) map[th.dataset.col] = w
   })
   try {
@@ -196,6 +238,11 @@ function resetColWidths() {
     th.style.width = ''
     th.style.minWidth = ''
   })
+  if (tableRef.value) {
+    tableRef.value.classList.remove('dt-fixed')
+    tableRef.value.style.width = ''
+  }
+  tableFixed = false
   try { localStorage.removeItem(COL_WIDTH_KEY) } catch {}
   hasCustomWidths.value = false
   showToast('已恢复默认列宽')
@@ -205,6 +252,8 @@ function startResize(e, col) {
   resizeCol = col
   resizeTh = colTh(col)
   if (!resizeTh) return
+  // 第一次拖之前先切 fixed 布局，之后才能往小拉（auto 布局会被 nowrap 内容顶住）
+  ensureFixedLayout()
   // 拖拽时别选中文字、别让光标闪
   document.body.style.cursor = 'col-resize'
   document.body.style.userSelect = 'none'
@@ -215,6 +264,7 @@ function onResize(e) {
   if (!resizeTh) return
   const left = resizeTh.getBoundingClientRect().left
   applyWidth(resizeTh, Math.max(40, Math.round(e.clientX - left)))
+  syncTableWidth()
 }
 function stopResize() {
   document.removeEventListener('mousemove', onResize)
@@ -232,7 +282,10 @@ function openColFilter(col, label) { emit('openColFilter', col, label) }
 <style>
 .table-shell{background:#fff;border-radius:8px;border:1px solid #e8e8e8;overflow:visible;flex:1;display:flex;flex-direction:column}
 .dt{width:max-content;min-width:100%;border-collapse:collapse;font-size:12px}
-.dt th{background:#fafafa;color:#888;font-weight:500;padding:8px 6px;text-align:left;white-space:nowrap;border-bottom:1px solid #e8e8e8;font-size:11px;position:sticky;top:0;z-index:2}
+.dt th{background:#fafafa;color:#888;font-weight:500;padding:8px 6px;text-align:center;white-space:nowrap;border-bottom:1px solid #e8e8e8;font-size:11px;position:sticky;top:0;z-index:2}
+/* 自定义列宽后切 fixed：这样才能按指定宽度显示、也能往小拉；超出用省略号 */
+.dt-fixed{table-layout:fixed;min-width:0}
+.dt-fixed th,.dt-fixed td{box-sizing:border-box;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .dt td{padding:6px;border-bottom:1px solid #f5f5f5;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .dt tbody tr:hover td{background:rgba(var(--color-primary-rgb),.04)!important}
 .resize-handle{position:absolute;right:0;top:0;bottom:0;width:5px;cursor:col-resize;z-index:3}
