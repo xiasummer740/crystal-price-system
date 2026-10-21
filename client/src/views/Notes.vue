@@ -71,7 +71,8 @@
               <span class="customer-add" @click.stop="addNoteFor(customer)" title="为该客户新增记事">＋</span>
             </div>
             <transition-group name="card-stagger" tag="div" class="card-grid">
-              <div v-for="item in items" :key="item.id" class="note-card" @click="goDetail(item)" :class="{ pinned: item.is_pinned }">
+              <div v-for="item in items" :key="item.id" class="note-card" @click="goDetail(item)"
+                @contextmenu.prevent.stop="openNoteMenu($event, item)" :class="{ pinned: item.is_pinned }">
                 <div class="card-header">
                   <span class="card-priority" :class="'p' + (item.priority || 2)">
                     {{ {1:'🔴',2:'🟡',3:'🔵'}[item.priority || 2] }}
@@ -131,7 +132,8 @@
             </div>
             <div class="kanban-list">
               <div v-for="item in grouped[col.key]" :key="item.id" class="kanban-card" :draggable="true"
-                @dragstart="onDragStart($event, item)" @click="goDetail(item)">
+                @dragstart="onDragStart($event, item)" @click="goDetail(item)"
+                @contextmenu.prevent.stop="openNoteMenu($event, item)">
                 <div class="kanban-card-header">
                   <span class="card-priority" :class="'p' + (item.priority || 2)">{{ {1:'🔴',2:'🟡',3:'🔵'}[item.priority || 2] }}</span>
                   <span class="kanban-cat" v-if="item.category_name" :style="{ color: item.category_color }">{{ item.category_name }}</span>
@@ -165,6 +167,20 @@
       <!-- 筛选弹出层（支持滚轮滚动） -->
       <van-action-sheet v-model:show="showFilterSheet" :actions="filterActions" cancel-text="取消"
         @select="onFilterSelect" close-on-click-action description="选择筛选条件" />
+
+      <!-- 右键菜单：直接改状态（v1.0.238），不用进编辑页 -->
+      <div v-if="ctxMenu.show" class="ctx-backdrop" @click="closeNoteMenu" @contextmenu.prevent="closeNoteMenu"></div>
+      <div v-if="ctxMenu.show" class="note-ctx" :style="{ left: ctxMenu.x + 'px', top: ctxMenu.y + 'px' }"
+        @click.stop @contextmenu.prevent>
+        <div class="note-ctx-title" :title="ctxMenu.item?.title || ''">{{ ctxMenu.item?.title || '未命名记事' }}</div>
+        <div v-for="s in statusOptions" :key="s.value" class="note-ctx-item"
+          :class="{ active: (ctxMenu.item?.status || 'todo') === s.value }"
+          @click="setNoteStatus(s.value)">
+          <span class="note-ctx-dot" :style="{ background: s.color }"></span>
+          <span>{{ s.label }}</span>
+          <span v-if="(ctxMenu.item?.status || 'todo') === s.value" class="note-ctx-check">✓</span>
+        </div>
+      </div>
     </div>
   </transition>
 </template>
@@ -347,6 +363,48 @@ async function clearReminder(item) {
     showToast('清除失败: ' + (e.message || '未知错误'))
   }
 }
+// ===== 右键菜单：直接改状态（v1.0.238）=====
+// 看板/卡片上右键 → 待办 / 跟进后续 / 已完成，不用进编辑页。
+// 菜单是 fixed 定位，按鼠标坐标显示并夹在视口内；透明遮罩负责「点空白关闭」。
+const statusOptions = [
+  { value: 'todo', label: '待办', color: '#757575' },
+  { value: 'follow_up', label: '跟进后续', color: '#e65100' },
+  { value: 'done', label: '已完成', color: '#2e7d32' }
+]
+const ctxMenu = ref({ show: false, x: 0, y: 0, item: null })
+function openNoteMenu(e, item) {
+  const W = 180
+  const H = 168
+  ctxMenu.value = {
+    show: true,
+    x: Math.max(6, Math.min(e.clientX, window.innerWidth - W - 6)),
+    y: Math.max(6, Math.min(e.clientY, window.innerHeight - H - 6)),
+    item
+  }
+}
+function closeNoteMenu() {
+  ctxMenu.value.show = false
+  ctxMenu.value.item = null
+}
+async function setNoteStatus(status) {
+  const item = ctxMenu.value.item
+  closeNoteMenu()
+  if (!item) return
+  const cur = item.status || 'todo'
+  if (cur === status) return
+  try {
+    await updateNote(item.id, { status })
+    // 列表/看板共用 store.list，就地改状态即可（看板分组是 computed，会自己挪列）
+    item.status = status
+    const label = statusOptions.find(s => s.value === status)?.label || status
+    showToast('已改为「' + label + '」')
+    // 正在按状态筛选时，改完这条已不满足条件 → 重新拉一次
+    if (store.filters.status && store.filters.status !== status) load()
+  } catch (e) {
+    showToast('更新失败: ' + (e.message || '未知错误'))
+  }
+}
+
 function addNoteFor(customer) {
   if (customer) router.push('/notes/add?customer=' + encodeURIComponent(customer))
 }
@@ -697,6 +755,16 @@ onUnmounted(() => {
 .fab { position: fixed; bottom: 24px; right: 24px; width: 52px; height: 52px; border-radius: 50%; background: var(--color-primary); color: #fff; font-size: 24px; display: flex; align-items: center; justify-content: center; text-decoration: none; box-shadow: 0 4px 16px rgba(var(--color-primary-rgb),.3); z-index: 100; transition: all .2s; }
 .fab:hover { background: #1676d9; transform: scale(1.08); box-shadow: 0 6px 24px rgba(var(--color-primary-rgb),.4); }
 .fab:active { transform: scale(.95); }
+
+/* ===== 右键改状态菜单（v1.0.238）===== */
+.ctx-backdrop { position: fixed; inset: 0; z-index: 900; background: transparent; }
+.note-ctx { position: fixed; z-index: 901; min-width: 168px; background: #fff; border-radius: 10px; border: 1px solid #ebedf0; box-shadow: 0 10px 30px rgba(0,0,0,.18); padding: 5px 0; user-select: none; }
+.note-ctx-title { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 7px 12px 8px; font-size: 11px; color: #969799; border-bottom: 1px solid #f2f3f5; margin-bottom: 4px; }
+.note-ctx-item { display: flex; align-items: center; gap: 8px; padding: 8px 12px; font-size: 13px; color: #323233; cursor: pointer; }
+.note-ctx-item:hover { background: #f0f7ff; }
+.note-ctx-item.active { color: var(--color-primary); font-weight: 600; }
+.note-ctx-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.note-ctx-check { margin-left: auto; font-size: 12px; }
 
 /* ===== 移动端适配 ===== */
 @media (max-width: 768px) {
