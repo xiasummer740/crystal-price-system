@@ -510,6 +510,13 @@ export async function initDb() {
   try { db.run("ALTER TABLE customers ADD COLUMN next_statement_date TEXT DEFAULT ''") } catch {}  // 手填的「下次对账日」覆写 YYYY-MM-DD（空=按每月对账日自动算）
   try { db.run("ALTER TABLE customers ADD COLUMN pay_remark TEXT DEFAULT ''") } catch {}           // 付款/对账备注
   try { db.run("ALTER TABLE customers ADD COLUMN profile_updated_at TEXT DEFAULT ''") } catch {}   // 资料最后修改时间
+  // 客户简称（祥哥 2026-10-22）：生成订单时做单号前缀，如「国润」→ GR → GR261022001。
+  // 放在 customers 而不是订单模块自建表：改名合并/名册管理本来就在处理 customers，合并时简称跟着走。
+  try { db.run("ALTER TABLE customers ADD COLUMN short_name TEXT DEFAULT ''") } catch {}
+  // 订单默认资料（祥哥 2026-10-22）：乙方地址/联系人/电话/传真 + 六~九条款，按客户绑定。
+  // JSON 存一列：{ buyer:{address,contact,phone,fax}, terms:{deliveryPlace,freight,acceptance,settlement} }
+  // 同样放 customers：客户改名/合并时资料跟着走，不用再维护第四张表。
+  try { db.run("ALTER TABLE customers ADD COLUMN order_profile TEXT DEFAULT ''") } catch {}
 
   // ====== 公司资料 / 开票资料库（祥哥 2026-10-15 需求）======
   // 主要存放**客户发来的**开票资料/证照（对方多半发图片、PDF、Word/Excel），

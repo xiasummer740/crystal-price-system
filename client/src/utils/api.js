@@ -397,6 +397,45 @@ export function fetchMaterialFactories(customer) {
   return http.get('/materials/factories/list', { params: { customer } })
 }
 
+// ===== 生成订单（供货合同） =====
+// 落位：<数据目录>/客户管理/<客户>/订单/日期+物料型号+数量.xlsx
+export function fetchOrderOptions(customer) {
+  return http.get('/orders/options', { params: { customer } })
+}
+export function generateOrder(payload) {
+  return http.post('/orders/generate', payload)
+}
+/** 只生成 PDF 预览（不落盘、不占单号） */
+export function previewOrder(payload) {
+  return http.post('/orders/preview', payload, { responseType: 'blob' })
+}
+export function fetchOrderList(customer) {
+  return http.get('/orders/list', { params: { customer } })
+}
+export function openOrderPath(customer, name, mode = 'file') {
+  return http.post('/orders/open', { customer, name, mode })
+}
+export function uploadOrderSeal(formData) {
+  return http.post('/orders/seal', formData)
+}
+export function resetOrderSeal() {
+  return http.post('/orders/seal/reset')
+}
+export function saveOrderDefaults(payload) {
+  return http.post('/orders/defaults', payload)
+}
+export function orderDownloadUrl(customer, name) {
+  return `/api/orders/download?customer=${encodeURIComponent(customer)}&name=${encodeURIComponent(name)}`
+}
+/** 浏览器内预览（目前只有 PDF 支持 inline；xlsx 仍会下载） */
+export function orderPreviewUrl(customer, name) {
+  return orderDownloadUrl(customer, name) + '&inline=1'
+}
+/** 把订单文件（PDF/Excel）复制到系统剪贴板，可直接粘到微信/QQ */
+export function copyOrderFile(customer, name) {
+  return http.post('/orders/copy', { customer, name })
+}
+
 // ===== 阶段停留时长 / 待跟进 / 月度汇总（祥哥 2026-10-14）=====
 // 停留天数两种口径：有状态事件=精确，没有=按上次改动估算（界面必须能区分）。
 // 阈值由用户在「待跟进」面板里自己设，默认全 0 = 不提醒；「下批量」是终态不参与。

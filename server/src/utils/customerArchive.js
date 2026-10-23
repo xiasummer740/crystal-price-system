@@ -27,6 +27,7 @@ export const DIR = {
   spec: '规格书',
   materialImage: '物料图片',
   notes: '记事',
+  orders: '订单',          // 生成订单（供货合同）落位：客户管理/<客户>/订单/
   archiveList: '物料清单.xlsx',
   quoteSpec: '报价规格书',
   quoteImage: '报价备注图',
@@ -155,6 +156,7 @@ export function normalizeArchiveList(dirAbs, canonicalName) {
 
 export function customerSpecDirAbs(customer) { return path.join(customerDirAbs(customer), DIR.spec) }
 export function customerImageDirAbs(customer) { return path.join(customerDirAbs(customer), DIR.materialImage) }
+export function customerOrderDirAbs(customer) { return path.join(customerDirAbs(customer), DIR.orders) }
 export function customerNoteDayDirAbs(customer, date) {
   return path.join(customerDirAbs(customer), DIR.notes, safeSegment(date, '未知日期'))
 }

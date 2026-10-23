@@ -10,10 +10,12 @@
     "@vitalets/google-translate-api": "^9.2.1",
     "adm-zip": "^0.6.1",
     "cors": "^2.8.5",
+    "exceljs": "^4.4.0",
     "express": "^4.21.0",
     "mammoth": "^1.12.0",
     "multer": "^1.4.5-lts.1",
     "pdfjs-dist": "^4.10.38",
+    "pinyin-pro": "^3.29.5",
     "xlsx": "^0.18.5",
     "xlsx-js-style": "^1.2.0"
   }

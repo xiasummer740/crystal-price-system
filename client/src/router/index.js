@@ -38,6 +38,8 @@ const routes = [
   { path: '/company-docs', name: 'CompanyDocs', component: () => import('../views/CompanyDocs.vue'), meta: { title: '公司资料' } },
   // 手机版同一份数据的只读/可传视图（在外面开发票时用手机就能看）
   { path: '/mobile-docs', name: 'MobileDocs', component: () => import('../views/MobileDocs.vue'), meta: { title: '公司资料' } },
+  // 生成订单（供货合同）：选客户 → 带出资料 → 生成到 客户管理/<客户>/订单/
+  { path: '/order', name: 'OrderForm', component: () => import('../views/OrderForm.vue'), meta: { title: '生成订单' } },
   { path: '/:pathMatch(.*)*', redirect: '/' }
 ]
 

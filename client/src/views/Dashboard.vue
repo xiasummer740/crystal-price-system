@@ -11,6 +11,7 @@
         <button class="nav-btn hide-mobile" style="margin-right:6px;background:#fce4ec;color:#c62828;border-color:#f8bbd0;cursor:pointer" @click="openMaterialsWin">📦 客户物料</button>
         <button class="nav-btn hide-mobile" style="margin-right:6px;background:#e0f7fa;color:#00695c;border-color:#b2dfdb;cursor:pointer" @click="openMapWin">🗺️ 地图地址</button>
         <button class="nav-btn hide-mobile" style="margin-right:6px;background:#e8f5e9;color:#2e7d32;border-color:#c8e6c9;cursor:pointer" @click="openPerfWin">📊 绩效明细</button>
+        <router-link to="/order" class="nav-btn hide-mobile" style="margin-right:6px;background:#fff1f0;color:#cf1322;border-color:#ffccc7">🧾 生成订单</router-link>
         <router-link to="/translator" class="nav-btn hide-mobile" style="margin-right:6px;background:#f0f6ff;color:#1565c0;border-color:#bbdefb">规格书翻译</router-link>
         <router-link to="/samples" class="nav-btn hide-mobile" style="margin-right:6px">样品登记</router-link>
         <router-link to="/trash" class="nav-btn hide-mobile" style="margin-right:6px;color:#e53935;border-color:#ffcdd2">回收站</router-link>
@@ -33,6 +34,7 @@
           <button class="nav-btn mobile-nav-item" @click="showMobileMenu = false;openMaterialsWin()">📦 客户物料</button>
           <button class="nav-btn mobile-nav-item" @click="showMobileMenu = false;openMapWin()">🗺️ 地图地址</button>
           <button class="nav-btn mobile-nav-item" @click="showMobileMenu = false;openPerfWin()">📊 绩效明细</button>
+          <router-link to="/order" class="nav-btn mobile-nav-item" @click="showMobileMenu = false">🧾 生成订单</router-link>
           <router-link to="/translator" class="nav-btn mobile-nav-item" @click="showMobileMenu = false">规格书翻译</router-link>
           <router-link to="/samples" class="nav-btn mobile-nav-item" @click="showMobileMenu = false">样品登记</router-link>
           <router-link to="/trash" class="nav-btn mobile-nav-item" @click="showMobileMenu = false">回收站</router-link>

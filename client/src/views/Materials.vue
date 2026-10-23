@@ -17,6 +17,9 @@
           <!-- 该客户的开票资料/证照（祥哥 2026-10-15）：开票时通常就在这个客户的物料页上，给个直达入口 -->
           <button class="action-btn" :disabled="!selectedCustomer" @click="openCustomerDocs"
             title="该客户发来的开票资料 / 营业执照等（图片、PDF、Word、Excel）">📄 开票资料</button>
+          <!-- 生成订单（祥哥 2026-10-22）：用当前客户资料生成供货合同，模板照祥哥给的样张 -->
+          <button class="action-btn" :disabled="!selectedCustomer" @click="goOrder"
+            title="用该客户资料生成供货合同（Excel，带公章）">🧾 生成订单</button>
           <button class="add-btn" :disabled="!selectedCustomer" @click="openForm()">＋ 新增</button>
           <button class="close-btn" @click="goBack" title="关闭">✕</button>
         </div>
@@ -1238,6 +1241,13 @@ async function openCustomerDir() {
     return
   }
   await window.electronAPI.openCustomerFolder(customer)
+}
+
+// 「🧾 生成订单」：带着当前客户跳到订单页（同一窗口；测试版先这样，正式版可改成独立浮窗）
+function goOrder() {
+  const customer = selectedCustomer.value
+  if (!customer) return
+  router.push({ path: '/order', query: { customer } })
 }
 
 function onKeydown(e) {

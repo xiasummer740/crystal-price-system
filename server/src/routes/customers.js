@@ -176,6 +176,22 @@ router.post('/merge', (req, res) => {
       changed.profile = 'kept-target' // 两边都填过：保留目标行的
     }
   } catch (e) { console.warn('[customers] 合并时搬迁账期资料失败（不影响合并）:', e.message) }
+  // 订单默认资料（简称 / 乙方 / 六~九条款）同样跟着走：目标行没存过才从源行搬
+  try {
+    const src = queryOne('SELECT short_name, order_profile FROM customers WHERE name = ?', [from])
+    const dst = queryOne('SELECT short_name, order_profile FROM customers WHERE name = ?', [to])
+    const srcHas = !!(src && (String(src.short_name || '').trim() || String(src.order_profile || '').trim()))
+    const dstHas = !!(dst && (String(dst.short_name || '').trim() || String(dst.order_profile || '').trim()))
+    if (srcHas && !dstHas) {
+      executeBatch(
+        'UPDATE customers SET short_name = ?, order_profile = ? WHERE name = ?',
+        [src.short_name || '', src.order_profile || '', to]
+      )
+      changed.order_profile = 'moved'
+    } else if (srcHas) {
+      changed.order_profile = 'kept-target'
+    }
+  } catch (e) { console.warn('[customers] 合并时搬迁订单资料失败（不影响合并）:', e.message) }
   executeBatch('DELETE FROM customers WHERE name = ?', [from])
   saveNow()
   res.json({ code: 0, msg: `已把「${from}」合并到「${to}」`, data: { from, to, merged: plan.total, tables: plan.tables } })
@@ -204,6 +220,17 @@ router.delete('/:name', (req, res) => {
       data: { name, has_profile: true }
     })
   }
+  // 存过订单默认资料（乙方/条款/简称）的同样不许删 —— 订单页的「保存默认」就存在这一行上
+  try {
+    const o = queryOne('SELECT short_name, order_profile FROM customers WHERE name = ?', [name])
+    if (o && (String(o.short_name || '').trim() || String(o.order_profile || '').trim())) {
+      return res.status(409).json({
+        code: 1,
+        msg: `「${name}」上存过订单默认资料（客户简称/乙方信息/条款），从名册删会一起删掉。若确实要删，请重新生成订单时清空这些资料再删。`,
+        data: { name, has_order_profile: true }
+      })
+    }
+  } catch { /* 查不到就按没存过处理 */ }
   const r = executeBatch('DELETE FROM customers WHERE name = ?', [name])
   if (!r.changes) return res.status(404).json({ code: 1, msg: `名册里没有「${name}」` })
   saveNow()

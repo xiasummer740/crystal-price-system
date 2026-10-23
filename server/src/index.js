@@ -18,6 +18,7 @@ import materialsRouter from './routes/materials.js'
 import customersRouter from './routes/customers.js'
 import companyDocsRouter from './routes/companyDocs.js'
 import suggestRouter from './routes/suggest.js'
+import ordersRouter from './routes/orders.js'
 import { exportToExcel, importFromExcel, generateTemplate, generateSampleTemplate, generateNoteTemplate } from './utils/export.js'
 import { initDb, saveNow, queryAll, execute, flushDeferredDailyDbBackup } from './db.js'
 import { triggerBackup, flushPending } from './utils/excelBackup.js'
@@ -134,6 +135,8 @@ app.get('/api/customers/list', (req, res) => {
 app.use('/api/customers', customersRouter)
 // 公司资料 / 开票资料库（客户发来的开票资料、自己公司的证照；支持多家抬头）
 app.use('/api/company-docs', companyDocsRouter)
+// 生成订单（供货合同）：落位 客户管理/<客户>/订单/，模板带公章
+app.use('/api/orders', ordersRouter)
 
 // 导出 Excel
 app.get('/api/export', (req, res) => {
