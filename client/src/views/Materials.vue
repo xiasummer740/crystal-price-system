@@ -317,7 +317,7 @@
                   </div>
                   <input ref="remarkFileInput" type="file" multiple hidden @change="onRemarkFileChange" />
                 </div>
-                <van-image-preview v-model:show="showRPreview" :images="(form.remark_images||[])" :start-position="rPreview" closeable close-on-click-overlay @change="rPreview = $event" @contextmenu="onPreviewCtx" />
+                <RemarkPreview v-model:show="showRPreview" :items="form.remark_images || []" v-model:index="rPreview" @open="openSpec" @copy="copySpecFile" @ctx="onPreviewCtx" />
               </div>
             </div>
 
@@ -370,7 +370,7 @@
         @select="onFormStatusSelect" close-on-click-action />
 
       <!-- 主列表备注图片预览 -->
-      <van-image-preview v-model:show="showListPreview" :images="listPreviewImgs" :start-position="listPreviewIdx" closeable close-on-click-overlay @change="listPreviewIdx = $event" @contextmenu="onPreviewCtx" />
+      <RemarkPreview v-model:show="showListPreview" :items="listPreviewImgs" v-model:index="listPreviewIdx" @open="openSpec" @copy="copySpecFile" @ctx="onPreviewCtx" />
       <ImageContextMenu ref="ctxMenuRef" />
       <!-- 客户名册管理（删除零引用名字 / 把简写合并到正确全名） -->
       <CustomerRegistryManager v-model:show="showRegistry" @changed="loadCustomerList" />
@@ -391,6 +391,7 @@ import { fetchMaterials, createMaterial, updateMaterial, deleteMaterial, getMate
 import { STATUS_FALLBACK, statusOrderFromConfig } from '../utils/materialStatus.js'
 // 图片预览右键菜单（复制图片 / 另存为）—— 客户端自带的右键菜单没有「复制图片」
 import ImageContextMenu from '../components/ImageContextMenu.vue'
+import RemarkPreview from '../components/RemarkPreview.vue'
 // 客户名册管理弹窗（删除没人用的名字 / 把简写合并到正确全名）
 import CustomerRegistryManager from '../components/CustomerRegistryManager.vue'
 // 物料进展时间线弹窗（报价变化/送样/规格书/状态流转/被关联的记事）
