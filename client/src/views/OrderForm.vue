@@ -3,7 +3,6 @@
     <header class="page-header">
       <button class="back-btn" @click="goBack">‹</button>
       <h3>生成订单</h3>
-      <span class="test-badge">测试版</span>
       <span class="header-hint" v-if="selectedCustomer">客户管理 / {{ selectedCustomer }} / 订单</span>
       <div class="header-actions">
         <button v-if="isElectron" class="ghost-btn" :disabled="!selectedCustomer" @click="openOrderFolder">📁 订单文件夹</button>
