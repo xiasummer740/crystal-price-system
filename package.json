@@ -1,6 +1,6 @@
 {
   "name": "crystal-price-system",
-  "version": "1.0.239",
+  "version": "1.0.240",
   "description": "晶振物料报价记录查询系统",
   "type": "module",
   "main": "electron/main.js",
@@ -22,6 +22,7 @@
   "dependencies": {
     "@vitalets/google-translate-api": "^9.2.1",
     "adm-zip": "^0.6.1",
+    "call-bind-apply-helpers": "^1.0.2",
     "cors": "^2.8.5",
     "electron-updater": "^6.8.9",
     "exceljs": "^4.4.0",
@@ -97,7 +98,46 @@
     },
     "portable": {
       "artifactName": "晶振报价管理系统-便携版-v${version}.${ext}"
-    }
+    },
+    "asar": false,
+    "extraResources": [
+      {
+        "from": "node_modules/archiver-utils",
+        "to": "app/node_modules/archiver-utils"
+      },
+      {
+        "from": "node_modules/call-bind-apply-helpers",
+        "to": "app/node_modules/call-bind-apply-helpers"
+      },
+      {
+        "from": "node_modules/encoding",
+        "to": "app/node_modules/encoding"
+      },
+      {
+        "from": "node_modules/es-abstract-get",
+        "to": "app/node_modules/es-abstract-get"
+      },
+      {
+        "from": "node_modules/iconv-lite",
+        "to": "app/node_modules/iconv-lite"
+      },
+      {
+        "from": "node_modules/side-channel-list",
+        "to": "app/node_modules/side-channel-list"
+      },
+      {
+        "from": "node_modules/side-channel-map",
+        "to": "app/node_modules/side-channel-map"
+      },
+      {
+        "from": "node_modules/side-channel-weakmap",
+        "to": "app/node_modules/side-channel-weakmap"
+      },
+      {
+        "from": "node_modules/tesseract.js-core",
+        "to": "app/node_modules/tesseract.js-core"
+      }
+    ]
   },
   "devDependencies": {
     "@playwright/test": "^1.61.1",
