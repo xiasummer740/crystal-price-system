@@ -282,14 +282,19 @@ function openColFilter(col, label) { emit('openColFilter', col, label) }
 <style>
 .table-shell{background:#fff;border-radius:8px;border:1px solid #e8e8e8;overflow:visible;flex:1;display:flex;flex-direction:column}
 .dt{width:max-content;min-width:100%;border-collapse:collapse;font-size:12px}
-.dt th{background:#fafafa;color:#888;font-weight:500;padding:8px 6px;text-align:center;white-space:nowrap;border-bottom:1px solid #e8e8e8;font-size:11px;position:sticky;top:0;z-index:2}
+.dt th{background:#fafafa;color:#888;font-weight:500;padding:8px 6px;text-align:center;white-space:nowrap;border-bottom:1px solid #e8e8e8;border-right:1px solid #eceff3;font-size:11px;position:sticky;top:0;z-index:2}
+/* 列与列之间给一条可见的分割线，拖列宽时好找位置（最后列不要线） */
+.dt th:last-child{border-right:none}
 /* 自定义列宽后切 fixed：这样才能按指定宽度显示、也能往小拉；超出用省略号 */
 .dt-fixed{table-layout:fixed;min-width:0}
 .dt-fixed th,.dt-fixed td{box-sizing:border-box;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .dt td{padding:6px;border-bottom:1px solid #f5f5f5;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .dt tbody tr:hover td{background:rgba(var(--color-primary-rgb),.04)!important}
-.resize-handle{position:absolute;right:0;top:0;bottom:0;width:5px;cursor:col-resize;z-index:3}
-.resize-handle:hover{background:rgba(var(--color-primary-rgb),.25)}
+.resize-handle{position:absolute;right:-5px;top:0;bottom:0;width:10px;cursor:col-resize;z-index:3;background:transparent}
+/* 常态给一条淡淡的手柄线，悬停变主题色 —— 以前完全透明，鼠标得盲找 */
+.resize-handle::after{content:'';position:absolute;left:4px;top:7px;bottom:7px;width:1px;background:#dfe3e8;transition:background .15s,width .15s}
+.resize-handle:hover{background:rgba(var(--color-primary-rgb),.10)}
+.resize-handle:hover::after{background:var(--color-primary);width:2px;left:4px}
 .empty{text-align:center!important;padding:48px 0!important}
 .f-red{color:#e53935;font-weight:600;font-family:'SF Mono','Consolas',monospace}
 .f-orange{color:#ef6c00;font-weight:500}

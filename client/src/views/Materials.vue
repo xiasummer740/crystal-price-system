@@ -140,7 +140,10 @@
                 <td class="cell-copy" :style="{ width: colWidths.date + 'px', textAlign: colAligns.date }" @click="copyText(item.date)">{{ (item.date || '').slice(0, 10) }}</td>
                 <td class="cell-copy" :style="{ width: colWidths.customer_code + 'px', textAlign: colAligns.customer_code }" @click="copyText(item.customer_code)">{{ item.customer_code }}</td>
                 <td class="cell-copy" :style="{ width: colWidths.jkx_code + 'px', textAlign: colAligns.jkx_code }" @click="copyText(item.jkx_code)">{{ item.jkx_code }}</td>
-                <td class="cell-copy" :style="{ width: colWidths.price + 'px', textAlign: colAligns.price }" @click="copyText(item.price)">{{ item.price }}</td>
+                <td class="cell-copy price-cell" :style="{ width: colWidths.price + 'px', textAlign: colAligns.price }" @click="copyText(item.price)">
+                  <span>{{ item.price }}</span>
+                  <button class="pair-copy" @click.stop="copyCodePrice(item)" title="复制：晶科鑫料号 + 报价（中间两个空格）">⧉</button>
+                </td>
                 <td class="cell-copy" :style="{ width: colWidths.cost_price + 'px', textAlign: colAligns.cost_price }" @click="copyText(item.cost_price)">{{ item.cost_price }}</td>
                 <td class="cell-copy" :style="{ width: colWidths.material_code + 'px', textAlign: colAligns.material_code }" @click="copyText(item.material_code)">{{ item.material_code }}</td>
                 <td class="cell-copy" :style="{ width: colWidths.material_name + 'px', textAlign: colAligns.material_name }" :title="materialNameTitle(item)" @click="copyText(item.material_name)">
@@ -344,6 +347,7 @@
               <div v-if="form.spec_document" class="spec-current">
                 <span class="spec-name" :title="specName(form.spec_document)">{{ specName(form.spec_document) }}</span>
                 <button class="spec-action" @click="openSpec(form.spec_document)" title="打开规格书">👁 打开</button>
+                <button v-if="canCopyFile" class="spec-action" @click="copySpecFile(form.spec_document)" title="复制文件，可直接粘到微信">📋 复制</button>
                 <button class="spec-action spec-del" @click="form.spec_document = ''" title="移除规格书">✕ 移除</button>
                 <button class="spec-action" @click="triggerSpecUpload" title="替换规格书">🔄 替换</button>
               </div>
@@ -383,7 +387,7 @@
 import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { showToast, showConfirmDialog } from 'vant'
-import { fetchMaterials, createMaterial, updateMaterial, deleteMaterial, getMaterialStatusConfig, exportMaterials, importMaterialsExcel, searchAllCustomers, fetchMaterialCustomers, fetchMaterialFactories, uploadMaterialImages, deleteMaterialImage, isLocalFileUrl, fileDisplayName, fetchStaleMaterials, http } from '../utils/api.js'
+import { fetchMaterials, createMaterial, updateMaterial, deleteMaterial, getMaterialStatusConfig, exportMaterials, importMaterialsExcel, searchAllCustomers, fetchMaterialCustomers, fetchMaterialFactories, uploadMaterialImages, deleteMaterialImage, copyMaterialFile, isLocalFileUrl, fileDisplayName, fetchStaleMaterials, http } from '../utils/api.js'
 import { STATUS_FALLBACK, statusOrderFromConfig } from '../utils/materialStatus.js'
 // 图片预览右键菜单（复制图片 / 另存为）—— 客户端自带的右键菜单没有「复制图片」
 import ImageContextMenu from '../components/ImageContextMenu.vue'
@@ -407,6 +411,8 @@ const router = useRouter()
 const isStandalone = ref(route.query.standalone === '1')
 // 桌面端才有的能力（打开资源管理器）；手机浏览器里没有「文件夹」这回事
 const isElectron = ref(!!window.electronAPI)
+// 复制文件走系统剪贴板：桌面版或本机浏览器才显示（手机浏览器复制的是电脑剪贴板，没意义）
+const canCopyFile = isElectron.value || ['localhost', '127.0.0.1'].includes(location.hostname)
 
 // 客户选择
 const selectedCustomer = ref('')
@@ -705,6 +711,17 @@ function copyText(text) {
   }).catch(() => {})
 }
 
+// 一键复制「料号 + 报价」：SJK-3N32768K4415GRC9  1.3含税
+// 料号优先晶科鑫料号，没有就用物料编码；中间固定两个空格（祥哥要求，粘到微信/Excel 都好看）
+function copyCodePrice(item) {
+  const code = String(item?.jkx_code || item?.material_code || '').trim()
+  const price = String(item?.price || '').trim()
+  if (!code && !price) return
+  const text = [code, price].filter(Boolean).join('  ')
+  navigator.clipboard?.writeText(text).then(() => {
+    showToast('已复制：' + text)
+  }).catch(() => {})
+}
 // ===== 富文本渲染（**文字** → 加粗+高亮色） =====
 function renderRich(text) {
   if (!text) return ''
@@ -906,6 +923,17 @@ function onPreviewCtx(e) {
   const img = e.target?.closest?.('.van-image-preview__image')
   const url = img?.getAttribute('src') || e.target?.getAttribute?.('src')
   if (url) ctxMenuRef.value?.open(e, url)
+}
+
+// 把规格书文件复制到系统剪贴板（微信里 Ctrl+V 直接是文件）
+async function copySpecFile(url) {
+  if (!url) return
+  try {
+    const r = await copyMaterialFile(url)
+    showToast('已复制「' + (r.data?.name || '规格书') + '」，可直接粘贴到微信')
+  } catch (e) {
+    showToast('复制失败: ' + (e.message || '未知错误'))
+  }
 }
 
 function openSpec(url) {
@@ -1447,7 +1475,10 @@ onUnmounted(() => {
 
 .status-tag { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; border: 1px solid; }
 .tbl-btn { background: none; border: none; cursor: pointer; font-size: 14px; padding: 2px 4px; transition: opacity .15s; line-height: 1; }
-.tbl-btn:hover { opacity: .7; }
+/* 报价格里的「复制料号+报价」小图标（不新增列，避免操作列被挤爆） */
+.price-cell { white-space: nowrap; }
+.pair-copy { border: none; background: none; color: #b0b8c4; cursor: pointer; font-size: 12px; padding: 0 0 0 3px; line-height: 1; vertical-align: middle; }
+.pair-copy:hover { color: var(--color-primary); }.tbl-btn:hover { opacity: .7; }
 .edit-btn-sm { color: var(--color-primary); }
 .del-btn-sm { color: #ee0a24; }
 

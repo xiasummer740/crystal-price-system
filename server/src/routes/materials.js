@@ -16,6 +16,7 @@ import { buildTimeline } from '../utils/materialTimeline.js'
 import { dwellIndex, annotateDwell, computeStale, readStaleSettings, TERMINAL_STATUS } from '../utils/materialDwell.js'
 // 客户名统一名册：读用并集（suggest/listAll），写用 upsert（任何录入点都进名册）
 import { upsertMany, resolveSuggestWithMaterialMatch, listAll } from '../utils/customerNames.js'
+import { copyFileToClipboard } from '../utils/clipboardFile.js'
 
 const router = Router()
 
@@ -58,6 +59,22 @@ router.delete('/upload', (req, res) => {
   if (!fs.existsSync(hit.abs)) return res.status(404).json({ code: 1, msg: '文件不存在' })
   try { fs.unlinkSync(hit.abs); res.json({ code: 0, msg: '已删除' }) }
   catch (e) { res.status(500).json({ code: 1, msg: '删除失败' }) }
+})
+
+// 复制规格书/附件文件到系统剪贴板（可粘到微信/QQ）—— 传归档 URL，后端解析成磁盘路径
+router.post('/copy-file', async (req, res) => {
+  try {
+    const hit = A.resolveUrl(req.body?.url)
+    if (!hit) return res.status(400).json({ code: 1, msg: '非法的文件路径' })
+    if (!fs.existsSync(hit.abs)) return res.status(404).json({ code: 1, msg: '文件不存在' })
+    if (!/\.(pdf|png|jpe?g|gif|webp|docx?|xlsx?|zip|rar)$/i.test(hit.abs)) {
+      return res.status(400).json({ code: 1, msg: '这种文件不支持复制' })
+    }
+    await copyFileToClipboard(hit.abs)
+    res.json({ code: 0, data: { name: path.basename(hit.abs) } })
+  } catch (e) {
+    res.status(500).json({ code: 1, msg: '复制失败: ' + (e.message || '未知错误') })
+  }
 })
 
 // ========== 客户改名：整个客户目录整组迁移 ==========

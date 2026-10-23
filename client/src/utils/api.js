@@ -102,6 +102,10 @@ export function uploadMaterialImages(formData, customer = '') {
 export function deleteMaterialImage(url) {
   return http.delete('/materials/upload', { params: { url } })
 }
+/** 把规格书/附件文件复制到系统剪贴板（可粘到微信） */
+export function copyMaterialFile(url) {
+  return http.post('/materials/copy-file', { url })
+}
 
 export function getMetaOptions() {
   return http.get('/prices/meta/options')
