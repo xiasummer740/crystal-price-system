@@ -445,6 +445,29 @@ export function deleteOrder(customer, name) {
   return http.post('/orders/delete', { customer, name })
 }
 
+// ===== 客户文件柜（客户管理/<客户>/客户文件/）=====
+export function fetchCustomerFiles(customer) {
+  return http.get('/customer-files', { params: { customer } })
+}
+export function mkdirCustomerFolder(customer, name) {
+  return http.post('/customer-files/mkdir', { customer, name })
+}
+export function uploadCustomerFiles(formData) {
+  return http.post('/customer-files/upload', formData)
+}
+export function deleteCustomerFile(customer, folder, name) {
+  return http.post('/customer-files/delete', { customer, folder, name })
+}
+export function deleteCustomerFolder(customer, folder) {
+  return http.post('/customer-files/delete-folder', { customer, folder })
+}
+export function copyCustomerFile(customer, folder, name) {
+  return http.post('/customer-files/copy', { customer, folder, name })
+}
+export function openCustomerFile(customer, folder, name) {
+  return http.post('/customer-files/open', { customer, folder, name })
+}
+
 // ===== 阶段停留时长 / 待跟进 / 月度汇总（祥哥 2026-10-14）=====
 // 停留天数两种口径：有状态事件=精确，没有=按上次改动估算（界面必须能区分）。
 // 阈值由用户在「待跟进」面板里自己设，默认全 0 = 不提醒；「下批量」是终态不参与。

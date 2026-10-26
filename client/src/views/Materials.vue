@@ -14,6 +14,9 @@
           <!-- 只在桌面端显示：手机浏览器没有「打开文件夹」这回事 -->
           <button v-if="isElectron" class="action-btn" :disabled="!selectedCustomer" @click="openCustomerDir"
             title="在资源管理器里打开该客户的资料文件夹（规格书 / 物料图片 / 记事）">📁 客户目录</button>
+          <!-- 客户文件柜：按日期+料号建文件夹，上传/拖入/粘贴文件（祥哥 2026-10-26） -->
+          <button class="action-btn" :disabled="!selectedCustomer" @click="showCustomerFiles = true"
+            title="按客户存文件：默认用「日期+晶科鑫料号」建文件夹，支持拖入/粘贴">🗂 客户文件</button>
           <!-- 该客户的开票资料/证照（祥哥 2026-10-15）：开票时通常就在这个客户的物料页上，给个直达入口 -->
           <button class="action-btn" :disabled="!selectedCustomer" @click="openCustomerDocs"
             title="该客户发来的开票资料 / 营业执照等（图片、PDF、Word、Excel）">📄 开票资料</button>
@@ -371,6 +374,7 @@
 
       <!-- 主列表备注图片预览 -->
       <RemarkPreview v-model:show="showListPreview" :items="listPreviewImgs" v-model:index="listPreviewIdx" @open="openSpec" @copy="copySpecFile" @ctx="onPreviewCtx" />
+      <CustomerFiles v-model:show="showCustomerFiles" :customer="selectedCustomer" :materials="list" />
       <ImageContextMenu ref="ctxMenuRef" />
       <!-- 客户名册管理（删除零引用名字 / 把简写合并到正确全名） -->
       <CustomerRegistryManager v-model:show="showRegistry" @changed="loadCustomerList" />
@@ -392,6 +396,7 @@ import { STATUS_FALLBACK, statusOrderFromConfig } from '../utils/materialStatus.
 // 图片预览右键菜单（复制图片 / 另存为）—— 客户端自带的右键菜单没有「复制图片」
 import ImageContextMenu from '../components/ImageContextMenu.vue'
 import RemarkPreview from '../components/RemarkPreview.vue'
+import CustomerFiles from '../components/CustomerFiles.vue'
 // 客户名册管理弹窗（删除没人用的名字 / 把简写合并到正确全名）
 import CustomerRegistryManager from '../components/CustomerRegistryManager.vue'
 // 物料进展时间线弹窗（报价变化/送样/规格书/状态流转/被关联的记事）
@@ -904,6 +909,8 @@ function cancelForm() {
 
 // 主列表备注图片预览
 const showListPreview = ref(false)
+// 客户文件柜（按日期+料号建文件夹）
+const showCustomerFiles = ref(false)
 const listPreviewImgs = ref([])
 const listPreviewIdx = ref(0)
 function rimgCount(item) { return (item.remark_images || []).length }
