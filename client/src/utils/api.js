@@ -440,6 +440,11 @@ export function copyOrderFile(customer, name) {
   return http.post('/orders/copy', { customer, name })
 }
 
+/** 删除一份订单（xlsx + pdf 一起删） */
+export function deleteOrder(customer, name) {
+  return http.post('/orders/delete', { customer, name })
+}
+
 // ===== 阶段停留时长 / 待跟进 / 月度汇总（祥哥 2026-10-14）=====
 // 停留天数两种口径：有状态事件=精确，没有=按上次改动估算（界面必须能区分）。
 // 阈值由用户在「待跟进」面板里自己设，默认全 0 = 不提醒；「下批量」是终态不参与。

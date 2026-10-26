@@ -472,6 +472,9 @@ export async function initDb() {
   try { db.run("ALTER TABLE customer_materials ADD COLUMN alternates TEXT DEFAULT '[]'") } catch {}
   // 兼容旧数据库：添加规格书列
   try { db.run("ALTER TABLE customer_materials ADD COLUMN spec_document TEXT DEFAULT ''") } catch {}
+  // 订单里手改过的「货品编码 / 产品规格」：下次选同一个物料时自动带入（祥哥 2026-10-26）
+  try { db.run("ALTER TABLE customer_materials ADD COLUMN order_code TEXT DEFAULT ''") } catch {}
+  try { db.run("ALTER TABLE customer_materials ADD COLUMN order_spec TEXT DEFAULT ''") } catch {}
 
   // 客户物料的**进展流水**（只追加，永不覆盖）。
   //

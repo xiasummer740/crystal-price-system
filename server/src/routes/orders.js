@@ -257,7 +257,7 @@ function buyerPrefill(customer) {
 /** 该客户的物料清单（给下拉用） */
 function customerMaterials(customer) {
   const rows = queryAll(
-    `SELECT id, date, customer_code, jkx_code, material_code, material_name, price, factory, customer_desc
+    `SELECT id, date, customer_code, jkx_code, material_code, material_name, price, factory, customer_desc, order_code, order_spec
        FROM customer_materials
       WHERE customer = ? AND is_deleted = 0
       ORDER BY date DESC, id DESC
@@ -379,6 +379,7 @@ async function generateHandler(req, res, preview = false) {
       if (!Number.isFinite(qty) || qty <= 0) return res.status(400).json({ code: 1, msg: '数量必须是大于 0 的数字' })
       if (!Number.isFinite(price) || price < 0) return res.status(400).json({ code: 1, msg: '单价必须是不小于 0 的数字' })
       cleanItems.push({
+        materialId: Number(it.materialId) || 0,
         jkx_code: String(it.jkx_code || '').trim(),
         code,
         spec,
@@ -466,6 +467,20 @@ async function generateHandler(req, res, preview = false) {
     // 记住客户简称：下一单直接用同一前缀（用户手改过的也记住）
     saveShortName(customer, shortName)
 
+    // 记住这次手改过的「货品编码 / 产品规格」：按客户物料 id 存，
+    // 下次选同一个物料时自动带入（祥哥 2026-10-26：不用每次都改）
+    try {
+      for (const it of cleanItems) {
+        if (!it.materialId) continue
+        execute(
+          'UPDATE customer_materials SET order_code = ?, order_spec = ? WHERE id = ? AND customer = ?',
+          [it.code, it.spec, it.materialId, customer]
+        )
+      }
+    } catch (e) {
+      console.warn('[orders] 记住编码/规格失败:', e.message)
+    }
+
     // 同时导出一份 PDF（直接发客户用）。失败不影响 xlsx：把原因带回前端
     let pdfName = ''
     let pdfError = ''
@@ -513,6 +528,32 @@ router.get('/list', (req, res) => {
     res.json({ code: 0, data: listOrders(customer) })
   } catch (e) {
     res.status(500).json({ code: 1, msg: '读取订单列表失败: ' + e.message })
+  }
+})
+
+// ===== 删除一份订单（xlsx + pdf 一起删）=====
+// 只允许删「该客户 订单 目录」下的文件：name 先取 basename，再按 stem 拼回 xlsx/pdf，
+// 不信任前端传来的路径，避免误删别处文件。
+router.post('/delete', (req, res) => {
+  try {
+    const customer = String(req.body?.customer || '').trim()
+    const name = path.basename(String(req.body?.name || '').trim())
+    if (!customer) return res.status(400).json({ code: 1, msg: '缺少客户' })
+    if (!name || !/\.(xlsx|pdf)$/i.test(name)) return res.status(400).json({ code: 1, msg: '文件名不合法' })
+    const dir = orderDir(customer)
+    if (!fs.existsSync(dir)) return res.status(404).json({ code: 1, msg: '该客户还没有订单目录' })
+    const stem = path.basename(name, path.extname(name))
+    const deleted = []
+    for (const ext of ['.xlsx', '.pdf']) {
+      const abs = path.join(dir, stem + ext)
+      if (!fs.existsSync(abs)) continue
+      try { fs.unlinkSync(abs); deleted.push(path.basename(abs)) } catch (e) { console.warn('[orders/delete]', e.message) }
+    }
+    if (!deleted.length) return res.status(404).json({ code: 1, msg: '文件不存在（可能已被删除）' })
+    res.json({ code: 0, data: { deleted } })
+  } catch (e) {
+    console.error('[orders/delete]', e)
+    res.status(500).json({ code: 1, msg: '删除失败: ' + e.message })
   }
 })
 

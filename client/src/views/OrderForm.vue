@@ -193,6 +193,7 @@
               <button :class="{ active: priceMode === '未税' }" @click="priceMode = '未税'">未税</button>
             </div>
             <span class="card-tip">{{ items.length }} 条 · 合计 {{ money(totalAmount) }} 元</span>
+            <span class="card-tip remember-tip" title="生成订单后会按物料记住，下次选同一个物料自动带入">改过的编码/规格会记住</span>
             <button class="mini-btn" @click="addItem">＋ 添加物料</button>
           </div>
         </div>
@@ -284,6 +285,7 @@
             <span class="hi-date">{{ o.date }}</span>
             <a class="hi-model hi-file" :href="historyUrl(o)" target="_blank">{{ o.pdf || o.xlsx }}</a>
             <button v-if="o.pdf && canCopyFile" class="hi-copy" @click="copyFile(o.pdf)" title="复制文件，可直接粘到微信">复制</button>
+            <button class="hi-del" @click="removeOrder(o)" title="删除这份订单（xlsx + pdf 一起删）">删除</button>
           </div>
         </div>
         <div class="empty" v-else>还没有生成过订单</div>
@@ -310,7 +312,7 @@
 <script setup>
 import { ref, reactive, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { showToast } from 'vant'
+import { showToast, showConfirmDialog } from 'vant'
 import {
   fetchOrderOptions,
   generateOrder,
@@ -323,6 +325,7 @@ import {
   orderDownloadUrl,
   orderPreviewUrl,
   copyOrderFile,
+  deleteOrder,
   fetchAllCustomerNames
 } from '../utils/api.js'
 
@@ -449,6 +452,29 @@ async function copyFile(name) {
 // 浏览器 Clipboard 不支持文件，走服务端 PowerShell；手机浏览器没法复制电脑上的文件
 const canCopyFile = isElectron || ['localhost', '127.0.0.1'].includes(location.hostname)
 
+/** 删除一份订单：确认后把 xlsx + pdf 一起删（生错了的订单用这个清掉） */
+async function removeOrder(o) {
+  const name = o.pdf || o.xlsx
+  if (!name) return
+  try {
+    await showConfirmDialog({
+      title: '删除订单',
+      message: `删除「${name}」？\nExcel 和 PDF 会一起删掉，删除后不能恢复。`,
+      confirmButtonText: '删除',
+      confirmButtonColor: '#ee0a24'
+    })
+  } catch { return }
+  try {
+    await deleteOrder(selectedCustomer.value, name)
+    showToast('已删除')
+    if (result.value && (result.value.pdfName === name || result.value.fileName === name)) result.value = null
+    const list = await fetchOrderList(selectedCustomer.value)
+    recent.value = list.data || []
+  } catch (e) {
+    showToast('删除失败: ' + (e.message || '未知错误'))
+  }
+}
+
 async function loadBase() {
   try {
     const r = await fetchOrderOptions('')
@@ -537,9 +563,18 @@ function onMaterialPick(item) {
   const m = materials.value.find(x => String(x.id) === String(item.materialId))
   if (!m) return
   item.jkx_code = m.jkx_code || m.material_code || ''
-  // 货品编码不再自动填客户料号：默认保持行号 1、2、3…，用户自己改
-  const head = [m.jkx_code, m.factory].filter(Boolean).join('/')
-  item.spec = [head, m.material_name].filter(Boolean).join('\n')
+  // 货品编码：这个物料以前手改过就带入上次的（并停止自动编号），没有就保持 1、2、3…
+  if (m.order_code) {
+    item.code = String(m.order_code)
+    item.codeAuto = false
+  }
+  // 产品规格同理：上次改过就用上次的，没改过才按「料号/工厂 + 名称」拼
+  if (m.order_spec) {
+    item.spec = String(m.order_spec)
+  } else {
+    const head = [m.jkx_code, m.factory].filter(Boolean).join('/')
+    item.spec = [head, m.material_name].filter(Boolean).join('\n')
+  }
   if (!item.qty && m.qty) item.qty = m.qty
   if (m.price_num) item.price = String(m.price_num)
   if (!item.deliveryDate) item.deliveryDate = signDate.value
@@ -646,6 +681,7 @@ function buildPayload() {
     sign: { supplierRep: signRep.value || supplier.contact },
     showSeal: showSeal.value,
     items: items.value.map(it => ({
+      materialId: it.materialId || '',
       jkx_code: it.jkx_code,
       code: it.code,
       spec: it.spec,
@@ -665,7 +701,13 @@ async function generate() {
     const payload = buildPayload()
     const r = await generateOrder(payload)
     result.value = r.data
-    showToast('订单已生成')
+    // 本单手改过的编码/规格，同步到本地物料列表：接着再选同一个物料时立刻带入
+    for (const it of items.value) {
+      if (!it.materialId) continue
+      const m = materials.value.find(x => String(x.id) === String(it.materialId))
+      if (m) { m.order_code = it.code; m.order_spec = it.spec }
+    }
+    showToast('订单已生成（编码/规格已记住）')
     try {
       const list = await fetchOrderList(selectedCustomer.value)
       recent.value = list.data || []
@@ -825,6 +867,9 @@ onBeforeUnmount(() => {
 .hi-file { color: var(--color-primary); text-decoration: none; }
 .hi-copy { border: 1px solid #d0d5dd; background: #fff; color: #475467; font-size: 12px; border-radius: 6px; padding: 3px 10px; cursor: pointer; }
 .hi-copy:hover { border-color: var(--color-primary); color: var(--color-primary); }
+.hi-del { border: 1px solid #f3c1c1; background: #fff; color: #d92d20; font-size: 12px; border-radius: 6px; padding: 3px 10px; cursor: pointer; }
+.hi-del:hover { border-color: #d92d20; background: #fff5f5; }
+.remember-tip { color: #98a2b3; }
 .pdf-link { color: var(--color-primary); text-decoration: none; }
 
 .submit-bar { display: flex; align-items: center; gap: 16px; background: #fff; border-radius: 10px; padding: 12px 16px; box-shadow: 0 1px 4px rgba(0, 0, 0, .06); margin-bottom: 14px; }
