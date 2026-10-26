@@ -15,7 +15,7 @@
 import { queryOne, execute, saveNow } from '../db.js'
 
 /** 账期预设（界面下拉用；也允许自填，因为实际账期千奇百怪） */
-export const PAYMENT_TERM_PRESETS = ['款到发货', '货到付款', '月结30天', '月结60天', '月结90天', '预付30%', '预付50%']
+export const PAYMENT_TERM_PRESETS = ['款到发货', '货到付款', '当月结30天', '当月结60天', '当月结90天', '预付30%', '预付50%']
 
 /** 可写字段（白名单，防前端塞别的列） */
 export const PROFILE_FIELDS = ['payment_terms', 'statement_day', 'payment_days', 'next_statement_date', 'pay_remark']

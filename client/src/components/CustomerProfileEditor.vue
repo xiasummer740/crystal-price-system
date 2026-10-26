@@ -11,7 +11,7 @@
       <div class="cpe-body">
         <div class="cpe-row">
           <label>账期</label>
-          <input class="cpe-input" v-model="form.payment_terms" list="cpe-terms" placeholder="如：月结30天（可直接输入，也可选）" />
+          <input class="cpe-input" v-model="form.payment_terms" list="cpe-terms" placeholder="如：当月结30天（可直接输入，也可选）" />
           <datalist id="cpe-terms">
             <option v-for="p in presets" :key="p" :value="p" />
           </datalist>

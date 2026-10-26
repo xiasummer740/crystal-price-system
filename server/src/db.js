@@ -512,6 +512,11 @@ export async function initDb() {
   try { db.run('ALTER TABLE customers ADD COLUMN payment_days INTEGER DEFAULT 0') } catch {}       // 对账后多少天付款（0=不设）
   try { db.run("ALTER TABLE customers ADD COLUMN next_statement_date TEXT DEFAULT ''") } catch {}  // 手填的「下次对账日」覆写 YYYY-MM-DD（空=按每月对账日自动算）
   try { db.run("ALTER TABLE customers ADD COLUMN pay_remark TEXT DEFAULT ''") } catch {}           // 付款/对账备注
+  // 账期文案统一：祥哥 2026-10-26 要求「月结」前面加「当」→ 当月结30/60/90天。
+  // 旧数据里存的是「月结30天」，这里按精确值迁移一次（幂等，每次启动跑也无副作用）。
+  try { db.run("UPDATE customers SET payment_terms = '当月结30天' WHERE payment_terms = '月结30天'") } catch {}
+  try { db.run("UPDATE customers SET payment_terms = '当月结60天' WHERE payment_terms = '月结60天'") } catch {}
+  try { db.run("UPDATE customers SET payment_terms = '当月结90天' WHERE payment_terms = '月结90天'") } catch {}
   try { db.run("ALTER TABLE customers ADD COLUMN profile_updated_at TEXT DEFAULT ''") } catch {}   // 资料最后修改时间
   // 客户简称（祥哥 2026-10-22）：生成订单时做单号前缀，如「国润」→ GR → GR261022001。
   // 放在 customers 而不是订单模块自建表：改名合并/名册管理本来就在处理 customers，合并时简称跟着走。
