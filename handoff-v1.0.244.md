@@ -1,6 +1,6 @@
 # v1.0.244 交接（订单删除 + 编码/规格记忆）
 
-> 2026-10-26 · 已打包、已本地提交；**GitHub 推送/Release 待网络恢复后补**
+> 2026-10-26 · 已发版：https://github.com/xiasummer740/crystal-price-system/releases/tag/v1.0.244
 > 安装包：`dist-exe\crystal-price-system-setup-1.0.244.exe`（可直接双击安装）
 
 ## 这一版做了什么
@@ -32,24 +32,10 @@
 - `client/src/views/OrderForm.vue`：删除按钮 + 确认框、`onMaterialPick` 带入记忆、payload 带 `materialId`
 - `client/src/utils/api.js`：`deleteOrder()`
 
-## 发版进度（网络问题）
+## 发版记录
 
-2026-10-26 14:36 起 `github.com` / `api.github.com` 全部连不上（百度正常，TLS EOF），
-`git push` 失败。本地已：
-
-- `npm run package` 成功 → `dist-exe\crystal-price-system-setup-1.0.244.exe`
-- commit `v1.0.244` + tag 已打（本地）
-
-网络恢复后执行：
-
-```powershell
-cd crystal-price-system
-git push origin HEAD; git push origin v1.0.244
-# 再用 GitHub Release 上传：
-# dist-exe\crystal-price-system-setup-1.0.244.exe
-# dist-exe\crystal-price-system-setup-1.0.244.exe.blockmap
-# dist-exe\latest.yml
-```
+2026-10-26 14:36–15:0x `github.com` 一度连不上（`git push` TLS 握手失败），
+15:0x 恢复后已补：main + tag `v1.0.244` 推送，Release 三件套（exe / blockmap / latest.yml）已上传。
 
 ## 测试记录
 
