@@ -62,6 +62,16 @@
         </div>
       </section>
 
+      <!-- 条款（可改） -->
+      <section class="card">
+        <div class="card-head"><h4>条款（可改）</h4><span class="card-tip">改完直接写进报价单的「TERMS &amp; CONDITIONS」</span></div>
+        <div class="cust-row">
+          <label class="field"><span>1. 结款方式</span><input v-model="form.termsSettle" placeholder="款到做货" /></label>
+          <label class="field"><span>2. 正常交货期</span><input v-model="form.termsLead" placeholder="5-6周" /></label>
+          <label class="field"><span>3. 有效期限</span><input v-model="form.termsValid" placeholder="本报价单 30 天内有效" /></label>
+        </div>
+      </section>
+
       <div class="submit-bar">
         <div class="file-preview"><span class="fp-label">将保存为</span><code>{{ fileNamePreview }}</code></div>
         <button class="save-btn" :disabled="previewLoading" @click="openPreview">{{ previewLoading ? '预览中…' : '👁 预览' }}</button>
@@ -132,7 +142,10 @@ const previewOpen = ref(false)
 const previewUrl = ref('')
 const result = ref(null)
 
-const form = reactive({ customer: '', date: new Date().toISOString().slice(0, 10), to: '', attn: '', tel: '', fileShort: '' })
+const form = reactive({
+  customer: '', date: new Date().toISOString().slice(0, 10), to: '', attn: '', tel: '', fileShort: '',
+  termsSettle: '款到做货', termsLead: '5-6周', termsValid: '本报价单 30 天内有效'
+})
 
 function newItem() {
   return { key: Date.now() + '-' + Math.random().toString(36).slice(2, 6), matId: '', customer_code: '', jkx_code: '', spec: '', price: '', qty: '', lt: '', remark: '' }
@@ -190,6 +203,7 @@ function buildPayload() {
     attn: form.attn,
     tel: form.tel,
     fileShort: form.fileShort,
+    terms: { settle: form.termsSettle, lead: form.termsLead, valid: form.termsValid },
     items: items.value.map(it => ({
       customer_code: it.customer_code,
       jkx_code: it.jkx_code,

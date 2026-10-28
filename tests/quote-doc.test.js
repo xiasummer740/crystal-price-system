@@ -9,6 +9,7 @@ const sample = {
   fm: '夏祥',
   attn: '李工',
   tel: '13800000000',
+  terms: { settle: '月结30天', lead: '2-4周', valid: '本报价单 15 天内有效' },
   items: [
     { customer_code: '9008006710', jkx_code: 'SJK-7K32768K0135GRC9', spec: '1610,32.768KHz,9pF', price: 0.82, qty: '3000', lt: '8-10周', remark: '编带' },
     { customer_code: '', jkx_code: 'SJK-7Y38400M9125GRC9', spec: '1612,4pin,38.400MHz\n8PF,±10ppm', price: 0.63, qty: '3000', lt: '2-4周', remark: '' }
@@ -27,6 +28,9 @@ test('报价单 docx：占位符全部替换、明细按条数展开、logo/公�
   assert.match(xml, /SJK-7Y38400M9125GRC9/)
   assert.match(xml, /2026-10-28/)
   assert.match(xml, /李工/)
+  assert.match(xml, /月结30天/)
+  assert.match(xml, /本报价单 15 天内有效/)
+  assert.equal(xml.includes('{{T_'), false)
 
   // 两条物料 → 明细行出现两次
   const codeCount = (xml.match(/SJK-7K32768K0135GRC9/g) || []).length

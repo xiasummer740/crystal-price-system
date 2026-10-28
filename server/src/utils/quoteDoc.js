@@ -42,7 +42,11 @@ export function buildQuoteDocx(quote) {
     '{{TO}}': quote.to || '',
     '{{FM}}': quote.fm || '',
     '{{ATTN}}': quote.attn || '',
-    '{{TEL}}': quote.tel || ''
+    '{{TEL}}': quote.tel || '',
+    // 条款前三项可由界面改（祥哥 2026-10-28）
+    '{{T_SETTLE}}': quote.terms?.settle ?? '款到做货',
+    '{{T_LEAD}}': quote.terms?.lead ?? '5-6周',
+    '{{T_VALID}}': quote.terms?.valid ?? '本报价单 30 天内有效'
   }
   for (const [k, v] of Object.entries(header)) xml = xml.split(k).join(cellText(v))
 

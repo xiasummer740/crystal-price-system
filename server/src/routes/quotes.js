@@ -132,6 +132,11 @@ function quotePayload(body) {
     fm: String(body.fm || FM_NAME).trim(),
     attn: String(body.attn || '').trim(),
     tel: String(body.tel || '').trim(),
+    terms: {
+      settle: String(body.terms?.settle ?? '款到做货').trim() || '款到做货',
+      lead: String(body.terms?.lead ?? '5-6周').trim() || '5-6周',
+      valid: String(body.terms?.valid ?? '本报价单 30 天内有效').trim() || '本报价单 30 天内有效'
+    },
     items
   }
 }
