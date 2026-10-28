@@ -20,6 +20,7 @@ import companyDocsRouter from './routes/companyDocs.js'
 import suggestRouter from './routes/suggest.js'
 import ordersRouter from './routes/orders.js'
 import customerFilesRouter from './routes/customerFiles.js'
+import quotesRouter from './routes/quotes.js'
 import { exportToExcel, importFromExcel, generateTemplate, generateSampleTemplate, generateNoteTemplate } from './utils/export.js'
 import { initDb, saveNow, queryAll, execute, flushDeferredDailyDbBackup } from './db.js'
 import { triggerBackup, flushPending } from './utils/excelBackup.js'
@@ -140,6 +141,8 @@ app.use('/api/company-docs', companyDocsRouter)
 app.use('/api/orders', ordersRouter)
 // 客户文件柜：客户管理/<客户>/客户文件/<文件夹>/，支持新建文件夹/上传/拖入/粘贴
 app.use('/api/customer-files', customerFilesRouter)
+// 生成报价单：客户管理/<客户>/报价单/，模板保真（docx + PDF）
+app.use('/api/quotes', quotesRouter)
 
 // 导出 Excel
 app.get('/api/export', (req, res) => {

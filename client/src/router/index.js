@@ -40,6 +40,8 @@ const routes = [
   { path: '/mobile-docs', name: 'MobileDocs', component: () => import('../views/MobileDocs.vue'), meta: { title: '公司资料' } },
   // 生成订单（供货合同）：选客户 → 带出资料 → 生成到 客户管理/<客户>/订单/
   { path: '/order', name: 'OrderForm', component: () => import('../views/OrderForm.vue'), meta: { title: '生成订单' } },
+  // 生成报价单：模板保真（docx + PDF），落位 客户管理/<客户>/报价单/
+  { path: '/quote', name: 'QuoteForm', component: () => import('../views/QuoteForm.vue'), meta: { title: '生成报价单' } },
   { path: '/:pathMatch(.*)*', redirect: '/' }
 ]
 

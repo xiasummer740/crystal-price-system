@@ -407,11 +407,11 @@ export function fetchOrderOptions(customer) {
   return http.get('/orders/options', { params: { customer } })
 }
 export function generateOrder(payload) {
-  return http.post('/orders/generate', payload)
+  return http.post('/orders/generate', payload, { timeout: 180000 })
 }
 /** 只生成 PDF 预览（不落盘、不占单号） */
 export function previewOrder(payload) {
-  return http.post('/orders/preview', payload, { responseType: 'blob' })
+  return http.post('/orders/preview', payload, { responseType: 'blob', timeout: 180000 })
 }
 export function fetchOrderList(customer) {
   return http.get('/orders/list', { params: { customer } })
@@ -443,6 +443,33 @@ export function copyOrderFile(customer, name) {
 /** 删除一份订单（xlsx + pdf 一起删） */
 export function deleteOrder(customer, name) {
   return http.post('/orders/delete', { customer, name })
+}
+
+// ===== 报价单（客户管理/<客户>/报价单/）=====
+export function fetchQuoteOptions(customer) {
+  return http.get('/quotes/options', { params: { customer } })
+}
+export function generateQuote(payload) {
+  // Word 转 PDF 可能十几秒，默认 15s 会超时成「网络错误」
+  return http.post('/quotes/generate', payload, { timeout: 180000 })
+}
+export function previewQuote(payload) {
+  return http.post('/quotes/preview', payload, { responseType: 'blob', timeout: 180000 })
+}
+export function fetchQuoteList(customer) {
+  return http.get('/quotes/list', { params: { customer } })
+}
+export function quoteDownloadUrl(customer, name) {
+  return `/api/quotes/download?customer=${encodeURIComponent(customer)}&name=${encodeURIComponent(name)}`
+}
+export function quotePreviewUrl(customer, name) {
+  return quoteDownloadUrl(customer, name) + '&inline=1'
+}
+export function copyQuoteFile(customer, name) {
+  return http.post('/quotes/copy', { customer, name })
+}
+export function deleteQuoteFile(customer, name) {
+  return http.post('/quotes/delete', { customer, name })
 }
 
 // ===== 客户文件柜（客户管理/<客户>/客户文件/）=====

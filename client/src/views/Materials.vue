@@ -23,6 +23,9 @@
           <!-- 生成订单（祥哥 2026-10-22）：用当前客户资料生成供货合同，模板照祥哥给的样张 -->
           <button class="action-btn" :disabled="!selectedCustomer" @click="goOrder"
             title="用该客户资料生成供货合同（Excel，带公章）">🧾 生成订单</button>
+          <!-- 生成报价单（祥哥 2026-10-28）：模板照「晶科鑫报价单2026-5-20后.docx」，出 docx + PDF -->
+          <button class="action-btn" :disabled="!selectedCustomer" @click="goQuote"
+            title="用该客户资料生成报价单（Word + PDF，带 logo/公章）">📋 报价单</button>
           <button class="add-btn" :disabled="!selectedCustomer" @click="openForm()">＋ 新增</button>
           <button class="close-btn" @click="goBack" title="关闭">✕</button>
         </div>
@@ -1337,6 +1340,13 @@ function goOrder() {
   const customer = selectedCustomer.value
   if (!customer) return
   router.push({ path: '/order', query: { customer } })
+}
+
+// 「📋 报价单」：带着当前客户跳到报价单页
+function goQuote() {
+  const customer = selectedCustomer.value
+  if (!customer) return
+  router.push({ path: '/quote', query: { customer } })
 }
 
 function onKeydown(e) {
