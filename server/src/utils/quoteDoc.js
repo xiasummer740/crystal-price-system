@@ -57,8 +57,8 @@ function computeWidths(items) {
   w[1] = clamp(maxU('jkx_code') * 135 + pad, 1500, 3300)
   w[3] = clamp(maxU('price') * 120 + pad, 650, 1000)
   w[4] = clamp(maxU('qty') * 120 + pad, 700, 1300)
-  w[5] = clamp(maxU('lt') * 120 + pad, 650, 1100)
-  w[6] = clamp(maxU('remark') * 120 + pad, 650, 1700)
+  w[5] = clamp(maxU('lt') * 150 + 250, 900, 1400)
+  w[6] = clamp(maxU('remark') * 130 + 220, 700, 1700)
 
   const base = [900, 1500, 650, 700, 650, 650]
   let others = w[0] + w[1] + w[3] + w[4] + w[5] + w[6]
