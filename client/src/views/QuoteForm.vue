@@ -167,7 +167,7 @@ async function loadOptions(customer) {
     const d = r.data || {}
     materials.value = d.materials || []
     recent.value = d.recent || []
-    form.to = d.buyer?.name || customer
+    form.to = d.to || d.buyer?.name || customer
     form.attn = d.buyer?.contact || ''
     form.tel = d.buyer?.phone || ''
     form.fileShort = d.fileShort || ''

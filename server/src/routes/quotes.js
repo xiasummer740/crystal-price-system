@@ -9,7 +9,7 @@ import express from 'express'
 import fs from 'fs'
 import os from 'os'
 import path from 'path'
-import { queryAll, queryOne } from '../db.js'
+import { queryAll, queryOne, execute, saveNow } from '../db.js'
 import * as A from '../utils/customerArchive.js'
 import { buildQuoteDocx } from '../utils/quoteDoc.js'
 import { docxToPdf } from '../utils/docxToPdf.js'
@@ -40,6 +40,22 @@ function readProfile(customer) {
     try { prof = row.order_profile ? JSON.parse(row.order_profile) : {} } catch {}
     return { ...prof, shortName: row.short_name || prof.shortName || '' }
   } catch { return {} }
+}
+
+
+/** 记住该客户上一单的 TO/ATTN/TEL/简称，下次自动带出（存在 customers.order_profile.quote） */
+function saveQuoteDefaults(customer, data) {
+  try {
+    const row = queryOne('SELECT order_profile FROM customers WHERE name = ?', [customer])
+    if (!row) return
+    let prof = {}
+    try { prof = row.order_profile ? JSON.parse(row.order_profile) : {} } catch {}
+    prof.quote = { ...(prof.quote || {}), ...data }
+    execute('UPDATE customers SET order_profile = ? WHERE name = ?', [JSON.stringify(prof), customer])
+    saveNow()
+  } catch (e) {
+    console.warn('[quotes] 保存默认失败:', e.message)
+  }
 }
 
 /** 与订单模块同一套客户资料预填：地图客户 + 首要联系人 + 默认地址 */
@@ -145,14 +161,21 @@ router.get('/options', (req, res) => {
   try {
     const customer = String(req.query.customer || '').trim()
     const prof = customer ? readProfile(customer) : {}
-    const pre = customer ? (prof.buyer ? { ...buyerPrefill(customer), ...prof.buyer, name: customer } : buyerPrefill(customer)) : null
+    const qd = prof.quote || {}
+    let pre = customer ? (prof.buyer ? { ...buyerPrefill(customer), ...prof.buyer, name: customer } : buyerPrefill(customer)) : null
+    if (pre && qd) {
+      // 上一单存过的 TO/ATTN/TEL 优先（祥哥 2026-10-28：下次直接带出）
+      if (qd.attn) pre.contact = qd.attn
+      if (qd.tel) pre.phone = qd.tel
+    }
     res.json({
       code: 0,
       data: {
         date: todayStr(),
         buyer: pre,
+        to: qd.to || customer || '',
         materials: customer ? customerMaterials(customer) : [],
-        fileShort: customer ? (prof.fileShort || chineseShort(customer) || prof.shortName) : '',
+        fileShort: customer ? (qd.fileShort || prof.fileShort || chineseShort(customer) || prof.shortName) : '',
         fm: FM_NAME,
         recent: customer ? listQuotes(customer).slice(0, 10) : []
       }
@@ -211,6 +234,10 @@ router.post('/generate', async (req, res) => {
       pdfError = e.message || 'PDF 导出失败'
       console.warn('[quotes] PDF 导出失败:', pdfError)
     }
+
+    saveQuoteDefaults(q.customer, {
+      to: q.to, attn: q.attn, tel: q.tel, fileShort: short
+    })
 
     res.json({
       code: 0,
