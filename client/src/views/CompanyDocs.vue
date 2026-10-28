@@ -104,6 +104,8 @@
             <div class="doc-ops">
               <button class="op" title="预览" @click="preview(d)">👁</button>
               <a class="op" :href="d.url" :download="d.file_name" title="下载">⬇</a>
+              <button v-if="canCopyFile" class="op" title="复制文件（可直接粘到微信）" @click="copyDoc(d)">📋</button>
+              <button class="op" title="在资源管理器里定位" @click="locateDoc(d)">📁</button>
               <button class="op danger" title="删除" @click="removeDoc(d)">🗑</button>
             </div>
           </div>
@@ -165,6 +167,8 @@
               <div class="doc-ops">
                 <button class="op" title="预览" @click="preview(d)">👁</button>
                 <a class="op" :href="d.url" :download="d.file_name" title="下载">⬇</a>
+                <button v-if="canCopyFile" class="op" title="复制文件（可直接粘到微信）" @click="copyDoc(d)">📋</button>
+                <button class="op" title="在资源管理器里定位" @click="locateDoc(d)">📁</button>
                 <button class="op danger" title="删除" @click="removeDoc(d)">🗑</button>
               </div>
             </div>
@@ -181,7 +185,8 @@ import { useRoute, useRouter } from 'vue-router'
 import { showConfirmDialog, showNotify, showSuccessToast } from 'vant'
 import {
   fetchCompanyDocs, fetchCompanyDocsSummary, deleteCompanyDoc, uploadCompanyDocs,
-  fetchCompanyProfiles, saveCompanyProfile, deleteCompanyProfile, fetchMaterialCustomers
+  fetchCompanyProfiles, saveCompanyProfile, deleteCompanyProfile, fetchMaterialCustomers,
+  copyCompanyDoc, openCompanyDoc
 } from '../utils/api.js'
 
 const route = useRoute()
@@ -353,6 +358,20 @@ function pickSelfFiles(company) {
 }
 
 function preview(d) { previewDoc.value = d; showPreview.value = true }
+
+// 复制文件到系统剪贴板（桌面版/本机浏览器才显示按钮）
+const canCopyFile = !!window.electronAPI || ['localhost', '127.0.0.1'].includes(location.hostname)
+async function copyDoc(d) {
+  try {
+    await copyCompanyDoc(d.id)
+    showSuccessToast('已复制「' + (d.file_name || d.title) + '」，可粘贴到微信')
+  } catch (e) { showNotify({ type: 'danger', message: '复制失败：' + (e.message || '未知错误') }) }
+}
+async function locateDoc(d) {
+  try {
+    await openCompanyDoc(d.id)
+  } catch (e) { showNotify({ type: 'danger', message: '打开位置失败：' + (e.message || '未知错误') }) }
+}
 
 async function removeDoc(d) {
   try {

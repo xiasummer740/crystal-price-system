@@ -509,6 +509,14 @@ export function fetchCompanyDocsSummary() {
 export function deleteCompanyDoc(id) {
   return http.delete(`/company-docs/docs/${id}`)
 }
+/** 把资料文件复制到系统剪贴板（粘到微信） */
+export function copyCompanyDoc(id) {
+  return http.post('/company-docs/copy', { id })
+}
+/** 在资源管理器里定位资料文件 */
+export function openCompanyDoc(id) {
+  return http.post('/company-docs/open', { id })
+}
 /** 上传（可多选）。onProgress 用于显示进度条 */
 export function uploadCompanyDocs({ ownerType, ownerName, category, files, onProgress }) {
   const fd = new FormData()

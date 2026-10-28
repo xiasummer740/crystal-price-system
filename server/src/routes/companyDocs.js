@@ -28,6 +28,8 @@ import fs from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import { queryAll, queryOne, execute, saveNow } from '../db.js'
+import { copyFileToClipboard } from '../utils/clipboardFile.js'
+import { execFile } from 'child_process'
 
 const router = Router()
 
@@ -208,6 +210,34 @@ router.delete('/docs/:id', (req, res) => {
   // 文件删不掉（被占用/已手工删）不算失败：库里已经没有它了，界面不会再显示
   try { fs.unlinkSync(absOf(row.file_path)) } catch (e) { console.warn('[company-docs] 文件删除失败（不影响列表）:', e.message) }
   res.json({ code: 0, msg: '已删除' })
+})
+
+// ===== 复制文件到系统剪贴板（粘到微信就是文件）=====
+router.post('/copy', async (req, res) => {
+  try {
+    const row = queryOne('SELECT * FROM company_docs WHERE id = ?', [Number(req.body?.id)])
+    if (!row) return res.status(404).json({ code: 1, msg: '资料不存在' })
+    const abs = absOf(row.file_path)
+    if (!fs.existsSync(abs)) return res.status(404).json({ code: 1, msg: '文件不存在（可能被手工删了）' })
+    await copyFileToClipboard(abs)
+    res.json({ code: 0, data: { file_name: row.file_name } })
+  } catch (e) {
+    res.status(500).json({ code: 1, msg: '复制失败: ' + (e.message || '未知错误') })
+  }
+})
+
+// ===== 在资源管理器里定位文件 =====
+router.post('/open', (req, res) => {
+  try {
+    const row = queryOne('SELECT * FROM company_docs WHERE id = ?', [Number(req.body?.id)])
+    if (!row) return res.status(404).json({ code: 1, msg: '资料不存在' })
+    const abs = absOf(row.file_path)
+    if (!fs.existsSync(abs)) return res.status(404).json({ code: 1, msg: '文件不存在' })
+    if (process.platform === 'win32') execFile('explorer.exe', [`/select,${abs}`], () => {})
+    res.json({ code: 0 })
+  } catch (e) {
+    res.status(500).json({ code: 1, msg: '打开失败: ' + (e.message || '未知错误') })
+  }
 })
 
 // ===== 汇总：自己公司主体（含各自资料数）+ 有哪些客户存过资料 =====

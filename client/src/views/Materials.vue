@@ -118,6 +118,15 @@
             <input v-model="dateEnd" type="date" class="date-input" @change="onSearch" />
           </div>
           <button v-if="hasFilters" class="clear-filter-btn" @click="clearFilters" title="清除所有筛选">✕ 清除</button>
+          <button class="filter-btn" :class="{ active: multiMode }" @click="toggleMultiSelect" title="勾选多行（可不相邻），一次复制">☑ 多选</button>
+          <label class="copy-opt" title="复制的文本里带上「客户编码」">
+            <input type="checkbox" v-model="copyWithCode" @change="saveCopyOpt" /> 带客户编码
+          </label>
+          <template v-if="selectedIds.length">
+            <span class="sel-count">已选 {{ selectedIds.length }}</span>
+            <button class="filter-btn active" @click="copySelected" title="复制已勾选物料的料号 + 报价">📋 复制已选</button>
+            <button class="filter-btn" @click="clearSelection" title="取消勾选">清空</button>
+          </template>
           <div class="filter-btn" @click="showColSettings = true" title="设置每列文字的对齐方式">⚙ 列设置</div>
         </div>
 
@@ -140,7 +149,10 @@
                 <td colspan="12" class="empty-row">暂无物料记录，点击「＋ 新增」添加</td>
               </tr>
               <tr v-for="item in list" :key="item.id" class="mat-row" :style="{ background: statusRowBg(item.status) }">
-                <td class="cell-copy" :style="{ width: colWidths.date + 'px', textAlign: colAligns.date }" @click="copyText(item.date)">{{ (item.date || '').slice(0, 10) }}</td>
+                <td class="cell-copy date-cell" :style="{ width: colWidths.date + 'px', textAlign: colAligns.date }" :title="item.date" @click="copyText(item.date)">
+                  <input v-if="multiMode" type="checkbox" class="row-check" :checked="selectedIds.includes(item.id)" @click.stop="toggleSelect(item.id)" title="勾选后可批量复制" />
+                  {{ (item.date || '').slice(0, 10) }}
+                </td>
                 <td class="cell-copy" :style="{ width: colWidths.customer_code + 'px', textAlign: colAligns.customer_code }" @click="copyText(item.customer_code)">{{ item.customer_code }}</td>
                 <td class="cell-copy" :style="{ width: colWidths.jkx_code + 'px', textAlign: colAligns.jkx_code }" @click="copyText(item.jkx_code)">{{ item.jkx_code }}</td>
                 <td class="cell-copy price-cell" :style="{ width: colWidths.price + 'px', textAlign: colAligns.price }" @click="copyText(item.price)">
@@ -719,13 +731,54 @@ function copyText(text) {
 
 // 一键复制「料号 + 报价」：SJK-3N32768K4415GRC9  1.3含税
 // 料号优先晶科鑫料号，没有就用物料编码；中间固定两个空格（祥哥要求，粘到微信/Excel 都好看）
-function copyCodePrice(item) {
+// 2026-10-28：可选带上「客户编码」；支持勾选多行（可不相邻）一次复制
+const copyWithCode = ref(localStorage.getItem('mat_copy_with_code') === '1')
+const selectedIds = ref([])
+// 默认不显示勾选框（避免把日期挤窄）；点「☑ 多选」才进入批量模式
+const multiMode = ref(false)
+function toggleMultiSelect() {
+  multiMode.value = !multiMode.value
+  if (!multiMode.value) selectedIds.value = []
+}
+function saveCopyOpt() {
+  localStorage.setItem('mat_copy_with_code', copyWithCode.value ? '1' : '0')
+}
+function toggleSelect(id) {
+  const i = selectedIds.value.indexOf(id)
+  if (i >= 0) selectedIds.value.splice(i, 1)
+  else selectedIds.value.push(id)
+}
+function clearSelection() { selectedIds.value = [] }
+
+/** 单条格式：客户编码（可选）  晶科鑫料号  报价，两空格分隔 */
+function pairText(item) {
+  const parts = []
+  if (copyWithCode.value) {
+    const c = String(item?.customer_code || '').trim()
+    if (c) parts.push(c)
+  }
   const code = String(item?.jkx_code || item?.material_code || '').trim()
+  if (code) parts.push(code)
   const price = String(item?.price || '').trim()
-  if (!code && !price) return
-  const text = [code, price].filter(Boolean).join('  ')
+  if (price) parts.push(price)
+  return parts.join('  ')
+}
+
+function copyCodePrice(item) {
+  const text = pairText(item)
+  if (!text) return
   navigator.clipboard?.writeText(text).then(() => {
     showToast('已复制：' + text)
+  }).catch(() => {})
+}
+
+/** 复制所有勾选行，一行一条 */
+function copySelected() {
+  const rows = list.value.filter(it => selectedIds.value.includes(it.id))
+  const text = rows.map(pairText).filter(Boolean).join('\n')
+  if (!text) return
+  navigator.clipboard?.writeText(text).then(() => {
+    showToast('已复制 ' + rows.length + ' 条')
   }).catch(() => {})
 }
 // ===== 富文本渲染（**文字** → 加粗+高亮色） =====
@@ -1377,7 +1430,13 @@ onUnmounted(() => {
 .gc-name { font-size: 14px; font-weight: 600; color: #323233; margin-bottom: 4px; }
 .gc-count { font-size: 11px; color: #999; }
 .filter-btn { padding: 4px 10px; border-radius: 6px; border: 1px solid #e0e0e0; font-size: 12px; color: #555; background: #fff; cursor: pointer; white-space: nowrap; user-select: none; transition: all .15s; height: 38px; display: flex; align-items: center; }
-.filter-btn:hover { border-color: var(--color-primary); color: var(--color-primary); }
+/* 多选复制 / 带客户编码 */
+.copy-opt { display: flex; align-items: center; gap: 4px; font-size: 12px; color: #555; white-space: nowrap; user-select: none; height: 38px; }
+.copy-opt input { cursor: pointer; }
+.copy-opt input:checked + span { color: var(--color-primary); }
+.sel-count { font-size: 12px; color: var(--color-primary); font-weight: 600; white-space: nowrap; }
+.row-check { margin-right: 4px; cursor: pointer; vertical-align: middle; }
+.date-cell { white-space: nowrap; }.filter-btn:hover { border-color: var(--color-primary); color: var(--color-primary); }
 .filter-btn.active { background: rgba(var(--color-primary-rgb),.08); border-color: var(--color-primary); color: var(--color-primary); }
 
 /* 搜索栏 */
