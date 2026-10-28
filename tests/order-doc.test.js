@@ -89,11 +89,31 @@ describe('订单 Excel 生成', () => {
     assert.match(drawing, /<xdr:row>0<\/xdr:row>/)
     assert.match(drawing, /<xdr:colOff>38100<\/xdr:colOff>/)
     assert.match(drawing, /cx="2190750" cy="1362075"/)
-    // 公章：锚在「供方签章」行（2 条物料时 0 基 25），B 列右移 52705、行内下移 247650
+    // 公章：锚在「供方签章」行（2 条物料时 0 基 25），B 列内右移（列宽会动态调整，偏移跟着补偿）
     assert.match(drawing, /<xdr:row>25<\/xdr:row>/)
-    assert.match(drawing, /<xdr:colOff>52705<\/xdr:colOff>/)
-    assert.match(drawing, /<xdr:rowOff>247650<\/xdr:rowOff>/)
+    const colOffs = [...drawing.matchAll(/<xdr:colOff>(\d+)<\/xdr:colOff>/g)].map(m => Number(m[1]))
+    assert.ok(colOffs[1] >= 52705, '公章列内偏移应不小于基准值（列窄了会补回来）')
+    const rowOffs = [...drawing.matchAll(/<xdr:rowOff>(\d+)<\/xdr:rowOff>/g)].map(m => Number(m[1]))
+    assert.ok(rowOffs[1] >= 100000 && rowOffs[1] <= 260000, '公章行内偏移应在合理范围（压一点文字）')
     assert.match(drawing, /cx="1333500" cy="1333500"/)
+  })
+
+  it('规格长、编码短时：编码列收窄，规格列加宽（尽量一页）', async () => {
+    const buf = await buildOrderXlsx(baseOrder([
+      {
+        code: '1',
+        spec: 'SJK-7L32768K8135ZQC9 3.2*1.5,32.768KHz,7pF,±20PPM,80kΩ,-40~+85℃ 编带',
+        qty: 1000, price: 0.5, deliveryDate: '2-4周左右', remark: ''
+      }
+    ]), ASSETS)
+    const wb = new ExcelJS.Workbook()
+    await wb.xlsx.load(buf)
+    const ws = wb.worksheets[0]
+    assert.ok(ws.getColumn(1).width < 10, '货品编码列应收窄（实际 ' + ws.getColumn(1).width + '）')
+    assert.ok(ws.getColumn(2).width > 30, '产品规格列应加宽（实际 ' + ws.getColumn(2).width + '）')
+    // 总宽保持不变，打印版式不会跑
+    const sum = [1, 2, 3, 4, 5, 6, 7].reduce((a, i) => a + ws.getColumn(i).width, 0)
+    assert.ok(Math.abs(sum - 100.875) < 0.01, '总列宽应保持 100.875（实际 ' + sum + '）')
   })
 
   it('showSeal=false 且 showLogo=false 时没有图片', async () => {

@@ -228,8 +228,14 @@
                 <input v-model="item.price" type="number" min="0" step="0.0001" placeholder="0.82" />
               </label>
               <label class="field">
-                <span>交货时间（可留空 / 2周 / 2-3周）</span>
-                <input v-model="item.deliveryDate" placeholder="2026/10/29 或 2周 / 2-3周，可留空" />
+                <span>交货时间（默认当天，可点选或手改）</span>
+                <div class="dt-wrap">
+                  <input v-model="item.deliveryDate" placeholder="2026/10/28 或 一周左右" />
+                  <button type="button" class="dt-btn" @click.stop="toggleDelivery(idx)" title="快捷选项">▾</button>
+                  <div v-if="deliveryMenu === idx" class="dt-menu" @click.stop>
+                    <button v-for="d in deliveryPresets" :key="d" type="button" @click="pickDelivery(item, d)">{{ d }}</button>
+                  </div>
+                </div>
               </label>
               <label class="field span-2">
                 <span>备注</span>
@@ -451,6 +457,16 @@ async function copyFile(name) {
 }
 // 浏览器 Clipboard 不支持文件，走服务端 PowerShell；手机浏览器没法复制电脑上的文件
 const canCopyFile = isElectron || ['localhost', '127.0.0.1'].includes(location.hostname)
+
+// 交货时间快捷选项（祥哥 2026-10-28）：默认当天日期，点 ▾ 可选，也可直接手改
+const deliveryPresets = ['一周左右', '2-4周左右', '4-6周左右', '6-8周左右']
+const deliveryMenu = ref(-1)
+function toggleDelivery(idx) { deliveryMenu.value = deliveryMenu.value === idx ? -1 : idx }
+function pickDelivery(item, text) {
+  item.deliveryDate = text
+  deliveryMenu.value = -1
+}
+function closeDeliveryMenu() { deliveryMenu.value = -1 }
 
 /** 删除一份订单：确认后把 xlsx + pdf 一起删（生错了的订单用这个清掉） */
 async function removeOrder(o) {
@@ -776,6 +792,7 @@ function goBack() {
 
 onMounted(async () => {
   window.addEventListener('keydown', onPreviewKeydown)
+  window.addEventListener('click', closeDeliveryMenu)
   try {
     const r = await fetchAllCustomerNames()
     customers.value = r.data || []
@@ -787,6 +804,7 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', onPreviewKeydown)
+  window.removeEventListener('click', closeDeliveryMenu)
   closePreview()
 })
 </script>
@@ -813,6 +831,14 @@ onBeforeUnmount(() => {
 .span-2 { grid-column: span 2; }
 .field { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: #667085; min-width: 0; }
 .field input, .field textarea { width: 100%; min-width: 0; border: 1px solid #d8dde5; border-radius: 6px; padding: 8px 10px; font-size: 13px; color: #1f2937; background: #fff; outline: none; font-family: inherit; resize: vertical; }
+/* 交货时间：输入框 + 快捷选项下拉 */
+.dt-wrap { position: relative; display: flex; }
+.dt-wrap input { padding-right: 30px; }
+.dt-btn { position: absolute; right: 1px; top: 1px; bottom: 1px; width: 28px; border: none; background: transparent; color: #667085; cursor: pointer; font-size: 12px; }
+.dt-btn:hover { color: var(--color-primary); }
+.dt-menu { position: absolute; left: 0; right: 0; top: calc(100% + 4px); background: #fff; border: 1px solid #e4e7ec; border-radius: 7px; box-shadow: 0 8px 24px rgba(16,24,40,.14); z-index: 20; overflow: hidden; }
+.dt-menu button { display: block; width: 100%; text-align: left; border: none; background: #fff; padding: 8px 12px; font-size: 13px; color: #344054; cursor: pointer; }
+.dt-menu button:hover { background: #f2f7ff; color: var(--color-primary); }
 .field input:focus, .field textarea:focus { border-color: var(--color-primary); box-shadow: 0 0 0 2px rgba(0, 135, 113, .1); }
 .hint { font-size: 12px; color: #8c98a8; line-height: 1.6; margin: 0; }
 

@@ -24,6 +24,43 @@ const BORDER_ALL = { top: THIN, left: THIN, bottom: THIN, right: THIN }
 // Excel 的列宽 → 点数是固定 6pt/字符（96dpi 下 8px），与「常规」字体无关，所以照抄样张即可。
 const COL_WIDTHS = [14.25, 26.375, 10.5, 12.375, 15.5, 11.625, 10.25]
 
+/**
+ * 按本单内容动态分配列宽（祥哥 2026-10-28）：
+ * 产品规格长、货品编码/单价/交货/备注短时，把省下来的宽度都给规格列，
+ * 让规格少换几行，订单尽量保持一页。总宽不变，打印版式不动。
+ */
+function computeColWidths(items) {
+  const total = COL_WIDTHS.reduce((a, b) => a + b, 0)
+  const list = items || []
+  const maxLen = (f) => list.reduce((m, it) => Math.max(m, String(it?.[f] ?? '').length), 0)
+  const qtyLen = list.reduce((m, it) => Math.max(m, (Number(it?.qty) || 0).toLocaleString('en-US').length), 1)
+
+  const out = COL_WIDTHS.slice()
+  out[0] = Math.min(COL_WIDTHS[0], Math.max(9.5, maxLen('code') + 2.5))
+  out[2] = Math.min(COL_WIDTHS[2], Math.max(9.5, qtyLen + 2.5))
+  out[3] = Math.min(COL_WIDTHS[3], Math.max(7, maxLen('price') + 2.5))
+  out[5] = Math.min(COL_WIDTHS[5], Math.max(10, maxLen('deliveryDate') * 1.9 + 2))
+  out[6] = Math.min(COL_WIDTHS[6], Math.max(7, maxLen('remark') * 1.9 + 2))
+
+  // 规格列吃掉剩下的宽度；封顶 46.25，免得把表撑得比例失调
+  out[1] = Math.max(26.375, Math.min(46.25, total - (out[0] + out[2] + out[3] + out[4] + out[5] + out[6])))
+
+  let rest = total - out.reduce((a, b) => a + b, 0)
+  for (const i of [0, 6, 5, 3, 2]) {
+    if (rest <= 0.01) break
+    const add = Math.min(rest, COL_WIDTHS[i] - out[i])
+    out[i] += add
+    rest -= add
+  }
+  for (const i of [0, 6, 5, 3, 2]) {
+    if (rest >= -0.01) break
+    const cut = Math.min(-rest, Math.max(0, out[i] - 6))
+    out[i] -= cut
+    rest += cut
+  }
+  return out
+}
+
 // 公章显示尺寸：140×140 px（祥哥在示例文件里用的就是这么大）
 const SEAL_W = 140
 const SEAL_H = 140
@@ -31,7 +68,7 @@ const SEAL_H = 140
 // 在示例文件里手工调好的位置：公章压在签章文字上一点（真实盖章就是这样），
 // 透明底不会把文字整段盖掉。xdr:colOff / xdr:rowOff 单位是 EMU（1px = 9525 EMU）
 const SEAL_OFF_X = 52705
-const SEAL_OFF_Y = 247650
+const SEAL_OFF_Y = 150000
 
 // 左上角 SJK logo（祥哥 2026-10-22）：251×156 等比缩到 100×62 px，
 // 放在 A1 里、右移 4px / 下移 2px —— 正好在标题「供 货 合 同」左边，不压字。
@@ -54,9 +91,9 @@ const FIXED_CLAUSES = {
 function countLines(text, widthUnits) {
   const s = String(text ?? '')
   if (!s) return 1
-  // 可用宽度按 85% 估：Excel 实际换行比「字符数」更保守（±、Ω、℃、数字都偏宽），
+  // 可用宽度按 80% 估：Excel 实际换行比「字符数」更保守（±、Ω、℃、数字都偏宽），
   // 估太满会出现「行高不够、文字被上下裁掉」——宁可多留半行
-  const usable = Math.max(4, widthUnits * 0.85)
+  const usable = Math.max(4, widthUnits * 0.8)
   let lines = 0
   for (const seg of s.split('\n')) {
     let units = 0
@@ -73,7 +110,7 @@ function countLines(text, widthUnits) {
 
 function lineHeightPx(lines, minHeight) {
   // 12pt 黑体实测行距 ~14.6pt；只留 2pt 余量（祥哥 2026-10-23：行高别再浪费，能一页就一页）
-  return Math.max(minHeight, lines * 14.6 + 2)
+  return Math.max(minHeight, lines * 14.2 + 2)
 }
 
 function makeCell(ws, r, c, value, opt = {}) {
@@ -187,6 +224,9 @@ export async function buildOrderXlsx(order, assets = {}) {
   ))
   if (!items.length) throw new Error('订单至少需要一条物料')
 
+  // 按本单内容分配列宽（规格长就把编码/单价/交货/备注压缩）
+  const widths = computeColWidths(items)
+
   const wb = new ExcelJS.Workbook()
   wb.creator = '晶振报价管理系统'
   wb.created = new Date()
@@ -211,7 +251,7 @@ export async function buildOrderXlsx(order, assets = {}) {
       }
     }
   })
-  COL_WIDTHS.forEach((w, i) => { ws.getColumn(i + 1).width = w })
+  widths.forEach((w, i) => { ws.getColumn(i + 1).width = w })
 
   const supplier = order.supplier || {}
   const buyer = order.buyer || {}
@@ -220,20 +260,20 @@ export async function buildOrderXlsx(order, assets = {}) {
 
   // ===== 标题 =====
   // 行高按 230×143 的 logo 留足（107pt），标题在同一条带子里垂直居中
-  ws.getRow(1).height = 110
+  ws.getRow(1).height = 108
   makeCell(ws, 1, 1, '供 货 合 同', { size: 36, bold: true, h: 'center' })
   merge(ws, 1, 1, 1, 7, { size: 36, bold: true, h: 'center' })
 
   // ===== 甲乙双方信息（第 3~8 行）=====
   // 2026-10-23 祥哥要求压缩行高：这些空行/单行都收到刚好放得下
-  ws.getRow(2).height = 10
-  ws.getRow(3).height = 13
-  ws.getRow(4).height = lineHeightPx(countLines(supplier.address, COL_WIDTHS[0] + COL_WIDTHS[1] + COL_WIDTHS[2]), 26)
-  ws.getRow(5).height = lineHeightPx(countLines(buyer.address, COL_WIDTHS[3] + COL_WIDTHS[4] + COL_WIDTHS[5] + COL_WIDTHS[6]), 30)
-  ws.getRow(6).height = 13
-  ws.getRow(7).height = 14
-  ws.getRow(8).height = 13
-  ws.getRow(9).height = 13
+  ws.getRow(2).height = 8
+  ws.getRow(3).height = 12
+  ws.getRow(4).height = lineHeightPx(countLines(supplier.address, widths[0] + widths[1] + widths[2]), 26)
+  ws.getRow(5).height = lineHeightPx(countLines(buyer.address, widths[3] + widths[4] + widths[5] + widths[6]), 30)
+  ws.getRow(6).height = 12
+  ws.getRow(7).height = 13
+  ws.getRow(8).height = 12
+  ws.getRow(9).height = 12
 
   makeCell(ws, 3, 1, `甲  方：${supplier.name || ''}`, { h: 'left' })
   merge(ws, 3, 1, 3, 3)
@@ -270,7 +310,7 @@ export async function buildOrderXlsx(order, assets = {}) {
   makeCell(ws, 10, 1, '一、产品规格、数量、价格、金额、交货时间', { h: 'left' })
   merge(ws, 10, 1, 10, 7)
 
-  ws.getRow(11).height = 42
+  ws.getRow(11).height = 34
   // 价格口径：含税 / 未税（祥哥 2026-10-22）——只改表头，金额仍是 数量×单价，不做换算
   const amountHead = order.priceMode === '未税' ? '金额（未税)' : '金额（含税)'
   const headers = ['货品编码', '产品规格', '数量(PCS)', '单价', amountHead, '交货时间', '备注']
@@ -287,8 +327,8 @@ export async function buildOrderXlsx(order, assets = {}) {
 
     const specText = String(it.spec || '')
     ws.getRow(r).height = lineHeightPx(Math.max(
-      countLines(specText, COL_WIDTHS[1]),
-      countLines(it.code, COL_WIDTHS[0])
+      countLines(specText, widths[1]),
+      countLines(it.code, widths[0])
     ), 30)
 
     // 货品编码：默认按行号 1、2、3…（祥哥习惯），填了自定义编码就用填的。
@@ -318,7 +358,7 @@ export async function buildOrderXlsx(order, assets = {}) {
 
   // ===== 条款（二~十）=====
   const r2 = totalRow + 1
-  const heights = [16, 16, 19.5, 16, 16, 16, 16, 16, 16, 16]
+  const heights = [15, 15, 18.5, 15, 15, 15, 15, 15, 15, 15]
   for (let i = 0; i < heights.length; i++) ws.getRow(r2 + i).height = heights[i]
 
   const clauses = [
@@ -347,7 +387,7 @@ export async function buildOrderXlsx(order, assets = {}) {
   const sigRow = blankRow + 1
   const repRow = sigRow + 1
   const dateRow = sigRow + 2
-  for (const r of [sigRow, repRow, dateRow]) ws.getRow(r).height = 45.75
+  for (const r of [sigRow, repRow, dateRow]) ws.getRow(r).height = 42
 
   makeCell(ws, sigRow, 1, `供方签章：${supplier.name || ''}`, { h: 'left' })
   makeCell(ws, sigRow, 4, '需方签章：', { h: 'left' })
@@ -371,6 +411,8 @@ export async function buildOrderXlsx(order, assets = {}) {
   // ===== 公章 =====
   if (order.showSeal !== false && seal?.buffer) {
     const imageId = wb.addImage({ buffer: seal.buffer, extension: seal.extension || 'jpeg' })
+    // 货品编码列变窄后 B 列整体左移，这里把偏移补回来，公章的绝对位置不变
+    const sealColOff = SEAL_OFF_X + Math.round((COL_WIDTHS[0] - widths[0]) * 7 * 9525)
     ws.addImage(imageId, {
       tl: {
         // ⚠️ 必须用 nativeCol/nativeRow 这一组字段：用 col/row 会把 nativeColOff 归零，
@@ -378,7 +420,7 @@ export async function buildOrderXlsx(order, assets = {}) {
         // 锚在「供方签章」行（sigRow）往下一点，公章压住一点文字（祥哥要的效果）
         nativeCol: 1,
         nativeRow: sigRow - 1,
-        nativeColOff: SEAL_OFF_X,
+        nativeColOff: sealColOff,
         nativeRowOff: SEAL_OFF_Y
       },
       ext: { width: SEAL_W, height: SEAL_H },
