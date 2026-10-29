@@ -31,6 +31,7 @@
         >
           👤 导入
         </button>
+        <router-link to="/coverage" class="hdr-btn" style="text-decoration:none" title="客户覆盖/定位率统计">📊 覆盖看板</router-link>
         <button class="hdr-btn" @click="handleExport" title="导出 Excel">
           📥 导出
         </button>
@@ -424,6 +425,7 @@
             <div class="nearby-name">{{ n.c.name }}</div>
             <div class="nearby-sub">{{ n.km.toFixed(1) }} km · {{ truncate(n.c.address || '', 26) }}</div>
           </div>
+          <button class="nearby-btn" @click="openAddToTrip(n.c)">＋行程</button>
           <button class="nearby-btn" @click="navCustomer(n.c)">🧭 导航</button>
         </div>
       </div>
@@ -1610,7 +1612,9 @@ async function saveCustomer() {
       }
     }
     showCustomerForm.value = false;
-    await loadData();
+    const q = String(route_.query?.q || '').trim();
+  if (q) searchKw.value = q;
+  await loadData();
   } catch (e) {
     showToast(e.message || "保存失败");
   } finally {
