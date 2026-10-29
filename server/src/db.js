@@ -306,6 +306,18 @@ export async function initDb() {
     )
   `)
   try { db.run('CREATE INDEX IF NOT EXISTS idx_map_customers_name ON map_customers(name)') } catch {}
+  // 客户资料最近更新时间（列表排序用）
+  try { db.run("ALTER TABLE map_customers ADD COLUMN updated_at TEXT DEFAULT ''") } catch {}
+  // 地址变更历史（谁改的、什么时候）
+  db.run(`
+    CREATE TABLE IF NOT EXISTS map_address_history (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      customer_id INTEGER NOT NULL,
+      old_address TEXT DEFAULT '',
+      new_address TEXT DEFAULT '',
+      changed_at  DATETIME DEFAULT (datetime('now','localtime'))
+    )
+  `)
 
   // 采购联系人
   db.run(`

@@ -66,6 +66,17 @@
           <span class="loc-chip" :class="{ active: locFilter === 'unlocated' }" @click="locFilter = 'unlocated'">未定位 {{ unlocatedCount }}</span>
         </div>
 
+        <!-- 排序 -->
+        <div class="sort-row">
+          <span class="sort-label">排序</span>
+          <select v-model="sortBy" class="sort-select">
+            <option value="default">按地区</option>
+            <option value="updated">最近更新</option>
+            <option value="unlocated">未定位优先</option>
+            <option value="distance">离地图中心近</option>
+          </select>
+        </div>
+
         <!-- 区域分组筛选（省→市层级） -->
         <div class="region-filter" v-if="regionByProvince.length">
           <template v-for="pg in regionByProvince" :key="pg.province">
@@ -107,8 +118,11 @@
                   <div class="cc-name">{{ c.name }}</div>
                   <span v-if="c.latitude && c.longitude" class="cc-badge">已定位</span>
                   <span v-else class="cc-badge muted">未定位</span>
+                  <span v-if="!c.address" class="cc-badge warn">缺地址</span>
+                  <span v-else-if="!/(市|区|县|镇|路|街|号)/.test(c.address)" class="cc-badge warn">地址待补全</span>
                 </div>
                 <div class="cc-addr" v-if="c.address">📍 {{ truncate(c.address, 35) }}</div>
+                <div class="cc-site" v-if="c.default_site_address">🏭 {{ c.default_site_name || '默认收货点' }}：{{ truncate(c.default_site_address, 28) }}</div>
                 <div class="cc-row2">
                   <span v-if="c.purchaser_count > 0">🧑‍💼 {{ c.purchaser_count }}联系人</span>
                   <span v-if="c.site_count > 0">📍 {{ c.site_count }}收货点</span>
@@ -470,6 +484,16 @@
           </div>
         </div>
 
+        <div v-if="addressHistory.length" class="addr-history">
+          <div class="ah-title">地址变更记录</div>
+          <div v-for="h in addressHistory.slice(0, 5)" :key="h.id" class="ah-row">
+            <span class="ah-time">{{ (h.changed_at || '').slice(0, 10) }}</span>
+            <span class="ah-text" :title="'旧：' + (h.old_address || '（空）') + ' → 新：' + h.new_address">
+              {{ truncate(h.old_address || '（空）', 16) }} → {{ truncate(h.new_address, 24) }}
+            </span>
+          </div>
+        </div>
+
         <div class="form-btns">
           <van-button
             round
@@ -699,6 +723,7 @@ import {
   getMapCustomer,
   createMapCustomer,
   updateMapCustomer,
+  fetchMapAddressHistory,
   deleteMapCustomer,
   importMapCustomersFromNotes,
   exportMapAddresses,
@@ -929,6 +954,8 @@ const regionByProvince = computed(() => {
 });
 
 const locFilter = ref('all')
+const sortBy = ref('default')
+const addressHistory = ref([])
 const locatedCount = computed(() => customers.value.filter(c => c.latitude && c.longitude).length)
 const unlocatedCount = computed(() => customers.value.length - locatedCount.value)
 
@@ -954,9 +981,42 @@ const filteredCustomers = computed(() => {
   return list;
 });
 
+function distanceKm(c) {
+  if (!c.latitude || !c.longitude || !map) return Infinity
+  try {
+    const ctr = map.getCenter()
+    const R = 6371
+    const toRad = (d) => d * Math.PI / 180
+    const dLat = toRad(c.latitude - ctr.lat)
+    const dLng = toRad(c.longitude - ctr.lng)
+    const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(ctr.lat)) * Math.cos(toRad(c.latitude)) * Math.sin(dLng / 2) ** 2
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+  } catch { return Infinity }
+}
+
+const sortedCustomers = computed(() => {
+  const list = [...filteredCustomers.value]
+  if (sortBy.value === 'updated') {
+    list.sort((a, b) => String(b.updated_at || b.created_at || '').localeCompare(String(a.updated_at || a.created_at || '')))
+  } else if (sortBy.value === 'unlocated') {
+    list.sort((a, b) => {
+      const la = a.latitude && a.longitude ? 1 : 0
+      const lb = b.latitude && b.longitude ? 1 : 0
+      if (la !== lb) return la - lb
+      return String(a.name).localeCompare(String(b.name), 'zh')
+    })
+  } else if (sortBy.value === 'distance') {
+    list.sort((a, b) => distanceKm(a) - distanceKm(b))
+  }
+  return list
+})
+
 const groupedByRegion = computed(() => {
+  if (sortBy.value !== 'default') {
+    return [{ name: '', items: sortedCustomers.value }]
+  }
   const groups = {};
-  for (const c of filteredCustomers.value) {
+  for (const c of sortedCustomers.value) {
     const region =
       c.latitude && c.longitude
         ? extractCity(c.address) || "未分组"
@@ -1432,6 +1492,7 @@ function openAddCustomer() {
   customerForm.longitude = null;
   customerForm.notes = "";
   customerContacts.value = [];
+  addressHistory.value = [];
   showCustomerForm.value = true;
 }
 
@@ -1444,6 +1505,12 @@ function editCustomer(c) {
   customerForm.longitude = c.longitude;
   customerForm.notes = c.notes || "";
   customerContacts.value = [];
+  addressHistory.value = [];
+  if (c.id) {
+    fetchMapAddressHistory(c.id)
+      .then((r) => { addressHistory.value = r.data || []; })
+      .catch(() => {});
+  }
   showCustomerForm.value = true;
   // 有地址但无坐标时自动静默定位
   if (c.address && c.address.length >= 3 && !c.latitude && !c.longitude) {
@@ -4220,4 +4287,22 @@ onUnmounted(() => {
 .leaflet-popup {
   z-index: 1001;
 }
+
+/* ===== 2026-10-29 体验优化 ===== */
+.sort-row { display: flex; align-items: center; gap: 8px; padding: 4px 10px 2px; }
+.sort-label { font-size: 12px; color: #98a2b3; }
+.sort-select { flex: 1; border: 1px solid #e4e7ec; border-radius: 6px; padding: 4px 8px; font-size: 12px; color: #344054; background: #fff; outline: none; }
+.sort-select:focus { border-color: var(--color-primary, #1677ff); }
+.cc-badge.warn { background: #fff7e6; color: #ad6800; }
+.cc-site { font-size: 11px; color: #667085; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.customer-card { border-left: 3px solid transparent; transition: background .15s, border-color .15s; }
+.customer-card:hover { background: #fafcff; }
+.customer-card.active { border-left-color: var(--color-primary, #1677ff); background: #f2f7ff; }
+.cc-actions button { font-size: 11px; }
+.addr-history { margin: 10px 0 2px; border-top: 1px dashed #eef0f3; padding-top: 8px; }
+.ah-title { font-size: 12px; color: #667085; margin-bottom: 4px; }
+.ah-row { display: flex; gap: 8px; font-size: 11px; color: #98a2b3; padding: 2px 0; }
+.ah-time { flex: 0 0 72px; }
+.ah-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
 </style>

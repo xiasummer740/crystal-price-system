@@ -217,6 +217,9 @@ export function fetchMapCustomers(params) {
 export function getMapCustomer(id) {
   return http.get(`/map/customers/${id}`)
 }
+export function fetchMapAddressHistory(id) {
+  return http.get(`/map/customers/${id}/address-history`)
+}
 export function createMapCustomer(data) {
   return http.post('/map/customers', data)
 }
