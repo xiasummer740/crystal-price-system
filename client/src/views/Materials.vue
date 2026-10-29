@@ -1137,7 +1137,6 @@ function scheduleQuoteRef(code) {
 function onCodeTyped(e) {
   scheduleQuoteRef(e?.target?.value)
 }
-watch(() => [form.value.material_code, form.value.jkx_code], scheduleQuoteRef)
 function useQuoteCost() {
   if (!quoteRef.value) return
   form.value.cost_price = String(quoteRef.value.price ?? '')
@@ -1257,6 +1256,7 @@ function onPickAltCode(alt, opt) {
   if (!String(alt.factory || '').trim() && m.factory_code) alt.factory = m.factory_code
 }
 
+watch(() => [form.value.material_code, form.value.jkx_code], scheduleQuoteRef)
 function openForm(item) {
   if (item) {
     editing.value = item.id
