@@ -33,6 +33,7 @@
         <button class="cdf-btn" @click="closeFolder">‹ 返回文件夹</button>
         <b class="cdf-cur">📁 {{ activeFolder.name }}</b>
         <span class="cdf-hint">{{ files.length }} 个文件</span>
+        <button v-if="activeFolder.id" class="cdf-btn" @click="startRename">重命名</button>
         <button v-if="activeFolder.id" class="cdf-btn danger" @click="removeFolder" :disabled="files.length > 0"
           :title="files.length ? '先删掉里面的文件' : '删除空文件夹'">删除文件夹</button>
       </div>
@@ -61,6 +62,7 @@
           <a class="cdf-op" :href="d.url" :download="d.file_name" title="下载">⬇</a>
           <button v-if="canCopy" class="cdf-op" title="复制文件（可粘到微信）" @click="copyDoc(d)">📋</button>
           <button class="cdf-op" title="在资源管理器里定位" @click="locateDoc(d)">📁</button>
+          <button class="cdf-op" title="移动到别的文件夹" @click="openMove(d)">📂</button>
           <button class="cdf-op danger" title="删除" @click="removeDoc(d)">🗑</button>
         </div>
       </div>
@@ -82,6 +84,36 @@
       </div>
     </div>
 
+    <!-- 重命名文件夹 -->
+    <div v-if="renameOpen" class="cdf-mask" @click.self="renameOpen = false">
+      <div class="cdf-modal">
+        <h4>重命名文件夹</h4>
+        <input v-model="renameValue" class="cdf-input" placeholder="20261029-ISO9001" @keyup.enter="saveRename" />
+        <div class="cdf-modal-tip">改名后文件夹里的文件会一起跟着走，不会丢</div>
+        <div class="cdf-modal-btns">
+          <button class="cdf-btn" @click="renameOpen = false">取消</button>
+          <button class="cdf-btn primary" @click="saveRename">保存</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 移动文件 -->
+    <div v-if="moveDoc" class="cdf-mask" @click.self="moveDoc = null">
+      <div class="cdf-modal">
+        <h4>移动文件</h4>
+        <div class="cdf-modal-file">{{ moveDoc.title }}</div>
+        <select v-model="moveTarget" class="cdf-input">
+          <option :value="0">未分类</option>
+          <option v-for="f in folders" :key="f.id" :value="f.id">{{ f.name }}</option>
+        </select>
+        <div class="cdf-modal-tip">只能移到同一个客户/主体下的文件夹</div>
+        <div class="cdf-modal-btns">
+          <button class="cdf-btn" @click="moveDoc = null">取消</button>
+          <button class="cdf-btn primary" @click="doMove">移动</button>
+        </div>
+      </div>
+    </div>
+
     <!-- 图片预览 -->
     <div v-if="previewUrl" class="cdf-preview" @click="previewUrl = ''">
       <img :src="previewUrl" alt="" />
@@ -94,7 +126,8 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { showConfirmDialog, showSuccessToast, showNotify } from 'vant'
 import {
   fetchDocFolders, createDocFolder, deleteDocFolder, fetchCompanyDocs,
-  uploadCompanyDocs, deleteCompanyDoc, copyCompanyDoc, openCompanyDoc, setDocExpiry
+  uploadCompanyDocs, deleteCompanyDoc, copyCompanyDoc, openCompanyDoc, setDocExpiry,
+  renameDocFolder, moveCompanyDoc
 } from '../utils/api.js'
 
 const props = defineProps({
@@ -118,6 +151,10 @@ const fileInput = ref(null)
 const expiryDoc = ref(null)
 const expiryValue = ref('')
 const previewUrl = ref('')
+const renameOpen = ref(false)
+const renameValue = ref('')
+const moveDoc = ref(null)
+const moveTarget = ref(0)
 
 const allFolders = computed(() => {
   const list = [...folders.value]
@@ -269,6 +306,46 @@ async function removeDoc(d) {
     await load()
     emit('changed')
   } catch (e) { showNotify({ type: 'danger', message: '删除失败：' + (e.message || '未知错误') }) }
+}
+
+function startRename() {
+  if (!activeFolder.value?.id) return
+  renameValue.value = activeFolder.value.name
+  renameOpen.value = true
+}
+
+async function saveRename() {
+  const name = String(renameValue.value || '').trim()
+  if (!name) return showNotify({ type: 'danger', message: '文件夹名不能为空' })
+  try {
+    const r = await renameDocFolder(activeFolder.value.id, name)
+    showSuccessToast('已改名')
+    renameOpen.value = false
+    activeFolder.value = { ...activeFolder.value, name: r.data.name }
+    await load()
+    emit('changed')
+  } catch (e) {
+    showNotify({ type: 'danger', message: e?.response?.data?.msg || ('改名失败：' + e.message) })
+  }
+}
+
+function openMove(d) {
+  moveDoc.value = d
+  moveTarget.value = 0
+}
+
+async function doMove() {
+  if (!moveDoc.value) return
+  try {
+    await moveCompanyDoc(moveDoc.value.id, moveTarget.value)
+    showSuccessToast('已移动')
+    moveDoc.value = null
+    await loadFiles()
+    await load()
+    emit('changed')
+  } catch (e) {
+    showNotify({ type: 'danger', message: e?.response?.data?.msg || ('移动失败：' + e.message) })
+  }
 }
 
 function editExpiry(d) {
