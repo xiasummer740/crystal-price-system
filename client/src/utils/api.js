@@ -527,8 +527,24 @@ export function saveCustomerProfile(payload) {
 // ===== 公司资料 / 开票资料库（祥哥 2026-10-15）=====
 // 主要存**客户发来的**开票资料（图片/PDF/Word/Excel），也存自己公司的证照（支持多家抬头）。
 // 归属与分类走 query：multer 决定目录/文件名时就要知道归属，走 body 时字段可能还没解析到。
-export function fetchCompanyDocs(ownerType, ownerName) {
-  return http.get('/company-docs/docs', { params: { owner_type: ownerType, owner_name: ownerName } })
+export function fetchCompanyDocs(ownerType, ownerName, folderId) {
+  const params = { owner_type: ownerType, owner_name: ownerName }
+  if (folderId !== undefined && folderId !== null) params.folder_id = folderId
+  return http.get('/company-docs/docs', { params })
+}
+
+// ===== 资料文件夹 + 过期时间（祥哥 2026-10-29）=====
+export function fetchDocFolders(ownerType, ownerName) {
+  return http.get('/company-docs/folders', { params: { owner_type: ownerType, owner_name: ownerName } })
+}
+export function createDocFolder(ownerType, ownerName, name) {
+  return http.post('/company-docs/folders', { owner_type: ownerType, owner_name: ownerName, name })
+}
+export function deleteDocFolder(id) {
+  return http.delete(`/company-docs/folders/${id}`)
+}
+export function setDocExpiry(id, expiresAt) {
+  return http.post(`/company-docs/docs/${id}/expiry`, { expires_at: expiresAt })
 }
 export function fetchCompanyDocsSummary() {
   return http.get('/company-docs/summary')
@@ -545,11 +561,11 @@ export function openCompanyDoc(id) {
   return http.post('/company-docs/open', { id })
 }
 /** 上传（可多选）。onProgress 用于显示进度条 */
-export function uploadCompanyDocs({ ownerType, ownerName, category, files, onProgress }) {
+export function uploadCompanyDocs({ ownerType, ownerName, category, folderId, files, onProgress }) {
   const fd = new FormData()
   for (const f of files) fd.append('files', f, f.name)
   return http.post('/company-docs/upload', fd, {
-    params: { owner_type: ownerType, owner_name: ownerName, category: category || '' },
+    params: { owner_type: ownerType, owner_name: ownerName, category: category || '', folder_id: folderId || 0 },
     headers: { 'Content-Type': 'multipart/form-data' },
     onUploadProgress: (e) => { if (onProgress && e.total) onProgress(Math.round((e.loaded / e.total) * 100)) }
   })

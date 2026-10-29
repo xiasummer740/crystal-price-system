@@ -123,11 +123,18 @@ const upload = multer({
       // ⚠️ 清洗后的名字要**同时**用于目录和入库：只清洗目录会让库里存着 `../../x` 而文件夹叫别的，
       //    之后按库里的名字去查/删就对不上了（两套规则迟早漂移）。真实客户名不受影响（中文不会被改）。
       const ownerName = safeName(String(req.query?.owner_name || '').trim())
-      const dir = ownerDir(ownerType, ownerName)
+      const folderId = Number(req.query?.folder_id) || 0
+      let sub = ''
+      if (folderId) {
+        const f = queryOne('SELECT name FROM company_doc_folders WHERE id = ? AND owner_type = ? AND owner_name = ?', [folderId, ownerType, ownerName])
+        if (f) sub = safeName(f.name)
+      }
+      const dir = path.join(ownerDir(ownerType, ownerName), sub)
       try { fs.mkdirSync(dir, { recursive: true }) } catch {}
       req._docType = ownerType
       req._docOwner = ownerName
       req._docDir = dir
+      req._docFolder = folderId
       cb(null, dir)
     },
     filename: (req, file, cb) => {
@@ -161,6 +168,8 @@ const shape = (r) => ({
   size: r.size || 0,
   url: `/api/company-docs/file/${String(r.file_path || '').split('/').map(encodeURIComponent).join('/')}`,
   note: r.note || '',
+  folder_id: r.folder_id || 0,
+  expires_at: r.expires_at || '',
   created_at: r.created_at || '',
   // is_image 只对**浏览器能直接渲染**的图片为真：HEIC/TIFF 也允许上传（iPhone 拍照/扫描件常见），
   // 但它们解不出来，界面要走「文件图标 + 用系统程序打开」，否则会显示成破图
@@ -172,11 +181,118 @@ router.get('/docs', (req, res) => {
   const ownerType = req.query.owner_type === 'self' ? 'self' : 'customer'
   const ownerName = String(req.query.owner_name || '').trim()
   if (!ownerName) return res.status(400).json({ code: 1, msg: '缺少归属名（客户名或主体名）' })
-  const rows = queryAll(
-    `SELECT * FROM company_docs WHERE owner_type = ? AND owner_name = ? ORDER BY created_at DESC, id DESC`,
-    [ownerType, ownerName]
-  )
+  let sql = `SELECT * FROM company_docs WHERE owner_type = ? AND owner_name = ?`
+  const params = [ownerType, ownerName]
+  if (req.query.folder_id !== undefined) {
+    sql += ' AND folder_id = ?'
+    params.push(Number(req.query.folder_id) || 0)
+  }
+  sql += ' ORDER BY created_at DESC, id DESC'
+  const rows = queryAll(sql, params)
   res.json({ code: 0, data: rows.map(shape), categories: DOC_CATEGORIES })
+})
+
+// ===== 资料文件夹（日期+自定义）=====
+const todayTag = () => {
+  const d = new Date()
+  const p = (n) => String(n).padStart(2, "0")
+  return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}`
+}
+
+router.get('/folders', (req, res) => {
+  try {
+    const ownerType = req.query.owner_type === 'self' ? 'self' : 'customer'
+    const ownerName = String(req.query.owner_name || '').trim()
+    if (!ownerName) return res.status(400).json({ code: 1, msg: '缺少归属名' })
+    const folders = queryAll(
+      'SELECT * FROM company_doc_folders WHERE owner_type = ? AND owner_name = ? ORDER BY name DESC',
+      [ownerType, ownerName]
+    )
+    const stats = queryAll(
+      `SELECT folder_id,
+              COUNT(*) AS total,
+              SUM(CASE WHEN expires_at <> '' AND expires_at < date('now') THEN 1 ELSE 0 END) AS expired,
+              SUM(CASE WHEN expires_at <> '' AND expires_at >= date('now') AND expires_at <= date('now','+30 day') THEN 1 ELSE 0 END) AS expiring
+         FROM company_docs WHERE owner_type = ? AND owner_name = ?
+        GROUP BY folder_id`,
+      [ownerType, ownerName]
+    )
+    const byId = new Map(stats.map(x => [Number(x.folder_id) || 0, x]))
+    const out = folders.map(f => {
+      const st = byId.get(f.id) || {}
+      return { id: f.id, name: f.name, created_at: f.created_at, total: st.total || 0, expired: st.expired || 0, expiring: st.expiring || 0 }
+    })
+    const un = byId.get(0) || {}
+    res.json({
+      code: 0,
+      data: {
+        folders: out,
+        uncategorized: { id: 0, name: '未分类', total: un.total || 0, expired: un.expired || 0, expiring: un.expiring || 0 }
+      }
+    })
+  } catch (e) {
+    res.status(500).json({ code: 1, msg: '读取文件夹失败: ' + e.message })
+  }
+})
+
+router.post('/folders', (req, res) => {
+  try {
+    const ownerType = req.body?.owner_type === 'self' ? 'self' : 'customer'
+    const ownerName = String(req.body?.owner_name || '').trim()
+    const raw = String(req.body?.name || '').trim()
+    if (!ownerName) return res.status(400).json({ code: 1, msg: '缺少归属名' })
+    const name = safeName(raw || `${todayTag()}-新文件夹`, 80)
+    if (!name) return res.status(400).json({ code: 1, msg: '文件夹名不合法' })
+    const exists = queryOne(
+      'SELECT id FROM company_doc_folders WHERE owner_type = ? AND owner_name = ? AND name = ?',
+      [ownerType, ownerName, name]
+    )
+    if (exists) return res.status(400).json({ code: 1, msg: '文件夹「' + name + '」已存在' })
+    const r = execute(
+      'INSERT INTO company_doc_folders (owner_type, owner_name, name) VALUES (?, ?, ?)',
+      [ownerType, ownerName, name]
+    )
+    saveNow()
+    try { fs.mkdirSync(path.join(ownerDir(ownerType, ownerName), name), { recursive: true }) } catch {}
+    res.json({ code: 0, data: { id: r.lastInsertRowid, name } })
+  } catch (e) {
+    res.status(500).json({ code: 1, msg: '新建文件夹失败: ' + e.message })
+  }
+})
+
+router.delete('/folders/:id', (req, res) => {
+  try {
+    const id = Number(req.params.id)
+    const f = queryOne('SELECT * FROM company_doc_folders WHERE id = ?', [id])
+    if (!f) return res.status(404).json({ code: 1, msg: '文件夹不存在' })
+    const n = queryOne('SELECT COUNT(*) AS c FROM company_docs WHERE folder_id = ?', [id])?.c || 0
+    if (n > 0) return res.status(400).json({ code: 1, msg: '文件夹里还有文件，先删文件' })
+    execute('DELETE FROM company_doc_folders WHERE id = ?', [id])
+    saveNow()
+    try {
+      const dir = path.join(ownerDir(f.owner_type, f.owner_name), f.name)
+      if (fs.existsSync(dir) && !fs.readdirSync(dir).length) fs.rmdirSync(dir)
+    } catch {}
+    res.json({ code: 0 })
+  } catch (e) {
+    res.status(500).json({ code: 1, msg: '删除文件夹失败: ' + e.message })
+  }
+})
+
+// ===== 单个文件设置过期时间（体系证书年审）=====
+router.post('/docs/:id/expiry', (req, res) => {
+  try {
+    const id = Number(req.params.id)
+    const row = queryOne('SELECT * FROM company_docs WHERE id = ?', [id])
+    if (!row) return res.status(404).json({ code: 1, msg: '资料不存在' })
+    const v = String(req.body?.expires_at || '').trim()
+    if (v && !/^\d{4}-\d{2}-\d{2}$/.test(v)) return res.status(400).json({ code: 1, msg: '日期格式应为 YYYY-MM-DD' })
+    execute('UPDATE company_docs SET expires_at = ? WHERE id = ?', [v, id])
+    saveNow()
+    res.json({ code: 0, data: { id, expires_at: v } })
+  } catch (e) {
+    res.status(500).json({ code: 1, msg: '保存过期时间失败: ' + e.message })
+  }
 })
 
 // ===== 上传（可多文件；归属与分类走 query）=====
@@ -189,10 +305,11 @@ router.post('/upload', upload.array('files', 9), (req, res) => {
     const original = fixFileName(f.originalname)   // 中文文件名还原（同上）
     const ext = extOf(original)
     const r = execute(
-      `INSERT INTO company_docs (owner_type, owner_name, category, title, file_name, file_path, ext, size, mime, note)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO company_docs (owner_type, owner_name, category, title, file_name, file_path, ext, size, mime, note, folder_id, expires_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [req._docType, req._docOwner, category, original.slice(0, 200), original.slice(0, 200),
-       relOf(f.path), ext, f.size || 0, f.mimetype || '', note]
+       relOf(f.path), ext, f.size || 0, f.mimetype || '', note,
+       Number(req.query?.folder_id) || 0, String(req.query?.expires_at || '').slice(0, 10)]
     )
     out.push(shape(queryOne('SELECT * FROM company_docs WHERE id = ?', [r.lastInsertRowid])))
   }

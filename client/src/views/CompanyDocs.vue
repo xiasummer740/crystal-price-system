@@ -78,38 +78,13 @@
       <section class="cd-main">
         <div class="main-head">
           <span class="main-title">{{ ownerName || '请选择客户' }}</span>
-          <span v-if="docs.length" class="main-count">{{ docs.length }} 份资料</span>
-          <button class="up-btn" :disabled="!ownerName" @click="pickFiles('开票资料')">＋ 上传资料</button>
         </div>
         <p class="main-tip">
-          支持 <b>图片 / PDF / OFD / Word / Excel / WPS / txt</b>（单个不超过 {{ maxSizeMb }}MB，一次最多 9 个）。
-          开票时对方发来的「开票信息.jpg」直接传这儿，以后不用翻聊天记录。<br />
-          💡 <b>可以把文件拖进来</b>，也可以 <b>Ctrl+V 直接粘贴截图</b>（微信截图后按 Ctrl+V 就行）。
+          按类目建文件夹（默认名「当天日期-自定义」，例如 20261029-ISO9001）；文件支持 <b>拖入 / Ctrl+V 粘贴 / 点击选择</b>，
+          证照和体系证书可以单独设过期时间。
         </p>
-        <div v-if="!docs.length" class="main-empty">还没有资料 —— 点右上「＋ 上传资料」</div>
-        <div v-else class="doc-grid">
-          <div v-for="d in docs" :key="d.id" class="doc-card">
-            <div class="doc-thumb" @click="preview(d)">
-              <img v-if="d.is_image" :src="d.url" :alt="d.title" loading="lazy" />
-              <span v-else class="doc-icon">{{ fileIcon(d.ext) }}</span>
-            </div>
-            <div class="doc-meta">
-              <div class="doc-title" :title="d.file_name">{{ d.title || d.file_name }}</div>
-              <div class="doc-sub">
-                <span v-if="d.category" class="doc-cat">{{ d.category }}</span>
-                <span>{{ fmtSize(d.size) }}</span>
-                <span class="doc-time">{{ (d.created_at || '').slice(0, 10) }}</span>
-              </div>
-            </div>
-            <div class="doc-ops">
-              <button class="op" title="预览" @click="preview(d)">👁</button>
-              <a class="op" :href="d.url" :download="d.file_name" title="下载">⬇</a>
-              <button v-if="canCopyFile" class="op" title="复制文件（可直接粘到微信）" @click="copyDoc(d)">📋</button>
-              <button class="op" title="在资源管理器里定位" @click="locateDoc(d)">📁</button>
-              <button class="op danger" title="删除" @click="removeDoc(d)">🗑</button>
-            </div>
-          </div>
-        </div>
+        <CompanyDocFolders v-if="ownerName" owner-type="customer" :owner-name="ownerName" :can-copy="canCopyFile" @changed="loadSummary" />
+        <div v-else class="main-empty">请先在左边选择客户</div>
       </section>
     </div>
 
@@ -142,37 +117,9 @@
             <span v-if="!c.tax_no && !c.address && !c.phone && !c.bank && !c.account" class="comp-hint">还没填开票资料，点 ✎ 填一下</span>
           </div>
           <div class="comp-docs">
-            <!-- 分类在**上传时**选：开票资料/营业执照/开户许可证…（默认营业执照，自己公司最常传这个） -->
-            <select v-model="uploadCategory[c.id]" class="cat-select">
-              <option v-for="cat in categories" :key="cat" :value="cat">{{ cat }}</option>
-            </select>
-            <button class="mini-up" @click="pickSelfFiles(c)">＋ 上传资料</button>
             <button class="mini-up" @click="copyCompanyInfo(c)">📋 复制开票资料</button>
           </div>
-          <!-- 本主体的资料（按主体分开存，多抬头不会串） -->
-          <div v-if="(selfDocsMap[c.id] || []).length" class="doc-grid small">
-            <div v-for="d in selfDocsMap[c.id]" :key="d.id" class="doc-card">
-              <div class="doc-thumb" @click="preview(d)">
-                <img v-if="d.is_image" :src="d.url" :alt="d.title" loading="lazy" />
-                <span v-else class="doc-icon">{{ fileIcon(d.ext) }}</span>
-              </div>
-              <div class="doc-meta">
-                <div class="doc-title" :title="d.file_name">{{ d.title || d.file_name }}</div>
-                <div class="doc-sub">
-                  <span v-if="d.category" class="doc-cat">{{ d.category }}</span>
-                  <span>{{ fmtSize(d.size) }}</span>
-                  <span class="doc-time">{{ (d.created_at || '').slice(0, 10) }}</span>
-                </div>
-              </div>
-              <div class="doc-ops">
-                <button class="op" title="预览" @click="preview(d)">👁</button>
-                <a class="op" :href="d.url" :download="d.file_name" title="下载">⬇</a>
-                <button v-if="canCopyFile" class="op" title="复制文件（可直接粘到微信）" @click="copyDoc(d)">📋</button>
-                <button class="op" title="在资源管理器里定位" @click="locateDoc(d)">📁</button>
-                <button class="op danger" title="删除" @click="removeDoc(d)">🗑</button>
-              </div>
-            </div>
-          </div>
+          <CompanyDocFolders owner-type="self" :owner-name="c.name" :can-copy="canCopyFile" @changed="loadSummary" />
         </div>
       </section>
     </div>
@@ -183,6 +130,7 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { showConfirmDialog, showNotify, showSuccessToast } from 'vant'
+import CompanyDocFolders from '../components/CompanyDocFolders.vue'
 import {
   fetchCompanyDocs, fetchCompanyDocsSummary, deleteCompanyDoc, uploadCompanyDocs,
   fetchCompanyProfiles, saveCompanyProfile, deleteCompanyProfile, fetchMaterialCustomers,
@@ -501,6 +449,8 @@ onUnmounted(() => { document.removeEventListener('paste', onPaste) })
 .comp-ops { margin-left: auto; display: flex; gap: 4px; }
 .comp-fields { margin-top: 6px; display: flex; flex-wrap: wrap; gap: 10px; font-size: 12px; color: #646566; }
 .comp-hint { color: #c8c9cc; }
+.comp-card :deep(.cdf) { margin-top: 6px; }
+.comp-docs { margin-bottom: 4px; }
 .comp-docs { margin-top: 8px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .cat-select { height: 24px; font-size: 12px; border: 1px solid #dcdee0; border-radius: 6px; padding: 0 4px; color: #323233; }
 .mini-up { height: 24px; padding: 0 10px; font-size: 12px; border: 1px dashed #b8d4ff; background: #fff; color: #1677ff; border-radius: 6px; cursor: pointer; }
