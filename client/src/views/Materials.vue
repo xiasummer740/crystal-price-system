@@ -15,6 +15,8 @@
           <button v-if="isElectron" class="action-btn" :disabled="!selectedCustomer" @click="openCustomerDir"
             title="在资源管理器里打开该客户的资料文件夹（规格书 / 物料图片 / 记事）">📁 客户目录</button>
           <!-- 客户文件柜：按日期+料号建文件夹，上传/拖入/粘贴文件（祥哥 2026-10-26） -->
+          <button class="action-btn" :disabled="!selectedCustomer || syncingCost" @click="syncCost"
+            title="把空着的成本价按同料号最近一次记录补上（不覆盖已填）">💰 {{ syncingCost ? '同步中…' : '同步成本价' }}</button>
           <button class="action-btn" :disabled="!selectedCustomer" @click="showCustomerFiles = true"
             title="按客户存文件：默认用「日期+晶科鑫料号」建文件夹，支持拖入/粘贴">🗂 客户文件</button>
           <!-- 该客户的开票资料/证照（祥哥 2026-10-15）：开票时通常就在这个客户的物料页上，给个直达入口 -->
@@ -406,7 +408,7 @@
 import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { showToast, showConfirmDialog } from 'vant'
-import { fetchMaterials, createMaterial, updateMaterial, deleteMaterial, getMaterialStatusConfig, exportMaterials, importMaterialsExcel, searchAllCustomers, fetchMaterialCustomers, fetchMaterialFactories, uploadMaterialImages, deleteMaterialImage, copyMaterialFile, isLocalFileUrl, fileDisplayName, fetchStaleMaterials, http } from '../utils/api.js'
+import { fetchMaterials, createMaterial, updateMaterial, deleteMaterial, getMaterialStatusConfig, exportMaterials, importMaterialsExcel, searchAllCustomers, fetchMaterialCustomers, fetchMaterialFactories, uploadMaterialImages, deleteMaterialImage, copyMaterialFile, syncMaterialCost, isLocalFileUrl, fileDisplayName, fetchStaleMaterials, http } from '../utils/api.js'
 import { STATUS_FALLBACK, statusOrderFromConfig } from '../utils/materialStatus.js'
 // 图片预览右键菜单（复制图片 / 另存为）—— 客户端自带的右键菜单没有「复制图片」
 import ImageContextMenu from '../components/ImageContextMenu.vue'
@@ -967,6 +969,7 @@ function cancelForm() {
 const showListPreview = ref(false)
 // 客户文件柜（按日期+料号建文件夹）
 const showCustomerFiles = ref(false)
+const syncingCost = ref(false)
 const listPreviewImgs = ref([])
 const listPreviewIdx = ref(0)
 function rimgCount(item) { return (item.remark_images || []).length }
@@ -1096,6 +1099,28 @@ function onSearchDebounced() {
 function onSearch() {
   page.value = 1
   load()
+}
+
+// 批量同步成本价（同料号最近一次，不覆盖已填）
+async function syncCost() {
+  if (!selectedCustomer.value) return
+  try {
+    await showConfirmDialog({
+      title: '同步成本价',
+      message: '把该客户下「成本价为空」的物料，按同一料号最近一次成本价补上。\n已填的成本价不会被覆盖。',
+      confirmButtonText: '开始同步'
+    })
+  } catch { return }
+  syncingCost.value = true
+  try {
+    const r = await syncMaterialCost(selectedCustomer.value)
+    showToast(`已补 ${r.data.updated} 条（空成本共 ${r.data.blanks} 条）`)
+    await load()
+  } catch (e) {
+    showToast('同步失败: ' + (e.message || '未知错误'))
+  } finally {
+    syncingCost.value = false
+  }
 }
 
 // 加载列表
