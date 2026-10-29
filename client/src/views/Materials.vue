@@ -283,8 +283,8 @@
               <div v-if="quoteRef" class="quote-ref form-field-full">
                 <div class="qr-main">
                   <span class="qr-badge">最近报价</span>
-                  <b>{{ quoteRef.date }}</b> · 报价 <b class="qr-price">{{ quoteRef.price }}</b>
-                  <span>· {{ quoteRef.factory || '工厂未填' }}</span>
+                  <b>{{ quoteRef.date }}</b> · 报价 <b class="qr-price">{{ quotePriceText(quoteRef) }}</b>
+                  <span>&nbsp;· {{ quoteRef.factory || '工厂未填' }}</span>
                   <span>· {{ quoteRef.quoter || '报价人未填' }}</span>
                 </div>
                 <div class="qr-actions">
@@ -1137,9 +1137,16 @@ function scheduleQuoteRef(code) {
 function onCodeTyped(e) {
   scheduleQuoteRef(e?.target?.value)
 }
+function quotePriceText(q) {
+  if (!q) return ''
+  const hasTax = q.price_with_tax !== null && q.price_with_tax !== undefined && q.price_with_tax !== ''
+  const noTax = q.price_without_tax !== null && q.price_without_tax !== undefined && q.price_without_tax !== ''
+  const label = hasTax ? '含税' : (noTax ? '未税' : '')
+  return String(q.price ?? '') + label
+}
 function useQuoteCost() {
   if (!quoteRef.value) return
-  form.value.cost_price = String(quoteRef.value.price ?? '')
+  form.value.cost_price = quotePriceText(quoteRef.value)
   showToast('已带入成本价 ' + form.value.cost_price)
 }
 function focusCost() {
@@ -1148,7 +1155,7 @@ function focusCost() {
 function costTip(item) {
   const q = item.latest_quote
   if (!q) return '报价页面暂无同编码报价'
-  return `最近报价：${q.date}\n报价：${q.price}\n工厂：${q.factory || '-'}\n报价人：${q.quoter || '-'}\n（点击可复制成本价）`
+  return `最近报价：${q.date}\n报价：${quotePriceText(q)}\n工厂：${q.factory || '-'}\n报价人：${q.quoter || '-'}\n（点击可复制成本价）`
 }
 
 // 批量同步成本价（同料号最近一次，不覆盖已填）
