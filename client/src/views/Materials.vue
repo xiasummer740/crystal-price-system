@@ -164,7 +164,7 @@
                   <span>{{ item.price }}</span>
                   <button class="pair-copy" @click.stop="copyCodePrice(item)" title="复制：晶科鑫料号 + 报价（中间两个空格）">⧉</button>
                 </td>
-                <td class="cell-copy" :style="{ width: colWidths.cost_price + 'px', textAlign: colAligns.cost_price }" @click="copyText(item.cost_price)">{{ item.cost_price }}</td>
+                <td class="cell-copy cost-cell" :title="costTip(item)" :style="{ width: colWidths.cost_price + 'px', textAlign: colAligns.cost_price }" @click="copyText(item.cost_price)">{{ item.cost_price }}<span v-if="item.latest_quote" class="cost-info">ⓘ</span></td>
                 <td class="cell-copy" :style="{ width: colWidths.material_code + 'px', textAlign: colAligns.material_code }" @click="copyText(item.material_code)">{{ item.material_code }}</td>
                 <td class="cell-copy" :style="{ width: colWidths.material_name + 'px', textAlign: colAligns.material_name }" :title="materialNameTitle(item)" @click="copyText(item.material_name)">
                   <span class="rich-text" v-html="renderRich(item.material_name)"></span>
@@ -278,12 +278,26 @@
               </div>
               <div class="form-field">
                 <label>成本价</label>
-                <input v-model="form.cost_price" placeholder="成本价" class="f-input" />
+                <input ref="costInput" v-model="form.cost_price" placeholder="成本价" class="f-input" />
+              </div>
+              <div v-if="quoteRef" class="quote-ref form-field-full">
+                <div class="qr-main">
+                  <span class="qr-badge">最近报价</span>
+                  <b>{{ quoteRef.date }}</b> · 报价 <b class="qr-price">{{ quoteRef.price }}</b>
+                  <span>· {{ quoteRef.factory || '工厂未填' }}</span>
+                  <span>· {{ quoteRef.quoter || '报价人未填' }}</span>
+                </div>
+                <div class="qr-actions">
+                  <button type="button" class="qr-btn primary" @click="useQuoteCost">带入成本价</button>
+                  <button type="button" class="qr-btn" @click="quoteRef = null">不带入</button>
+                  <button type="button" class="qr-btn" @click="focusCost">自定义</button>
+                </div>
               </div>
               <div class="form-field">
                 <label>物料编码</label>
                 <SuggestField plain input-class="f-input" v-model="form.material_code" :options="matOpts.codes"
-                  :drop-width="560" placeholder="物料编码（可联想）" @select="onPickMatCode" />
+                  :drop-width="560" placeholder="物料编码（可联想）" @select="onPickMatCode"
+                  @input="onCodeTyped" @blur="onCodeTyped" />
               </div>
               <div class="form-field form-field-full">
                 <label class="f-label-with-btn">
@@ -405,10 +419,10 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { showToast, showConfirmDialog } from 'vant'
-import { fetchMaterials, createMaterial, updateMaterial, deleteMaterial, getMaterialStatusConfig, exportMaterials, importMaterialsExcel, searchAllCustomers, fetchMaterialCustomers, fetchMaterialFactories, uploadMaterialImages, deleteMaterialImage, copyMaterialFile, syncMaterialCost, isLocalFileUrl, fileDisplayName, fetchStaleMaterials, http } from '../utils/api.js'
+import { fetchMaterials, createMaterial, updateMaterial, deleteMaterial, getMaterialStatusConfig, exportMaterials, importMaterialsExcel, searchAllCustomers, fetchMaterialCustomers, fetchMaterialFactories, uploadMaterialImages, deleteMaterialImage, copyMaterialFile, syncMaterialCost, fetchLatestQuote, isLocalFileUrl, fileDisplayName, fetchStaleMaterials, http } from '../utils/api.js'
 import { STATUS_FALLBACK, statusOrderFromConfig } from '../utils/materialStatus.js'
 // 图片预览右键菜单（复制图片 / 另存为）—— 客户端自带的右键菜单没有「复制图片」
 import ImageContextMenu from '../components/ImageContextMenu.vue'
@@ -970,6 +984,9 @@ const showListPreview = ref(false)
 // 客户文件柜（按日期+料号建文件夹）
 const showCustomerFiles = ref(false)
 const syncingCost = ref(false)
+const quoteRef = ref(null)
+const costInput = ref(null)
+let quoteTimer = null
 const listPreviewImgs = ref([])
 const listPreviewIdx = ref(0)
 function rimgCount(item) { return (item.remark_images || []).length }
@@ -1099,6 +1116,40 @@ function onSearchDebounced() {
 function onSearch() {
   page.value = 1
   load()
+}
+
+// 报价页面参考：按物料编码取最近一条报价
+async function loadQuoteRef(code) {
+  if (!code) { quoteRef.value = null; return }
+  try {
+    const r = await fetchLatestQuote(code)
+    quoteRef.value = r.data || null
+  } catch { quoteRef.value = null }
+}
+function scheduleQuoteRef(code) {
+  clearTimeout(quoteTimer)
+  quoteTimer = setTimeout(() => {
+    if (!showForm.value) return
+    const c = String(code ?? form.value.material_code ?? form.value.jkx_code ?? '').trim()
+    loadQuoteRef(c)
+  }, 300)
+}
+function onCodeTyped(e) {
+  scheduleQuoteRef(e?.target?.value)
+}
+watch(() => [form.value.material_code, form.value.jkx_code], scheduleQuoteRef)
+function useQuoteCost() {
+  if (!quoteRef.value) return
+  form.value.cost_price = String(quoteRef.value.price ?? '')
+  showToast('已带入成本价 ' + form.value.cost_price)
+}
+function focusCost() {
+  costInput.value?.focus()
+}
+function costTip(item) {
+  const q = item.latest_quote
+  if (!q) return '报价页面暂无同编码报价'
+  return `最近报价：${q.date}\n报价：${q.price}\n工厂：${q.factory || '-'}\n报价人：${q.quoter || '-'}\n（点击可复制成本价）`
 }
 
 // 批量同步成本价（同料号最近一次，不覆盖已填）
@@ -1231,6 +1282,9 @@ function openForm(item) {
   }
   pendingImgDeletes.value = [] // 每次开表单都清空待删，避免上次残留
   showForm.value = true
+  quoteRef.value = null
+  const qcode = String(form.value.material_code || form.value.jkx_code || '').trim()
+  if (qcode) nextTick(() => loadQuoteRef(qcode))
   loadMatSuggestions()
 }
 
@@ -1666,4 +1720,16 @@ onUnmounted(() => {
   .form-grid { grid-template-columns: 1fr; }
   .grid-list { grid-template-columns: 1fr; }
 }
+
+/* 报价参考条 */
+.quote-ref { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; background: #f6fffb; border: 1px solid #b7ebd6; border-radius: 8px; padding: 8px 10px; font-size: 12px; color: #344054; }
+.qr-main { flex: 1; min-width: 0; }
+.qr-badge { background: #d9f7ea; color: #00794f; border-radius: 10px; padding: 1px 8px; font-size: 11px; margin-right: 6px; }
+.qr-price { color: #d46b08; }
+.qr-actions { display: flex; gap: 6px; }
+.qr-btn { border: 1px solid #d0d5dd; background: #fff; border-radius: 6px; padding: 4px 9px; font-size: 12px; cursor: pointer; }
+.qr-btn.primary { background: #00794f; border-color: #00794f; color: #fff; }
+.cost-cell { cursor: pointer; }
+.cost-info { color: #98a2b3; font-size: 10px; margin-left: 3px; }
+
 </style>

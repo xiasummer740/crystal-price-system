@@ -242,6 +242,10 @@ router.get('/', (req, res) => {
 
   // 每行补上停留时长（精确/估算两种口径，见 utils/materialDwell.js 顶部注释）
   annotateDwell(rows)
+  // 每行带出最近一次报价信息（鼠标悬停成本价时显示）
+  for (const r of rows) {
+    r.latest_quote = latestQuoteFor(r.material_code) || latestQuoteFor(r.jkx_code)
+  }
 
   res.json({ code: 0, data: { list: rows, total, page: pg.page, pageSize: pg.pageSize } })
 })
@@ -481,6 +485,12 @@ router.get('/monthly', (req, res) => {
 })
 
 // 详情
+router.get('/latest-quote', (req, res) => {
+  const code = String(req.query.code || '').trim()
+  if (!code) return res.json({ code: 0, data: null })
+  res.json({ code: 0, data: latestQuoteFor(code) })
+})
+
 router.get('/:id', (req, res) => {
   const row = queryOne('SELECT * FROM customer_materials WHERE id = ? AND is_deleted = 0', [Number(req.params.id)])
   if (!row) return res.status(404).json({ code: 1, msg: '记录不存在' })
@@ -587,6 +597,33 @@ router.post('/', (req, res) => {
   logEvent(r.lastInsertRowid, 'created', { field: 'status', oldValue: '', newValue: b.status || '报价', note: '建档' })
   res.json({ code: 0, data: { id: r.lastInsertRowid } })
 })
+
+/** 报价页面：按物料编码取最近一条报价（含时间/价格/工厂/报价人） */
+function latestQuoteFor(code) {
+  if (!code) return null
+  const q = queryOne(
+    `SELECT id, created_at, material_code, material_name, material_spec,
+            price_with_tax, price_without_tax, currency, factory_code, quoter
+       FROM material_prices
+      WHERE is_deleted = 0 AND material_code = ?
+      ORDER BY created_at DESC, id DESC LIMIT 1`,
+    [String(code)]
+  )
+  if (!q) return null
+  return {
+    id: q.id,
+    date: String(q.created_at || '').slice(0, 10),
+    material_code: q.material_code,
+    material_name: q.material_name,
+    spec: q.material_spec || '',
+    price: q.price_with_tax ?? q.price_without_tax ?? '',
+    price_with_tax: q.price_with_tax,
+    price_without_tax: q.price_without_tax,
+    currency: q.currency || 'CNY',
+    factory: q.factory_code || '',
+    quoter: q.quoter || ''
+  }
+}
 
 // 批量同步成本价：只补空值，不覆盖已填（祥哥 2026-10-29）
 router.post('/sync-cost', (req, res) => {

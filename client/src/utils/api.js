@@ -106,6 +106,10 @@ export function deleteMaterialImage(url) {
 export function copyMaterialFile(url) {
   return http.post('/materials/copy-file', { url })
 }
+/** 报价页面：按物料编码取最近一条报价 */
+export function fetchLatestQuote(code) {
+  return http.get('/materials/latest-quote', { params: { code } })
+}
 /** 批量同步成本价：只补空值（按同料号最近一次成本） */
 export function syncMaterialCost(customer) {
   return http.post('/materials/sync-cost', { customer })
