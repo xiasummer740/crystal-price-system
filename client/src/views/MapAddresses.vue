@@ -479,6 +479,7 @@
         />
         <div class="coord-pick-simple">
           <button class="coord-btn" @click="startCoordPick">📍 在地图选点定位</button>
+          <button v-if="customerForm.latitude && customerForm.longitude" class="coord-btn" @click="fillAddressFromCoords(customerForm.latitude, customerForm.longitude)" title="用当前坐标反查地址">🏠 按坐标补地址</button>
         </div>
         <van-field
           v-model="customerForm.notes"
@@ -1331,6 +1332,7 @@ async function initMap() {
       if (selectedMode.value === "pick" && e.lnglat) {
         const wgs = gcj02ToWgs84(e.lnglat.lat, e.lnglat.lng);
         setFormCoords(wgs.lat, wgs.lng);
+  fillAddressFromCoords(wgs.lat, wgs.lng);
         placePickMarker(wgs.lat, wgs.lng);
       }
     });
@@ -1506,7 +1508,7 @@ function locateCustomer(c) {
           if (window._viewMarker) map.remove(window._viewMarker);
           const gj = wgs84ToGcj02(best.lat, best.lng);
           window._viewMarker = addAmapMarker(map, gj.lat, gj.lng);
-          map.setView([gj.lng, gj.lat], 15);
+          mapSetView(gj.lat, gj.lng, 15);
         }
       } catch {}
     })();
@@ -1569,6 +1571,9 @@ function editCustomer(c) {
   customerForm.notes = c.notes || "";
   customerContacts.value = [];
   addressHistory.value = [];
+  if (c.latitude && c.longitude && !String(c.address || '').trim()) {
+    fillAddressFromCoords(c.latitude, c.longitude);
+  }
   if (c.id) {
     fetchMapAddressHistory(c.id)
       .then((r) => { addressHistory.value = r.data || []; })
@@ -2146,9 +2151,11 @@ function pickSearchResult(r) {
   mapSearchKw.value = r.name || "";
   // 选点模式下：搜索结果直接替换选点标记 + 更新表单坐标
   if (selectedMode.value === 'pick' && r.lat && r.lng) {
-    setFormCoords(r.lat, r.lng);
-    placePickMarker(r.lat, r.lng);
+    const w = gcj02ToWgs84(r.lat, r.lng);
+    setFormCoords(w.lat, w.lng);
+    placePickMarker(w.lat, w.lng);
     mapSetView(r.lat, r.lng, 16);
+    fillAddressFromCoords(w.lat, w.lng);
   } else {
     placeSearchMarker(r);
   }
@@ -2254,7 +2261,7 @@ async function doSmartGeocode(name, addr, isCustomer) {
     const slng = isAmap ? fromAmap(best.lat, best.lng).lng : best.lng;
     setFormCoords(slat, slng);
     placePickMarker(slat, slng);
-    map.setView(ll(slat, slng), 16);
+    mapSetView(wgs84ToGcj02(slat, slng).lat, wgs84ToGcj02(slat, slng).lng, 16);
     showToast("已定位到：" + (best.label || query).slice(0, 30));
     return;
   }
@@ -2269,7 +2276,7 @@ async function doSmartGeocode(name, addr, isCustomer) {
       const slng = isAmap ? fromAmap(best.lat, best.lng).lng : best.lng;
       setFormCoords(slat, slng);
       placePickMarker(slat, slng);
-      map.setView(ll(slat, slng), 16);
+      mapSetView(wgs84ToGcj02(slat, slng).lat, wgs84ToGcj02(slat, slng).lng, 16);
       showToast("已定位到地址：" + (best.label || addr).slice(0, 30));
       return;
     }
@@ -2297,7 +2304,7 @@ async function doSimpleGeocode(addr) {
       const slng = isAmap ? fromAmap(best.lat, best.lng).lng : best.lng;
       setFormCoords(slat, slng);
       placePickMarker(slat, slng);
-      map.setView(ll(slat, slng), 16);
+      mapSetView(wgs84ToGcj02(slat, slng).lat, wgs84ToGcj02(slat, slng).lng, 16);
       showToast("已定位到：" + (best.label || "").slice(0, 30));
     } else {
       centerMapForPick();
@@ -2307,6 +2314,21 @@ async function doSimpleGeocode(addr) {
     centerMapForPick();
   }
 }
+async function fillAddressFromCoords(lat, lng) {
+  if (!lat || !lng) return;
+  if (String(customerForm.address || '').trim()) return;
+  try {
+    // 高德逆地理要求 GCJ02；没有 Key 走 Nominatim 时用 WGS84
+    const g = getAmapKey() ? wgs84ToGcj02(lat, lng) : { lat, lng };
+    const r = await myReverseGeocode(g.lat, g.lng);
+    const addr = r?.data?.address || '';
+    if (addr) {
+      customerForm.address = addr;
+      showToast('已按坐标带出地址');
+    }
+  } catch {}
+}
+
 function centerMapForPick() {
   if (!map) return;
   const center = map.getCenter(); // GCJ02（高德瓦片坐标）
