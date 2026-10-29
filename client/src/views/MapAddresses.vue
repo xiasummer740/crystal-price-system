@@ -59,6 +59,15 @@
           </button>
         </div>
 
+        <!-- 覆盖概览 -->
+        <div class="coverage-card">
+          <div class="cv-item"><b>{{ customers.length }}</b><span>客户</span></div>
+          <div class="cv-item"><b>{{ locatedCount }}</b><span>已定位</span></div>
+          <div class="cv-item"><b>{{ locatedRate }}%</b><span>定位率</span></div>
+          <div class="cv-item"><b>{{ monthNew }}</b><span>本月新增</span></div>
+          <div class="cv-top" v-if="topProvinces.length">覆盖：{{ topProvinces.join(' · ') }}</div>
+        </div>
+
         <!-- 定位状态筛选（全部/已定位/未定位） -->
         <div class="loc-filter">
           <span class="loc-chip" :class="{ active: locFilter === 'all' }" @click="locFilter = 'all'">全部 {{ customers.length }}</span>
@@ -132,6 +141,7 @@
                   <button v-if="c.phone" @click.stop="callCustomer(c)" title="打电话">📞 电话</button>
                   <button v-if="!c.latitude && c.address" @click.stop="locateByAddress(c)" title="按地址自动定位">📍 去定位</button>
                   <button v-if="!c.latitude && !c.address" @click.stop="editCustomer(c)" title="先补地址">📝 补地址</button>
+                  <button v-if="c.latitude && c.longitude" @click.stop="openNearby(c)" title="看 50 公里内的其他客户">📍 附近</button>
                   <button v-if="c.latitude && c.longitude" @click.stop="navCustomer(c)" title="用高德导航过去">🧭 导航</button>
                   <button v-if="c.address" @click.stop="copyAddr(c)" title="复制地址">📋 地址</button>
                 </div>
@@ -400,6 +410,21 @@
               </div>
             </div>
           </div>
+        </div>
+      </div>
+    </van-popup>
+
+    <!-- ===== 附近客户 ===== -->
+    <van-popup v-model:show="showNearby" round position="bottom" :style="{ maxHeight: '70%' }" closeable>
+      <div class="nearby-wrap">
+        <h3>附近客户 <small v-if="nearbyBase">（{{ nearbyBase.name }} 周边 50km）</small></h3>
+        <div v-if="!nearbyList.length" class="inline-empty">50 公里内没有其他已定位客户</div>
+        <div v-for="n in nearbyList" :key="n.c.id" class="nearby-row">
+          <div class="nearby-main" @click="locateCustomer(n.c); showNearby = false">
+            <div class="nearby-name">{{ n.c.name }}</div>
+            <div class="nearby-sub">{{ n.km.toFixed(1) }} km · {{ truncate(n.c.address || '', 26) }}</div>
+          </div>
+          <button class="nearby-btn" @click="navCustomer(n.c)">🧭 导航</button>
         </div>
       </div>
     </van-popup>
@@ -956,6 +981,23 @@ const regionByProvince = computed(() => {
 const locFilter = ref('all')
 const sortBy = ref('default')
 const addressHistory = ref([])
+const showNearby = ref(false)
+const nearbyBase = ref(null)
+const nearbyList = ref([])
+
+const locatedRate = computed(() => customers.value.length ? Math.round(locatedCount.value / customers.value.length * 100) : 0)
+const monthNew = computed(() => {
+  const ym = new Date().toISOString().slice(0, 7)
+  return customers.value.filter(c => String(c.created_at || '').startsWith(ym)).length
+})
+const topProvinces = computed(() => {
+  const map = {}
+  for (const c of customers.value) {
+    const p = extractProvince(c.address) || '其他'
+    map[p] = (map[p] || 0) + 1
+  }
+  return Object.entries(map).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([p, n]) => `${p} ${n}`)
+})
 const locatedCount = computed(() => customers.value.filter(c => c.latitude && c.longitude).length)
 const unlocatedCount = computed(() => customers.value.length - locatedCount.value)
 
@@ -1382,6 +1424,25 @@ function highlightMarkers() {
     const el = marker.getContent();
     if (el?.style) el.style.opacity = opacity;
   }
+}
+
+function openNearby(c) {
+  if (!c.latitude || !c.longitude) return showToast('该客户还没有坐标')
+  nearbyBase.value = c
+  const list = []
+  for (const o of customers.value) {
+    if (o.id === c.id || !o.latitude || !o.longitude) continue
+    const R = 6371
+    const toRad = (d) => d * Math.PI / 180
+    const dLat = toRad(o.latitude - c.latitude)
+    const dLng = toRad(o.longitude - c.longitude)
+    const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(c.latitude)) * Math.cos(toRad(o.latitude)) * Math.sin(dLng / 2) ** 2
+    const km = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+    if (km <= 50) list.push({ c: o, km })
+  }
+  list.sort((a, b) => a.km - b.km)
+  nearbyList.value = list.slice(0, 12)
+  showNearby.value = true
 }
 
 function callCustomer(c) {
@@ -4304,5 +4365,36 @@ onUnmounted(() => {
 .ah-row { display: flex; gap: 8px; font-size: 11px; color: #98a2b3; padding: 2px 0; }
 .ah-time { flex: 0 0 72px; }
 .ah-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+
+/* 覆盖概览 */
+.coverage-card { margin: 8px 10px 2px; padding: 8px; border-radius: 8px; background: #f7f9fc; border: 1px solid #eef2f7; }
+.cv-item { display: inline-flex; flex-direction: column; align-items: center; min-width: 56px; margin-right: 8px; }
+.cv-item b { font-size: 15px; color: #1f2937; }
+.cv-item span { font-size: 10px; color: #98a2b3; }
+.cv-top { margin-top: 4px; font-size: 11px; color: #667085; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 附近客户 */
+.nearby-wrap { padding: 16px; }
+.nearby-wrap h3 { margin: 0 0 8px; font-size: 15px; }
+.nearby-wrap h3 small { color: #98a2b3; font-size: 11px; font-weight: normal; }
+.nearby-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px dashed #eef0f3; }
+.nearby-main { flex: 1; min-width: 0; cursor: pointer; }
+.nearby-name { font-size: 13px; color: #1f2937; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nearby-sub { font-size: 11px; color: #98a2b3; margin-top: 2px; }
+.nearby-btn { border: 1px solid #d0d5dd; background: #fff; border-radius: 6px; padding: 4px 8px; font-size: 12px; cursor: pointer; }
+
+
+@media (max-width: 768px) {
+  .coverage-card { margin: 6px 8px 2px; padding: 6px; }
+  .cv-item { min-width: 48px; margin-right: 4px; }
+  .cv-item b { font-size: 13px; }
+  .cv-item span { font-size: 9px; }
+  .cv-top { font-size: 10px; }
+  .sort-row { padding: 2px 8px; }
+  .sort-select { font-size: 11px; }
+  .cc-actions button { font-size: 10px; padding: 2px 6px; }
+  .nearby-wrap { padding: 12px; }
+  .nearby-name { font-size: 12px; }
+}
 
 </style>
