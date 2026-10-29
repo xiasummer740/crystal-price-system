@@ -111,6 +111,7 @@ export function addAmapCustomerMarker(map, lat, lng, name = "", onClick) {
     zIndex: 10,
   });
   map.add(marker);
+  marker.__el = el;
   if (onClick) marker.on("click", onClick);
   return marker;
 }

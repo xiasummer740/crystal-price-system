@@ -116,6 +116,8 @@
                 </div>
                 <div class="cc-actions">
                   <button v-if="c.phone" @click.stop="callCustomer(c)" title="打电话">📞 电话</button>
+                  <button v-if="!c.latitude && c.address" @click.stop="locateByAddress(c)" title="按地址自动定位">📍 去定位</button>
+                  <button v-if="!c.latitude && !c.address" @click.stop="editCustomer(c)" title="先补地址">📝 补地址</button>
                   <button v-if="c.latitude && c.longitude" @click.stop="navCustomer(c)" title="用高德导航过去">🧭 导航</button>
                   <button v-if="c.address" @click.stop="copyAddr(c)" title="复制地址">📋 地址</button>
                 </div>
@@ -151,7 +153,7 @@
             <input
               ref="searchInputRef"
               v-model="mapSearchKw"
-              placeholder="🔍 搜索地址、地点…"
+              placeholder="🔍 在地图上搜地点（只移动地图，不改客户资料）"
               class="map-search-input"
               @input="onMapSearchInput"
               @keydown.enter="onSearchKeydown"
@@ -1333,6 +1335,23 @@ function navCustomer(c) {
   if (window.electronAPI?.openExternal) window.electronAPI.openExternal(url)
   else window.open(url, '_blank')
 }
+async function locateByAddress(c) {
+  if (!c.address) return showToast('这个客户还没填地址')
+  showToast('正在按地址定位…')
+  try {
+    const r = await myGeocode(c.address)
+    const list = r.data || []
+    if (!list.length) return showToast('没搜到地址，请把地址补全一点')
+    const best = list[0]
+    await updateMapCustomer(c.id, { latitude: best.lat, longitude: best.lng })
+    showToast('已定位：' + String(best.label || c.address).slice(0, 20))
+    await loadData()
+    setTimeout(() => locateCustomer(customers.value.find(x => x.id === c.id) || c), 300)
+  } catch (e) {
+    showToast('定位失败：' + (e.message || '未知错误'))
+  }
+}
+
 async function copyAddr(c) {
   if (!c.address) return
   try { await navigator.clipboard.writeText(c.address); showToast('地址已复制') }
@@ -1346,6 +1365,9 @@ function toggleRegion(region) {
 // ====== 客户选择 ======
 function locateCustomer(c) {
   selectedCustomer.value = c;
+  Object.entries(customerMarkers || {}).forEach(([id, m]) => {
+    try { m.__el?.classList.toggle('is-active', String(id) === String(c.id)) } catch {}
+  });
   // 在地图上定位：有坐标直接跳转，无坐标但有地址则自动搜索
   if (c.latitude && c.longitude && map) {
     // 转 GCJ02 再定位，避免 WGS84 偏移
@@ -3225,11 +3247,20 @@ onUnmounted(() => {
 .marker-pin.is-customer:hover {
   transform: scale(1.08);
 }
+.marker-pin.is-customer:hover .mn,
+.marker-pin.is-customer.is-active .mn {
+  display: inline-block;
+}
+.marker-pin.is-customer.is-active {
+  background: #e6f0ff;
+  box-shadow: 0 0 0 2px var(--color-primary, #1677ff), 0 2px 6px rgba(0,0,0,.18);
+}
 .marker-pin.is-customer .mi {
   font-size: 16px;
   line-height: 1;
 }
 .marker-pin.is-customer .mn {
+  display: none;
   font-size: 12px;
   font-weight: 500;
   color: #333;
