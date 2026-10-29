@@ -76,6 +76,34 @@
         <button class="registry-btn" title="管理客户名册：删除没人用的名字 / 把简写合并到正确全名" @click="showRegistry = true">名册管理</button>
       </div>
 
+      <!-- 收货地址（来自地图地址页，直接在此复制） -->
+      <div v-if="selectedCustomer" class="addr-strip">
+        <span class="as-label">📦 收货地址</span>
+        <template v-if="customerAddresses.length">
+          <span class="as-item" :title="customerAddresses[0].address" @click="copyText(customerAddresses[0].address)">
+            <b v-if="customerAddresses[0].is_default">默认 · </b>{{ customerAddresses[0].address }}
+          </span>
+          <span v-if="customerAddresses.length > 1" class="as-more" @click="showAddrPanel = true">+{{ customerAddresses.length - 1 }} 个</span>
+        </template>
+        <span v-else class="as-empty">还没有收货地址</span>
+        <button class="as-manage" @click="goMapAddresses">管理地址</button>
+      </div>
+
+      <van-popup v-model:show="showAddrPanel" position="bottom" round :style="{ maxHeight: '60%' }">
+        <div class="addr-panel">
+          <h4>收货地址 <small>{{ selectedCustomer }}</small></h4>
+          <div v-if="!customerAddresses.length" class="ap-empty">还没有收货地址，点「管理地址」去地图页添加</div>
+          <div v-for="(a, i) in customerAddresses" :key="i" class="ap-row">
+            <div class="ap-main">
+              <div class="ap-name">{{ a.label }}<span v-if="a.is_default" class="ap-default">默认</span></div>
+              <div class="ap-addr">{{ a.address }}</div>
+              <div class="ap-contact" v-if="a.contact">{{ a.contact }}</div>
+            </div>
+            <button class="ap-copy" @click="copyText(a.address)">复制</button>
+          </div>
+        </div>
+      </van-popup>
+
       <!-- 未选择客户：显示客户列表入口 -->
       <div class="customer-grid" v-if="!selectedCustomer">
         <div v-if="customerList.length">
@@ -422,7 +450,7 @@
 import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { showToast, showConfirmDialog } from 'vant'
-import { fetchMaterials, createMaterial, updateMaterial, deleteMaterial, getMaterialStatusConfig, exportMaterials, importMaterialsExcel, searchAllCustomers, fetchMaterialCustomers, fetchMaterialFactories, uploadMaterialImages, deleteMaterialImage, copyMaterialFile, syncMaterialCost, fetchLatestQuote, isLocalFileUrl, fileDisplayName, fetchStaleMaterials, http } from '../utils/api.js'
+import { fetchMaterials, createMaterial, updateMaterial, deleteMaterial, getMaterialStatusConfig, exportMaterials, importMaterialsExcel, searchAllCustomers, fetchMaterialCustomers, fetchMaterialFactories, uploadMaterialImages, deleteMaterialImage, copyMaterialFile, syncMaterialCost, fetchLatestQuote, fetchCustomerAddresses, isLocalFileUrl, fileDisplayName, fetchStaleMaterials, http } from '../utils/api.js'
 import { STATUS_FALLBACK, statusOrderFromConfig } from '../utils/materialStatus.js'
 // 图片预览右键菜单（复制图片 / 另存为）—— 客户端自带的右键菜单没有「复制图片」
 import ImageContextMenu from '../components/ImageContextMenu.vue'
@@ -984,6 +1012,8 @@ const showListPreview = ref(false)
 // 客户文件柜（按日期+料号建文件夹）
 const showCustomerFiles = ref(false)
 const syncingCost = ref(false)
+const customerAddresses = ref([])
+const showAddrPanel = ref(false)
 const quoteRef = ref(null)
 const costInput = ref(null)
 let quoteTimer = null
@@ -1075,6 +1105,18 @@ function onCustomerKeydown(e) {
   if (e.key === 'Escape') showCustomerDropdown.value = false
 }
 
+async function loadCustomerAddresses(name) {
+  if (!name) { customerAddresses.value = []; return }
+  try {
+    const r = await fetchCustomerAddresses(name)
+    customerAddresses.value = r.data || []
+  } catch { customerAddresses.value = [] }
+}
+function goMapAddresses() {
+  if (!selectedCustomer.value) return
+  router.push({ path: '/map-addresses', query: { q: selectedCustomer.value } })
+}
+
 function selectCustomer(name, carryKeyword) {
   selectedCustomer.value = name
   customerQuery.value = name
@@ -1090,6 +1132,7 @@ function selectCustomer(name, carryKeyword) {
   // 说明用户就是在搜客户 → 不带入，免得每次都要手动清空
   const q = (carryKeyword || '').trim()
   keyword.value = (q && !name.includes(q)) ? q : ''
+  loadCustomerAddresses(name)
   loadFactories()
   load()
   // 聚焦到搜索框
@@ -1099,6 +1142,7 @@ function selectCustomer(name, carryKeyword) {
 function clearCustomer() {
   selectedCustomer.value = ''
   customerQuery.value = ''
+  customerAddresses.value = []
   list.value = []
   total.value = 0
   loadCustomerList()
@@ -1738,5 +1782,25 @@ onUnmounted(() => {
 .qr-btn.primary { background: #00794f; border-color: #00794f; color: #fff; }
 .cost-cell { cursor: pointer; }
 .cost-info { color: #98a2b3; font-size: 10px; margin-left: 3px; }
+
+
+/* 收货地址条 */
+.addr-strip { display: flex; align-items: center; gap: 8px; padding: 6px 16px; background: #fbfcfe; border-bottom: 1px solid #eef0f3; font-size: 12px; color: #344054; }
+.as-label { color: #98a2b3; flex: none; }
+.as-item { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; background: #f2f7ff; border: 1px solid #d6e4ff; border-radius: 12px; padding: 2px 10px; }
+.as-item:hover { border-color: #1677ff; }
+.as-more { color: #1677ff; cursor: pointer; flex: none; }
+.as-empty { color: #98a2b3; flex: 1; }
+.as-manage { margin-left: auto; flex: none; border: 1px solid #d0d5dd; background: #fff; border-radius: 6px; padding: 3px 10px; font-size: 12px; cursor: pointer; }
+.addr-panel { padding: 16px; }
+.addr-panel h4 { margin: 0 0 10px; font-size: 15px; }
+.addr-panel h4 small { color: #98a2b3; font-size: 11px; font-weight: normal; }
+.ap-row { display: flex; gap: 10px; padding: 10px 0; border-bottom: 1px dashed #eef0f3; }
+.ap-main { flex: 1; min-width: 0; }
+.ap-name { font-size: 13px; color: #1f2937; }
+.ap-default { margin-left: 6px; background: #e6f4ff; color: #1677ff; border-radius: 8px; padding: 0 6px; font-size: 10px; }
+.ap-addr { font-size: 12px; color: #475467; margin-top: 3px; }
+.ap-contact { font-size: 11px; color: #98a2b3; margin-top: 2px; }
+.ap-copy { align-self: center; border: 1px solid #d0d5dd; background: #fff; border-radius: 6px; padding: 4px 10px; font-size: 12px; cursor: pointer; }
 
 </style>

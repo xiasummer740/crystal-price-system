@@ -106,6 +106,10 @@ export function deleteMaterialImage(url) {
 export function copyMaterialFile(url) {
   return http.post('/materials/copy-file', { url })
 }
+/** 客户收货地址（地图地址页的收货点/联系人地址） */
+export function fetchCustomerAddresses(customer) {
+  return http.get('/materials/customer-addresses', { params: { customer } })
+}
 /** 报价页面：按物料编码取最近一条报价 */
 export function fetchLatestQuote(code) {
   return http.get('/materials/latest-quote', { params: { code } })
