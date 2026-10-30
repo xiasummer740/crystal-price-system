@@ -115,7 +115,7 @@
       />
 
       <div class="lan-tip">
-        手机端访问：同一 WiFi，浏览器访问 <strong>http://{{ localIp }}:3266</strong>
+        手机端访问：同一 WiFi 用 <strong>http://{{ localIp }}:3266</strong>；人在外面用 Tailscale（点「打不开？」）
         <button class="lan-fix" @click="showLanHelp = true; refreshLanIps()">打不开？</button>
         ｜ <a href="/使用手册.html" target="_blank" style="color:var(--color-primary)">使用手册</a>
       </div>
@@ -130,6 +130,22 @@
             <li>公司 WiFi 若开了「AP 隔离」，手机也访问不到电脑，需要让网管关掉</li>
             <li>电脑上开着 VPN / 虚拟机时，优先看 WLAN 那条地址</li>
           </ol>
+          <div class="lh-title">人在外面 / 用手机流量</div>
+          <div class="lh-wan">
+            <p>局域网地址只能同一 WiFi 用。手机用流量时，推荐装 <b>Tailscale</b>（免费、加密、不用开公网端口）：</p>
+            <ol class="lh-steps">
+              <li>电脑装 Tailscale 并登录（tailscale.com/download）</li>
+              <li>手机装 Tailscale，登录同一个账号</li>
+              <li>手机浏览器访问下面检测到的 100.x 地址</li>
+            </ol>
+            <div v-if="tailscaleIp" class="lh-ip">
+              <span class="lh-name">Tailscale</span>
+              <code>http://{{ tailscaleIp }}:3266</code>
+              <button @click="copyLan(tailscaleIp)">复制</button>
+            </div>
+            <div v-else class="lh-empty">未检测到 Tailscale 地址（100.x）。装好并登录后点「重新检测」。</div>
+          </div>
+
           <div class="lh-title">本机可用地址</div>
           <div v-for="(ip, i) in lanIps" :key="i" class="lh-ip">
             <span class="lh-name">{{ ip.name }}</span>
@@ -517,6 +533,7 @@ const fileInput = ref(null)
 const exporting = ref(false)
 const localIp = ref('127.0.0.1')
 const lanIps = ref([])
+const tailscaleIp = computed(() => lanIps.value.find(x => /^100\./.test(x.address))?.address || '')
 const showLanHelp = ref(false)
 const isDev = ref(new URLSearchParams(window.location.search).get('packaged') === 'false')
 const appVersion = ref(new URLSearchParams(window.location.search).get('v') || __APP_VERSION__)
@@ -1457,5 +1474,10 @@ onUnmounted(() => { if (clockTimer) clearInterval(clockTimer); if (colFilterTime
 .lh-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 14px; }
 .lh-actions button { border: 1px solid #d0d5dd; background: #fff; border-radius: 6px; padding: 6px 12px; font-size: 12px; cursor: pointer; }
 .lh-refresh { color: #1677ff; }
+
+
+.lh-wan { background: #f6fffb; border: 1px solid #b7ebd6; border-radius: 8px; padding: 10px 12px; margin-bottom: 12px; }
+.lh-wan p { margin: 0 0 6px; font-size: 12px; color: #344054; }
+.lh-wan .lh-steps { margin: 0 0 8px; }
 
 </style>
