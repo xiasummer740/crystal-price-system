@@ -543,7 +543,7 @@ async function startServer() {
   return new Promise((resolve, reject) => {
     const tryListen = (port) => {
       log(`Trying port ${port}... (attempt ${retryCount + 1}/${MAX_RETRIES})`)
-      const server = expressApp.listen(port, () => {
+      const server = expressApp.listen(port, '0.0.0.0', () => {
         log(`Server started on port ${port}`)
         resolve({ server, port })
       })

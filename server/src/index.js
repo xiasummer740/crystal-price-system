@@ -48,9 +48,13 @@ app.use(cors({
     // 允许无来源请求（同源、curl、Electron）
     if (!origin) return cb(null, true)
     // 允许局域网常见前缀
-    const allowed = ['http://localhost', 'http://127.0.0.1', 'http://192.168.', 'http://10.', 'http://172.']
-    if (allowed.some(p => origin.startsWith(p))) return cb(null, true)
-    cb(null, false)
+    try {
+      const u = new URL(origin)
+      const h = u.hostname
+      const ok = h === 'localhost' || h === '127.0.0.1' ||
+        /^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|100\.|169\.254\.)/.test(h)
+      return cb(null, ok)
+    } catch { return cb(null, false) }
   }
 }))
 app.use(express.json())
@@ -530,7 +534,7 @@ export default app
 // 直接运行时启动监听（非 Electron 模式）
 const isElectron = process.env.ELECTRON_MODE === 'true' || process.argv[1]?.includes('electron')
 if (!isElectron) {
-  app.listen(PORT, () => {
+  app.listen(PORT, '0.0.0.0', () => {
     console.log(`晶振报价系统已启动: http://localhost:${PORT}`)
   })
 }
