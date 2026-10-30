@@ -105,7 +105,7 @@
                 <span v-if="a.is_default" class="ap-default">默认</span>
               </div>
               <div class="ap-addr">{{ a.address }}</div>
-              <div class="ap-contact" v-if="a.label && a.name">{{ a.label }}</div>
+              <div class="ap-contact" v-if="a.type === 'site' && a.label && a.name && a.label !== a.name">{{ a.label }}</div>
             </div>
             <button class="ap-copy" @click="copyText(recipientText(a))">复制</button>
           </div>
