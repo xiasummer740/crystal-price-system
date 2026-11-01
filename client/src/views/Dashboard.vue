@@ -23,12 +23,23 @@
         <router-link to="/mobile" class="nav-btn hide-mobile">手机版</router-link>
         <button class="nav-btn hide-mobile" style="margin-left:6px;background:#f6ffed;color:#52c41a;border-color:#b7eb8f" @click="openDataFolder">📁 数据目录</button>
         <!-- 移动端汉堡菜单 -->
-        <button class="mobile-menu-btn" @click="showMobileMenu = !showMobileMenu">
+        <button class="mobile-menu-btn" @click="showMobileMenu = !showMobileMenu" title="菜单">
           <span class="menu-bar"></span>
           <span class="menu-bar"></span>
           <span class="menu-bar"></span>
+          <span class="menu-text">菜单</span>
         </button>
       </div>
+      <!-- 窄窗口/手机端：顶栏下方常驻一排导航（避免按钮栏“消失”） -->
+      <div class="mobile-nav-strip">
+        <button class="mns-btn" @click="openMaterialsWin">📦 客户物料</button>
+        <button class="mns-btn" @click="openMapWin">🗺️ 地图地址</button>
+        <router-link to="/order" class="mns-btn">🧾 生成订单</router-link>
+        <router-link to="/company-docs" class="mns-btn">🏢 公司资料</router-link>
+        <router-link to="/quotes" class="mns-btn">📋 报价单</router-link>
+        <button class="mns-btn" @click="showMobileMenu = true">更多…</button>
+      </div>
+
       <!-- 移动端下拉菜单 -->
       <div class="mobile-dropdown" v-if="showMobileMenu">
         <div class="mobile-dropdown-backdrop" @click="showMobileMenu = false"></div>
@@ -1548,5 +1559,22 @@ onUnmounted(() => { if (clockTimer) clearInterval(clockTimer); if (colFilterTime
 .tun-input { flex: 1; border: 1px solid #d0d5dd; border-radius: 6px; padding: 6px 9px; font-size: 12px; outline: none; }
 .tun-actions { display: flex; gap: 10px; align-items: center; margin-top: 8px; }
 .tun-open { font-size: 12px; color: #1677ff; }
+
+
+.mobile-nav-strip { display: none; }
+.menu-text { font-size: 11px; color: #475467; margin-left: 2px; }
+@media (max-width: 1100px) {
+  .mobile-nav-strip {
+    display: flex; gap: 6px; overflow-x: auto; padding: 6px 10px;
+    background: #f6fbf7; border-bottom: 1px solid #e3efe7; flex-shrink: 0;
+    -webkit-overflow-scrolling: touch;
+  }
+  .mobile-nav-strip::-webkit-scrollbar { display: none; }
+  .mns-btn {
+    flex: 0 0 auto; border: 1px solid #d9e7dd; background: #fff; color: #2f5d45;
+    border-radius: 14px; padding: 4px 10px; font-size: 12px; text-decoration: none; cursor: pointer;
+  }
+  .mobile-menu-btn { display: flex; flex-direction: row; align-items: center; gap: 3px; padding: 4px 8px; }
+}
 
 </style>
