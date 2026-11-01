@@ -342,6 +342,16 @@ app.post('/api/settings', (req, res) => {
   res.json({ code: 0 })
 })
 
+// 隧道状态（Cloudflare Tunnel 服务是否在跑 + 已配置的外网地址）
+app.get('/api/tunnel/status', (_req, res) => {
+  const url = queryAll("SELECT value FROM app_settings WHERE key = 'crystal_tunnel_url'")[0]?.value || ''
+  if (process.platform !== 'win32') return res.json({ code: 0, data: { running: false, url, supported: false } })
+  execFile('sc', ['query', 'Cloudflared'], (err, stdout) => {
+    const running = !err && /STATE\s*:\s*\d+\s+RUNNING/i.test(stdout)
+    res.json({ code: 0, data: { running, url, supported: true } })
+  })
+})
+
 // 全局错误捕获中间件（必须在所有路由之后）
 app.use((err, req, res, _next) => {
   logger.error('uncaught', `${req.method} ${req.originalUrl} — ${err.stack || err.message}`)

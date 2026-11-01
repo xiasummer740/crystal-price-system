@@ -1,7 +1,10 @@
 <template>
   <div class="app-wrap">
     <header class="topbar">
-      <div class="topbar-left"><span class="logo-dot"></span><span class="logo-text">晶振报价系统</span><span class="version-badge">v{{ appVersion }}</span><span v-if="isDev" class="dev-badge">开发版</span></div>
+      <div class="topbar-left"><span class="logo-dot"></span><span class="logo-text">晶振报价系统</span><span class="version-badge">v{{ appVersion }}</span>
+        <button class="tunnel-pill" :class="{ on: tunnelStatus.running }" @click="openTunnel" title="外网隧道状态（Cloudflare Tunnel）">
+          <span class="tp-dot"></span>隧道
+        </button><span v-if="isDev" class="dev-badge">开发版</span></div>
       <!-- PC端导航按钮 -->
       <div class="topbar-right">
         <span class="clock-display" :title="clockDate">
@@ -115,10 +118,35 @@
       />
 
       <div class="lan-tip">
-        手机端访问：同一 WiFi 用 <strong>http://{{ localIp }}:3266</strong>；人在外面用 Tailscale（点「打不开？」）
+        手机端访问：同一 WiFi 用 <strong>http://{{ localIp }}:3266</strong>
+        <template v-if="tunnelStatus.url"> ｜ 外网 <a :href="tunnelStatus.url" target="_blank" style="color:var(--color-primary)">{{ tunnelStatus.url }}</a></template>
+        ｜ <button class="lan-fix" @click="openTunnel">隧道状态</button>
+        <span class="lan-sep">·</span>
         <button class="lan-fix" @click="showLanHelp = true; refreshLanIps()">打不开？</button>
         ｜ <a href="/使用手册.html" target="_blank" style="color:var(--color-primary)">使用手册</a>
       </div>
+
+      <van-popup v-model:show="showTunnel" round position="bottom" :style="{ maxHeight: '60%' }" closeable>
+        <div class="lan-help">
+          <h4>外网隧道 <small>Cloudflare Tunnel</small></h4>
+          <div class="tun-row">
+            <span class="tun-dot" :class="{ on: tunnelStatus.running }"></span>
+            <b>{{ tunnelStatus.running ? '隧道运行中' : '隧道未运行' }}</b>
+            <button class="lh-refresh" @click="refreshTunnel">重新检测</button>
+          </div>
+          <p class="tun-tip">手机在外地用流量时，访问下面的外网地址即可（不用 Tailscale）。</p>
+          <div class="lh-title">外网地址</div>
+          <div class="tun-input-row">
+            <input v-model="tunnelUrlInput" class="tun-input" placeholder="https://sjk-crystal.你的域名.com" />
+            <button class="lh-refresh" @click="saveTunnelUrl">保存</button>
+          </div>
+          <div v-if="tunnelStatus.url" class="tun-actions">
+            <button class="lh-refresh" @click="copyTunnelUrl">复制地址</button>
+            <a class="tun-open" :href="tunnelStatus.url" target="_blank">打开</a>
+          </div>
+          <p class="tun-tip" v-if="!tunnelStatus.running">隧道没运行：管理员运行 <code>Restart-Service Cloudflared</code>，或看「外网访问教程」。</p>
+        </div>
+      </van-popup>
 
       <van-popup v-model:show="showLanHelp" round position="bottom" :style="{ maxHeight: '70%' }" closeable>
         <div class="lan-help">
@@ -535,9 +563,34 @@ const localIp = ref('127.0.0.1')
 const lanIps = ref([])
 const tailscaleIp = computed(() => lanIps.value.find(x => /^100\./.test(x.address))?.address || '')
 const showLanHelp = ref(false)
+const showTunnel = ref(false)
+const tunnelStatus = ref({ running: false, url: '' })
+const tunnelUrlInput = ref('')
 const isDev = ref(new URLSearchParams(window.location.search).get('packaged') === 'false')
 const appVersion = ref(new URLSearchParams(window.location.search).get('v') || __APP_VERSION__)
 const isElectron = ref(!!window.electronAPI)
+async function refreshTunnel() {
+  try {
+    const r = await http.get('/tunnel/status')
+    tunnelStatus.value = r.data || { running: false, url: '' }
+    tunnelUrlInput.value = tunnelStatus.value.url || ''
+  } catch {}
+}
+function openTunnel() {
+  showTunnel.value = true
+  refreshTunnel()
+}
+async function saveTunnelUrl() {
+  const url = String(tunnelUrlInput.value || '').trim().replace(/\/+$/, '')
+  await saveSettingsApi({ crystal_tunnel_url: url })
+  tunnelStatus.value = { ...tunnelStatus.value, url }
+  showToast(url ? '已保存外网地址' : '已清空外网地址')
+}
+function copyTunnelUrl() {
+  if (!tunnelStatus.value.url) return
+  navigator.clipboard?.writeText(tunnelStatus.value.url).then(() => showToast('已复制')).catch(() => {})
+}
+
 function refreshLanIps() {
   try {
     lanIps.value = window.electronAPI?.getLanIps?.() || [{ name: '当前访问地址', address: localIp.value }]
@@ -1077,6 +1130,7 @@ onMounted(async () => {
   await store.loadGroupedList()
   localIp.value = window.electronAPI ? window.electronAPI.getLanIp() : (window.location.hostname || '127.0.0.1')
   refreshLanIps()
+  refreshTunnel()
   // 启动后自动检查更新（小红点提示）
   setTimeout(() => { if (['idle'].includes(updateStatus.value)) onCheckUpdate() }, 8000)
   // 从服务器同步设置到 localStorage（跨升级保留）
@@ -1461,6 +1515,7 @@ onUnmounted(() => { if (clockTimer) clearInterval(clockTimer); if (colFilterTime
   .log-time{min-width:70px}
 }
 
+.lan-sep { color: #d0d5dd; margin: 0 2px; }
 .lan-fix { border: 1px solid #d0d5dd; background: #fff; color: #1677ff; border-radius: 10px; padding: 1px 8px; font-size: 11px; cursor: pointer; margin-left: 6px; }
 .lan-help { padding: 16px; }
 .lan-help h4 { margin: 0 0 10px; font-size: 15px; }
@@ -1479,5 +1534,19 @@ onUnmounted(() => { if (clockTimer) clearInterval(clockTimer); if (colFilterTime
 .lh-wan { background: #f6fffb; border: 1px solid #b7ebd6; border-radius: 8px; padding: 10px 12px; margin-bottom: 12px; }
 .lh-wan p { margin: 0 0 6px; font-size: 12px; color: #344054; }
 .lh-wan .lh-steps { margin: 0 0 8px; }
+
+
+.tunnel-pill { display: inline-flex; align-items: center; gap: 5px; margin-left: 8px; border: 1px solid #e4e7ec; background: #fff; color: #667085; border-radius: 12px; padding: 1px 8px; font-size: 11px; cursor: pointer; }
+.tunnel-pill.on { color: #00794f; border-color: #b7ebd6; background: #f6fffb; }
+.tp-dot { width: 7px; height: 7px; border-radius: 50%; background: #d0d5dd; }
+.tunnel-pill.on .tp-dot { background: #00b96b; }
+.tun-row { display: flex; align-items: center; gap: 8px; font-size: 13px; margin-bottom: 8px; }
+.tun-dot { width: 9px; height: 9px; border-radius: 50%; background: #d0d5dd; }
+.tun-dot.on { background: #00b96b; }
+.tun-tip { font-size: 12px; color: #667085; margin: 6px 0; }
+.tun-input-row { display: flex; gap: 8px; }
+.tun-input { flex: 1; border: 1px solid #d0d5dd; border-radius: 6px; padding: 6px 9px; font-size: 12px; outline: none; }
+.tun-actions { display: flex; gap: 10px; align-items: center; margin-top: 8px; }
+.tun-open { font-size: 12px; color: #1677ff; }
 
 </style>
