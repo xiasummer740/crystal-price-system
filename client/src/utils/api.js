@@ -500,8 +500,8 @@ export function uploadCustomerFiles(formData) {
 export function deleteCustomerFile(customer, folder, name) {
   return http.post('/customer-files/delete', { customer, folder, name })
 }
-export function deleteCustomerFolder(customer, folder) {
-  return http.post('/customer-files/delete-folder', { customer, folder })
+export function deleteCustomerFolder(customer, folder, force = false) {
+  return http.post('/customer-files/delete-folder', { customer, folder, force })
 }
 export function copyCustomerFile(customer, folder, name) {
   return http.post('/customer-files/copy', { customer, folder, name })

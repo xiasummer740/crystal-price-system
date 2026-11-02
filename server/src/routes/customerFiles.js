@@ -161,8 +161,12 @@ router.post('/delete-folder', (req, res) => {
     const hit = folderAbs(customer, req.body?.folder)
     if (!customer || !hit) return res.status(400).json({ code: 1, msg: '参数不合法' })
     if (!fs.existsSync(hit.abs)) return res.status(404).json({ code: 1, msg: '文件夹不存在' })
-    if (fs.readdirSync(hit.abs).length) return res.status(400).json({ code: 1, msg: '文件夹里还有文件，先删文件' })
-    fs.rmdirSync(hit.abs)
+    const entries = fs.readdirSync(hit.abs)
+    if (entries.length && !req.body?.force) {
+      return res.status(400).json({ code: 1, msg: `文件夹里还有 ${entries.length} 个文件`, needForce: true })
+    }
+    // force=1：连文件一起删（用户已二次确认）
+    fs.rmSync(hit.abs, { recursive: true, force: true })
     res.json({ code: 0, data: { name: hit.name } })
   } catch (e) {
     res.status(500).json({ code: 1, msg: '删除文件夹失败: ' + e.message })
