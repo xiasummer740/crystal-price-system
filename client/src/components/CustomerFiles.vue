@@ -83,7 +83,7 @@ import { computed, reactive, ref, watch, onBeforeUnmount, onMounted } from 'vue'
 import { showToast, showConfirmDialog } from 'vant'
 import {
   fetchCustomerFiles, mkdirCustomerFolder, uploadCustomerFiles,
-  deleteCustomerFile, deleteCustomerFolder, copyCustomerFile, openCustomerFile
+  deleteCustomerFile, deleteCustomerFolder, copyCustomerFile, openCustomerFile, getCustomerFilePath
 } from '../utils/api.js'
 
 const props = defineProps({
@@ -215,8 +215,15 @@ async function copyFile(name) {
 }
 
 async function openFile(name) {
-  try { await openCustomerFile(props.customer, activeFolder.value, name) }
-  catch (e) { showToast('打开失败: ' + (e.message || '未知错误')) }
+  try {
+    // 桌面端：拿绝对路径交给 Electron shell.showItemInFolder，精确定位到文件
+    if (window.electronAPI?.revealPath) {
+      const r = await getCustomerFilePath(props.customer, activeFolder.value, name)
+      await window.electronAPI.revealPath(r.data.path)
+      return
+    }
+    await openCustomerFile(props.customer, activeFolder.value, name)
+  } catch (e) { showToast('定位失败: ' + (e?.response?.data?.msg || e.message || '未知错误')) }
 }
 
 async function removeFile(name) {

@@ -1135,6 +1135,8 @@ ipcMain.handle('open-map-window', () => {
 
 // 浏览器打开外部链接（供渲染进程调用）
 ipcMain.handle('open-external', (_, url) => { shell.openExternal(url) })
+// 在资源管理器里精确选中文件（比 explorer /select 更稳，支持中文/空格路径）
+ipcMain.handle('reveal-path', (_, p) => { if (p) shell.showItemInFolder(String(p)) })
 
 // === 复制图片到系统剪贴板 ===
 // 放主进程的理由：渲染进程在 Electron 里写图片剪贴板要过 secure-context 与权限两道，

@@ -509,6 +509,9 @@ export function copyCustomerFile(customer, folder, name) {
 export function openCustomerFile(customer, folder, name) {
   return http.post('/customer-files/open', { customer, folder, name })
 }
+export function getCustomerFilePath(customer, folder, name) {
+  return http.post('/customer-files/path', { customer, folder, name })
+}
 
 // ===== 阶段停留时长 / 待跟进 / 月度汇总（祥哥 2026-10-14）=====
 // 停留天数两种口径：有状态事件=精确，没有=按上次改动估算（界面必须能区分）。
