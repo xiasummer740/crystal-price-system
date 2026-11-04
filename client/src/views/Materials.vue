@@ -319,12 +319,15 @@
               <div v-if="quoteRef" class="quote-ref form-field-full">
                 <div class="qr-main">
                   <span class="qr-badge">最近报价</span>
-                  <b>{{ quoteRef.date }}</b> · 报价 <b class="qr-price">{{ quotePriceText(quoteRef) }}</b>
+                  <b>{{ quoteRef.date }}</b>
+                  <span v-if="hasTaxPrice"> · 含税 <b class="qr-price">{{ moneyText(quoteRef, 'tax') }}</b></span>
+                  <span v-if="hasNoTaxPrice"> · 未税 <b class="qr-price">{{ moneyText(quoteRef, 'notax') }}</b></span>
                   <span>&nbsp;· {{ quoteRef.factory || '工厂未填' }}</span>
                   <span>· {{ quoteRef.quoter || '报价人未填' }}</span>
                 </div>
                 <div class="qr-actions">
-                  <button type="button" class="qr-btn primary" @click="useQuoteCost">带入成本价</button>
+                  <button v-if="hasTaxPrice" type="button" class="qr-btn primary" @click="useQuoteCost('tax')">带入含税价</button>
+                  <button v-if="hasNoTaxPrice" type="button" class="qr-btn" @click="useQuoteCost('notax')">带入未税价</button>
                   <button type="button" class="qr-btn" @click="quoteRef = null">不带入</button>
                   <button type="button" class="qr-btn" @click="focusCost">自定义</button>
                 </div>
@@ -1023,6 +1026,8 @@ const syncingCost = ref(false)
 const customerAddresses = ref([])
 const showAddrPanel = ref(false)
 const quoteRef = ref(null)
+const hasTaxPrice = computed(() => quoteRef.value && quoteRef.value.price_with_tax !== null && quoteRef.value.price_with_tax !== undefined && quoteRef.value.price_with_tax !== '')
+const hasNoTaxPrice = computed(() => quoteRef.value && quoteRef.value.price_without_tax !== null && quoteRef.value.price_without_tax !== undefined && quoteRef.value.price_without_tax !== '')
 const costInput = ref(null)
 let quoteTimer = null
 const listPreviewImgs = ref([])
@@ -1194,17 +1199,26 @@ function scheduleQuoteRef(code) {
 function onCodeTyped(e) {
   scheduleQuoteRef(e?.target?.value)
 }
+function moneyText(q, which) {
+  if (!q) return ''
+  const v = which === 'tax' ? q.price_with_tax : q.price_without_tax
+  if (v === null || v === undefined || v === '') return ''
+  const cur = q.currency && q.currency !== 'CNY' ? ' ' + q.currency : ''
+  return `${v}${cur}`
+}
+function moneyLabel(q, which) {
+  const m = moneyText(q, which)
+  return m ? `${m} ${which === 'tax' ? '含税' : '未税'}` : ''
+}
 function quotePriceText(q) {
   if (!q) return ''
-  const hasTax = q.price_with_tax !== null && q.price_with_tax !== undefined && q.price_with_tax !== ''
-  const noTax = q.price_without_tax !== null && q.price_without_tax !== undefined && q.price_without_tax !== ''
-  const label = hasTax ? '含税' : (noTax ? '未税' : '')
-  return String(q.price ?? '') + label
+  return moneyLabel(q, 'tax') || moneyLabel(q, 'notax') || String(q.price ?? '')
 }
-function useQuoteCost() {
+function useQuoteCost(which = 'tax') {
   if (!quoteRef.value) return
-  form.value.cost_price = quotePriceText(quoteRef.value)
-  showToast('已带入成本价 ' + form.value.cost_price)
+  const text = moneyLabel(quoteRef.value, which) || quotePriceText(quoteRef.value)
+  form.value.cost_price = text
+  showToast('已带入成本价 ' + text)
 }
 function focusCost() {
   costInput.value?.focus()
@@ -1212,7 +1226,7 @@ function focusCost() {
 function costTip(item) {
   const q = item.latest_quote
   if (!q) return '报价页面暂无同编码报价'
-  return `最近报价：${q.date}\n报价：${quotePriceText(q)}\n工厂：${q.factory || '-'}\n报价人：${q.quoter || '-'}\n（点击可复制成本价）`
+  return `最近报价：${q.date}\n含税：${moneyText(q, 'tax') || '-'}\n未税：${moneyText(q, 'notax') || '-'}\n工厂：${q.factory || '-'}\n报价人：${q.quoter || '-'}\n（点击可复制成本价）`
 }
 
 // 批量同步成本价（同料号最近一次，不覆盖已填）
