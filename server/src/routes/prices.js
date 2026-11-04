@@ -278,7 +278,7 @@ router.post('/', (req, res) => {
   const conflict = findCreateConflict(b)
   if (conflict) return res.status(400).json({ code: 1, msg: conflict.msg })
   const r = execute(`INSERT INTO material_prices (material_code,material_name,material_spec,category,brand,dimension,pin_count,frequency,load_cap,voltage,mode,freq_tol,temperature,price_with_tax,price_without_tax,currency,factory_code,quoter,standard_lead_time,min_package,spec_document,first_inquiry_customer,remarks,remark_images) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-    [b.material_code||'',b.material_name||'',b.material_spec||'',b.category||'',b.brand||'',b.dimension||'',b.pin_count||'',b.frequency||'',b.load_cap||'',b.voltage||'',b.mode||'',b.freq_tol||'',b.temperature||'',b.price_with_tax??null,b.price_without_tax??null,b.currency||'CNY',b.factory_code||'',b.quoter||'',b.standard_lead_time||'',b.min_package||'',b.spec_document||'',b.first_inquiry_customer||'',b.remarks||'',Array.isArray(b.remark_images)?JSON.stringify(b.remark_images):'[]'])
+    [b.material_code||'',b.material_name||'',b.material_spec||'',b.category||'',b.brand||'',b.dimension||'',b.pin_count||'',b.frequency||'',b.load_cap||'',b.voltage||'',b.mode||'',b.freq_tol||'',b.temperature||'',(b.currency==='USD'?null:(b.price_with_tax??null)),b.price_without_tax??null,b.currency||'CNY',b.factory_code||'',b.quoter||'',b.standard_lead_time||'',b.min_package||'',b.spec_document||'',b.first_inquiry_customer||'',b.remarks||'',Array.isArray(b.remark_images)?JSON.stringify(b.remark_images):'[]'])
   // 新录入的客户名进统一名册（报价里的「初次询价客户」也是客户名的来源之一）
   upsertMany([b.first_inquiry_customer], 'price')
   res.json({ code: 0, data: { id: r.lastInsertRowid } })
@@ -294,6 +294,8 @@ router.put('/:id', (req, res) => {
     if (f === 'remark_images') return Array.isArray(req.body[f]) ? JSON.stringify(req.body[f]) : (existing[f] || '[]')
     return req.body[f] ?? existing[f]
   })
+  // 美元报价只有未税价，不允许存含税价
+  if (values[fields.indexOf('currency')] === 'USD') values[fields.indexOf('price_with_tax')] = null
   execute(`UPDATE material_prices SET updated_at = datetime('now','localtime'), ${sets.join(', ')} WHERE id = ?`, [...values, Number(req.params.id)])
   // 编辑时改了客户名 → 补进统一名册
   upsertMany([req.body.first_inquiry_customer ?? existing.first_inquiry_customer], 'price')
