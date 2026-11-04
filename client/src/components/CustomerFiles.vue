@@ -65,6 +65,7 @@
               <div v-else class="cf-empty">这个文件夹还是空的，拖文件进来吧</div>
 
               <div class="cf-foot">
+                <button class="cf-mini" @click="startFolderRename" title="重命名当前文件夹">重命名文件夹</button>
                 <button class="cf-mini danger" @click="removeFolder(activeFolder)">删除这个空文件夹</button>
               </div>
             </template>
@@ -78,7 +79,7 @@
         <!-- 重命名文件 -->
         <div v-if="rename.open" class="cf-mask" @click.self="rename.open = false">
           <div class="cf-rename">
-            <h4>重命名文件</h4>
+            <h4>{{ rename.mode === 'folder' ? '重命名文件夹' : '重命名文件' }}</h4>
             <input v-model="rename.value" class="cf-input" @keyup.enter="doRename" />
             <div class="cf-rename-tip">不写扩展名会自动保留原扩展名</div>
             <div class="cf-rename-btns">
@@ -97,7 +98,7 @@ import { computed, reactive, ref, watch, onBeforeUnmount, onMounted } from 'vue'
 import { showToast, showConfirmDialog } from 'vant'
 import {
   fetchCustomerFiles, mkdirCustomerFolder, uploadCustomerFiles,
-  deleteCustomerFile, deleteCustomerFolder, renameCustomerFile, copyCustomerFile, openCustomerFile, getCustomerFilePath
+  deleteCustomerFile, deleteCustomerFolder, renameCustomerFile, renameCustomerFolder, copyCustomerFile, openCustomerFile, getCustomerFilePath
 } from '../utils/api.js'
 
 const props = defineProps({
@@ -123,7 +124,7 @@ const today6 = computed(() => {
 })
 
 const newFolder = reactive({ open: false, code: '', suffix: '', name: '', manual: false })
-const rename = reactive({ open: false, from: '', value: '' })
+const rename = reactive({ open: false, mode: 'file', from: '', value: '' })
 
 // 料号去重，附带名称方便辨认
 const materialOptions = computed(() => {
@@ -224,17 +225,32 @@ function fileUrl(name) {
 
 function startRename(name) {
   rename.open = true
+  rename.mode = 'file'
   rename.from = name
   rename.value = name
+}
+function startFolderRename() {
+  if (!activeFolder.value) return
+  rename.open = true
+  rename.mode = 'folder'
+  rename.from = activeFolder.value
+  rename.value = activeFolder.value
 }
 async function doRename() {
   const newName = String(rename.value || '').trim()
   if (!newName) return showToast('文件名不能为空')
   if (newName === rename.from) { rename.open = false; return }
   try {
-    await renameCustomerFile(props.customer, activeFolder.value, rename.from, newName)
-    showToast('已重命名')
-    rename.open = false
+    if (rename.mode === 'folder') {
+      const r = await renameCustomerFolder(props.customer, rename.from, newName)
+      showToast('已重命名文件夹')
+      rename.open = false
+      activeFolder.value = r.data.name
+    } else {
+      await renameCustomerFile(props.customer, activeFolder.value, rename.from, newName)
+      showToast('已重命名')
+      rename.open = false
+    }
     await load()
   } catch (e) {
     showToast(e?.response?.data?.msg || ('重命名失败: ' + (e.message || '未知错误')))
@@ -261,7 +277,7 @@ async function openFile(name) {
 
 async function removeFile(name) {
   try {
-    await showConfirmDialog({ title: '删除文件', message: `删除「${name}」？不能恢复。`, confirmButtonText: '删除', confirmButtonColor: '#ee0a24' })
+    await showConfirmDialog({ title: '删除文件', message: `删除「${name}」？不能恢复。`, confirmButtonText: '删除', confirmButtonColor: '#ee0a24', zIndex: 4000 })
   } catch { return }
   try {
     await deleteCustomerFile(props.customer, activeFolder.value, name)
@@ -272,7 +288,7 @@ async function removeFile(name) {
 
 async function removeFolder(name) {
   try {
-    await showConfirmDialog({ title: '删除文件夹', message: `删除文件夹「${name}」？`, confirmButtonText: '删除', confirmButtonColor: '#ee0a24' })
+    await showConfirmDialog({ title: '删除文件夹', message: `删除文件夹「${name}」？`, confirmButtonText: '删除', confirmButtonColor: '#ee0a24', zIndex: 4000 })
   } catch { return }
   try {
     await deleteCustomerFolder(props.customer, name)
@@ -281,7 +297,7 @@ async function removeFolder(name) {
     // 里面还有文件：再确认一次，连文件一起删
     if (data?.needForce) {
       try {
-        await showConfirmDialog({ title: '文件夹不是空的', message: data.msg + '，要连里面的文件一起删除吗？', confirmButtonText: '一起删除', confirmButtonColor: '#ee0a24' })
+        await showConfirmDialog({ title: '文件夹不是空的', message: data.msg + '，要连里面的文件一起删除吗？', confirmButtonText: '一起删除', confirmButtonColor: '#ee0a24', zIndex: 4000 })
       } catch { return }
       try {
         await deleteCustomerFolder(props.customer, name, true)

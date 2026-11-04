@@ -497,6 +497,9 @@ export function mkdirCustomerFolder(customer, name) {
 export function uploadCustomerFiles(formData) {
   return http.post('/customer-files/upload', formData)
 }
+export function renameCustomerFolder(customer, folder, newName) {
+  return http.post('/customer-files/rename-folder', { customer, folder, newName })
+}
 export function renameCustomerFile(customer, folder, name, newName) {
   return http.post('/customer-files/rename', { customer, folder, name, newName })
 }
