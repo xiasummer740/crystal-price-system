@@ -319,6 +319,13 @@ export async function initDb() {
     )
   `)
 
+  // 美元报价只有未税价：清掉历史遗留的含税价（2026-11-04）
+  try {
+    db.run("UPDATE material_prices SET price_with_tax = NULL WHERE currency = 'USD' AND price_with_tax IS NOT NULL")
+    const n = db.getRowsModified()
+    if (n) console.log(`[db] 已清理 ${n} 条美元报价的含税价`)
+  } catch {}
+
   // 采购联系人
   db.run(`
     CREATE TABLE IF NOT EXISTS map_purchasers (
