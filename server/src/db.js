@@ -306,6 +306,9 @@ export async function initDb() {
     )
   `)
   try { db.run('CREATE INDEX IF NOT EXISTS idx_map_customers_name ON map_customers(name)') } catch {}
+  // 客户物料：交期（祥哥 2026-11-06）
+  try { db.run("ALTER TABLE customer_materials ADD COLUMN lead_time TEXT DEFAULT ''") } catch {}
+
   // 客户资料最近更新时间（列表排序用）
   try { db.run("ALTER TABLE map_customers ADD COLUMN updated_at TEXT DEFAULT ''") } catch {}
   // 地址变更历史（谁改的、什么时候）

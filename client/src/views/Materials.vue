@@ -351,6 +351,11 @@
                   placeholder="工厂（可联想）" />
               </div>
               <div class="form-field">
+                <label>交期</label>
+                <SuggestField plain input-class="f-input" v-model="form.lead_time" :options="matOpts.lead_time"
+                  placeholder="交期（可联想）" />
+              </div>
+              <div class="form-field">
                 <label>状态</label>
                 <div class="status-select" @click="showFormStatusSheet = true">
                   <span class="status-tag" :style="{ background: statusBg(form.status), color: statusColor(form.status), borderColor: statusColor(form.status) + '55' }">
@@ -1329,6 +1334,7 @@ const matOpts = computed(() => {
       return { value: c.code, meta: c.name || '', note, noteTitle, raw: c }
     }),
     factory: vals('factory'),
+    lead_time: vals('lead_time'),
     customer_code: scopedOk ? vals('customer_code') : []
   }
 })
@@ -1373,6 +1379,7 @@ function openForm(item) {
       material_code: item.material_code || '',
       material_name: item.material_name || '',
       factory: item.factory || '',
+      lead_time: item.lead_time || '',
       status: item.status || '报价',
       customer_desc: item.customer_desc || '',
       remark: item.remark || '',
@@ -1382,7 +1389,7 @@ function openForm(item) {
     }
   } else {
     editing.value = null
-    form.value = { date: new Date().toISOString().slice(0, 10), customer_code: '', jkx_code: '', price: '', cost_price: '', material_code: '', material_name: '', factory: '', status: '报价', customer_desc: '', remark: '', alternates: [], spec_document: '', remark_images: [] }
+    form.value = { date: new Date().toISOString().slice(0, 10), customer_code: '', jkx_code: '', price: '', cost_price: '', material_code: '', material_name: '', factory: '', lead_time: '', status: '报价', customer_desc: '', remark: '', alternates: [], spec_document: '', remark_images: [] }
   }
   pendingImgDeletes.value = [] // 每次开表单都清空待删，避免上次残留
   showForm.value = true

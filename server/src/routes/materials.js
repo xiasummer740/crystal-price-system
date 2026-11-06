@@ -335,8 +335,8 @@ router.post('/import', excelUpload.single('file'), (req, res) => {
         }).filter(a => a.material_name || a.material_code || a.factory)
 
       execute(`
-        INSERT INTO customer_materials (customer, date, customer_code, jkx_code, price, cost_price, material_code, material_name, factory, status, customer_desc, remark, alternates, spec_document)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO customer_materials (customer, date, customer_code, jkx_code, price, cost_price, material_code, material_name, factory, lead_time, status, customer_desc, remark, alternates, spec_document)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `, [
         String(row['客户'] || ''),
         dateStr,
@@ -347,6 +347,7 @@ router.post('/import', excelUpload.single('file'), (req, res) => {
         String(row['物料编码'] || ''),
         String(row['物料名称'] || ''),
         String(row['工厂'] || ''),
+        String(row['交期'] || ''),
         String(row['状态'] || '报价'),
         String(row['客户描述'] || ''),
         String(row['备注'] || ''),
@@ -629,8 +630,8 @@ router.post('/', (req, res) => {
     : '[]'
   const remarkImages = Array.isArray(b.remark_images) ? JSON.stringify(b.remark_images) : '[]'
   const r = execute(`
-    INSERT INTO customer_materials (customer, date, customer_code, jkx_code, price, cost_price, material_code, material_name, factory, status, customer_desc, remark, alternates, spec_document, remark_images)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO customer_materials (customer, date, customer_code, jkx_code, price, cost_price, material_code, material_name, factory, lead_time, status, customer_desc, remark, alternates, spec_document, remark_images)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `, [
     b.customer || '',
     b.date || '',
@@ -641,6 +642,7 @@ router.post('/', (req, res) => {
     b.material_code || '',
     b.material_name || '',
     b.factory || '',
+    b.lead_time || '',
     b.status || '报价',
     b.customer_desc || '',
     b.remark || '',
@@ -722,7 +724,7 @@ router.put('/:id', (req, res) => {
     : (existing.alternates || '[]')
   const remarkImages = Array.isArray(b.remark_images) ? JSON.stringify(b.remark_images) : (existing.remark_images || '[]')
   execute(`
-    UPDATE customer_materials SET customer=?, date=?, customer_code=?, jkx_code=?, price=?, cost_price=?, material_code=?, material_name=?, factory=?, status=?, customer_desc=?, remark=?, alternates=?, spec_document=?, remark_images=?, updated_at=datetime('now','localtime')
+    UPDATE customer_materials SET customer=?, date=?, customer_code=?, jkx_code=?, price=?, cost_price=?, material_code=?, material_name=?, factory=?, lead_time=?, status=?, customer_desc=?, remark=?, alternates=?, spec_document=?, remark_images=?, updated_at=datetime('now','localtime')
     WHERE id=?
   `, [
     b.customer ?? existing.customer,
@@ -734,6 +736,7 @@ router.put('/:id', (req, res) => {
     b.material_code ?? existing.material_code,
     b.material_name ?? existing.material_name,
     b.factory ?? existing.factory,
+    b.lead_time ?? existing.lead_time ?? '',
     b.status ?? existing.status,
     b.customer_desc ?? existing.customer_desc,
     b.remark ?? existing.remark,

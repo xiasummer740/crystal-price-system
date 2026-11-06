@@ -42,6 +42,7 @@ const FIELD_SOURCES = {
     jkx_code: [['customer_materials', 'jkx_code'], ['material_prices', 'material_code'], ['material_samples', 'material_code']],
     material_name: [['customer_materials', 'material_name'], ['material_prices', 'material_name']],
     factory: [['customer_materials', 'factory'], ['material_prices', 'factory_code'], ['material_samples', 'factory_code']],
+    lead_time: [['customer_materials', 'lead_time'], ['material_prices', 'standard_lead_time']],
     customer_code: [['customer_materials', 'customer_code']]
   }
 }
