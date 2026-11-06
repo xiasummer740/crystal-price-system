@@ -94,7 +94,7 @@
 </template>
 
 <script setup>
-import { computed, reactive, ref, watch, onBeforeUnmount, onMounted } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import { showToast, showConfirmDialog } from 'vant'
 import {
   fetchCustomerFiles, mkdirCustomerFolder, uploadCustomerFiles,
@@ -337,8 +337,6 @@ watch(() => props.show, v => {
   if (v) { activeFolder.value = ''; newFolder.open = false; load() }
 })
 watch(() => props.customer, () => { if (props.show) load() })
-onMounted(() => window.addEventListener('paste', onPaste))
-onBeforeUnmount(() => window.removeEventListener('paste', onPaste))
 </script>
 
 <style scoped>
