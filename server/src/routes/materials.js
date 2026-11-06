@@ -625,7 +625,7 @@ router.post('/', (req, res) => {
   const dup = findMaterialDuplicate(b)
   if (dup) return res.status(400).json({ code: 1, msg: dup.msg })
   const alternates = Array.isArray(b.alternates)
-    ? JSON.stringify(b.alternates.filter(a => a && (a.material_name || a.factory)))
+    ? JSON.stringify(b.alternates.filter(a => a && (a.material_code || a.material_name || a.factory || a.cost_price || a.lead_time)))
     : '[]'
   const remarkImages = Array.isArray(b.remark_images) ? JSON.stringify(b.remark_images) : '[]'
   const r = execute(`
@@ -718,7 +718,7 @@ router.put('/:id', (req, res) => {
   }, Number(req.params.id))
   if (dup) return res.status(400).json({ code: 1, msg: dup.msg })
   const alternates = Array.isArray(b.alternates)
-    ? JSON.stringify(b.alternates.filter(a => a && (a.material_name || a.factory)))
+    ? JSON.stringify(b.alternates.filter(a => a && (a.material_code || a.material_name || a.factory || a.cost_price || a.lead_time)))
     : (existing.alternates || '[]')
   const remarkImages = Array.isArray(b.remark_images) ? JSON.stringify(b.remark_images) : (existing.remark_images || '[]')
   execute(`
