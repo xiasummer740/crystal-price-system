@@ -408,7 +408,7 @@
               <p class="alt-hint">主料缺货时临时可用的相近物料（选填）</p>
               <div v-for="(alt, i) in form.alternates" :key="i" class="alt-card">
                 <div class="alt-card-main">
-                  <div class="alt-card-title">{{ alt.material_code || '（未填编码）' }}<span v-if="alt.factory" class="alt-card-factory"> · {{ alt.factory }}</span></div>
+                  <div class="alt-card-title"><span v-if="alt.jkx_code">{{ alt.jkx_code }} · </span>{{ alt.material_code || '（未填编码）' }}<span v-if="alt.factory" class="alt-card-factory"> · {{ alt.factory }}</span></div>
                   <div class="alt-card-name">{{ alt.material_name || '未填名称' }}</div>
                   <div class="alt-card-meta">
                     <span>成本：{{ alt.cost_price || '-' }}</span>
@@ -430,18 +430,28 @@
               <div class="alt-editor">
                 <h4>{{ altEditor.index >= 0 ? '编辑备选物料' : '新增备选物料' }}</h4>
                 <div class="alt-editor-grid">
+                  <label>晶科鑫料号<input v-model="altEditor.data.jkx_code" class="f-input" placeholder="如 SJK-7L32768K..." /></label>
                   <label>备选物料编码<input v-model="altEditor.data.material_code" class="f-input" placeholder="如 6K22032768K..." /></label>
                   <label>备选物料名称<input v-model="altEditor.data.material_name" class="f-input" placeholder="规格/描述" /></label>
                   <label>工厂<input v-model="altEditor.data.factory" class="f-input" placeholder="备选工厂" /></label>
                   <label>成本价<input v-model="altEditor.data.cost_price" class="f-input" placeholder="如 0.18含税" /></label>
                   <label>交期<input v-model="altEditor.data.lead_time" class="f-input" placeholder="如 7天 / 4-6周" /></label>
-                  <label class="alt-spec-field">规格书
-                    <span v-if="altEditor.data.spec_document" class="alt-spec-row">
+                  <div class="alt-spec-field">
+                    <div class="alt-spec-label">规格书</div>
+                    <div v-if="altEditor.data.spec_document" class="alt-spec-row">
                       <a :href="altEditor.data.spec_document" target="_blank">{{ specName(altEditor.data.spec_document) }}</a>
                       <button type="button" class="alt-op" @click="altEditor.data.spec_document = ''">移除</button>
-                    </span>
-                    <button v-else type="button" class="alt-op" @click="altSpecInputRef?.click()">上传规格书</button>
-                  </label>
+                      <button type="button" class="alt-op" @click="altSpecInputRef?.click()">替换</button>
+                    </div>
+                    <div v-else class="alt-spec-drop" :class="{ drag: altSpecDragging }"
+                      @click="altSpecInputRef?.click()"
+                      @dragover.prevent="altSpecDragging = true"
+                      @dragleave="altSpecDragging = false"
+                      @drop.prevent="onAltSpecDrop"
+                      @paste="onAltSpecPaste">
+                      点击选择 / 拖文件进来 / Ctrl+V 粘贴
+                    </div>
+                  </div>
                 </div>
                 <input ref="altSpecInputRef" type="file" hidden accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg" @change="onAltSpecChange" />
                 <div class="alt-editor-tip">主料缺货时临时可用的相近物料，选填</div>
@@ -1064,8 +1074,9 @@ const showListPreview = ref(false)
 // 客户文件柜（按日期+料号建文件夹）
 const showCustomerFiles = ref(false)
 const syncingCost = ref(false)
-const altEditor = reactive({ open: false, index: -1, data: { material_code: '', material_name: '', factory: '', cost_price: '', lead_time: '', spec_document: '' } })
+const altEditor = reactive({ open: false, index: -1, data: { jkx_code: '', material_code: '', material_name: '', factory: '', cost_price: '', lead_time: '', spec_document: '' } })
 const altSpecInputRef = ref(null)
+const altSpecDragging = ref(false)
 const customerAddresses = ref([])
 const showAddrPanel = ref(false)
 const quoteRef = ref(null)
@@ -1395,7 +1406,7 @@ function openForm(item) {
       status: item.status || '报价',
       customer_desc: item.customer_desc || '',
       remark: item.remark || '',
-      alternates: (item.alternates || []).map(a => ({ material_code: a.material_code || '', material_name: a.material_name || '', factory: a.factory || '', cost_price: a.cost_price || '', lead_time: a.lead_time || '', spec_document: a.spec_document || '' })),
+      alternates: (item.alternates || []).map(a => ({ material_code: a.material_code || '', material_name: a.material_name || '', factory: a.factory || '', cost_price: a.cost_price || '', lead_time: a.lead_time || '', spec_document: a.spec_document || '', jkx_code: a.jkx_code || '' })),
       spec_document: item.spec_document || '',
       remark_images: (item.remark_images || []).slice()
     }
@@ -1413,7 +1424,7 @@ function openForm(item) {
 
 // 备选物料/工厂
 function addAlternate() {
-  form.value.alternates.push({ material_code: '', material_name: '', factory: '', cost_price: '', lead_time: '', spec_document: '' })
+  form.value.alternates.push({ jkx_code: '', material_code: '', material_name: '', factory: '', cost_price: '', lead_time: '', spec_document: '' })
   openAltEditor(form.value.alternates.length - 1)
 }
 function removeAlternate(i) {
@@ -1421,7 +1432,7 @@ function removeAlternate(i) {
 }
 function openAltEditor(i) {
   altEditor.index = i
-  altEditor.data = { material_code: '', material_name: '', factory: '', cost_price: '', lead_time: '', spec_document: '', ...form.value.alternates[i] }
+  altEditor.data = { jkx_code: '', material_code: '', material_name: '', factory: '', cost_price: '', lead_time: '', spec_document: '', ...form.value.alternates[i] }
   altEditor.open = true
 }
 function saveAltEditor() {
@@ -1432,6 +1443,16 @@ function saveAltEditor() {
 async function onAltSpecChange(e) {
   const file = e.target.files?.[0]
   e.target.value = ''
+  if (file) await uploadAltSpec(file)
+}
+function onAltSpecDrop(e) { altSpecDragging.value = false; const f = e.dataTransfer?.files?.[0]; if (f) uploadAltSpec(f) }
+function onAltSpecPaste(e) {
+  const f = e.clipboardData?.files?.[0]
+  if (!f) return
+  e.preventDefault()
+  uploadAltSpec(f)
+}
+async function uploadAltSpec(file) {
   if (!file) return
   const fd = new FormData()
   fd.append('file', file)
@@ -1476,8 +1497,8 @@ async function doPromote(alt, i) {
       await createMaterial({
         customer: selectedCustomer.value,
         date: new Date().toISOString().slice(0, 10),
-        jkx_code: alt.material_code || '',
-        material_code: alt.material_code || '',
+        jkx_code: alt.jkx_code || '',
+        material_code: alt.material_code || alt.jkx_code || '',
         material_name: alt.material_name || alt.material_code || '',
         factory: alt.factory || '',
         cost_price: alt.cost_price || '',
@@ -1497,6 +1518,7 @@ async function doPromote(alt, i) {
     return
   }
   // 未保存的新记录：把备选内容填进主表单，由用户确认后保存
+  form.value.jkx_code = alt.jkx_code || form.value.jkx_code
   form.value.material_code = alt.material_code || form.value.material_code
   form.value.material_name = alt.material_name || form.value.material_name
   form.value.factory = alt.factory || form.value.factory
@@ -1509,6 +1531,7 @@ async function doPromote(alt, i) {
 
 function copyAlternate(alt) {
   const lines = [
+    alt.jkx_code ? '晶科鑫料号：' + alt.jkx_code : '',
     alt.material_code ? '编码：' + alt.material_code : '',
     alt.material_name ? '名称：' + alt.material_name : '',
     alt.factory ? '工厂：' + alt.factory : '',
@@ -2002,5 +2025,10 @@ onUnmounted(() => {
 .alt-spec-field { grid-column: 1 / -1; }
 .alt-spec-row { display: flex; align-items: center; gap: 8px; font-size: 12px; }
 .alt-spec-row a { color: #1677ff; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 260px; }
+
+
+.alt-spec-label { font-size: 12px; color: #667085; margin-bottom: 4px; }
+.alt-spec-drop { border: 1.5px dashed #cdd5df; border-radius: 8px; padding: 10px; text-align: center; font-size: 12px; color: #98a2b3; cursor: pointer; }
+.alt-spec-drop:hover, .alt-spec-drop.drag { border-color: var(--color-primary, #00794f); background: #f6fffb; color: #00794f; }
 
 </style>
