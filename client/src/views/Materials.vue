@@ -1186,11 +1186,12 @@ async function loadCustomerAddresses(name) {
 }
 function goMapAddresses() {
   if (!selectedCustomer.value) return
-  router.push({ path: '/map-addresses', query: { q: selectedCustomer.value } })
+  router.push({ path: '/map-addresses', query: { q: selectedCustomer.value, from: 'materials', customer: selectedCustomer.value } })
 }
 
 function selectCustomer(name, carryKeyword) {
   selectedCustomer.value = name
+  try { sessionStorage.setItem('mat_last_customer', name) } catch {}
   customerQuery.value = name
   showCustomerDropdown.value = false
   systemCustomers.value = []
@@ -1213,6 +1214,7 @@ function selectCustomer(name, carryKeyword) {
 
 function clearCustomer() {
   selectedCustomer.value = ''
+  try { sessionStorage.removeItem('mat_last_customer') } catch {}
   customerQuery.value = ''
   customerAddresses.value = []
   list.value = []
@@ -1699,6 +1701,11 @@ onMounted(async () => {
     statusOrder.value = statusOrderFromConfig(r.data)
   } catch {}
   await loadCustomerList()
+  // 从地图/别处返回时恢复客户，避免又要重新搜索
+  try {
+    const want = String(route.query.customer || sessionStorage.getItem('mat_last_customer') || '').trim()
+    if (want) selectCustomer(want)
+  } catch {}
   // 待跟进计数（未启用阈值时后端会返回 0，不会干扰界面）
   loadStaleCount()
   // 料号/工厂联想候选（打开表单时还会再刷新一次）
