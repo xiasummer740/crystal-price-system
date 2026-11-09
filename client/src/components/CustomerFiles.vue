@@ -10,13 +10,15 @@
 
         <div class="cf-toolbar">
           <button class="cf-btn primary" @click="startNew">＋ 新建文件夹</button>
+          <button v-if="activeFolder" class="cf-btn" @click="startSub">＋ 子文件夹</button>
           <span class="cf-hint">默认名：{{ today6 }} + 晶科鑫料号，后面可加后缀或整个改名</span>
           <button class="cf-btn" @click="load" :disabled="loading">{{ loading ? '刷新中…' : '刷新' }}</button>
         </div>
 
         <div class="cf-body">
           <aside class="cf-folders">
-            <button v-for="f in folders" :key="f.name" class="cf-folder" :class="{ on: f.name === activeFolder }" @click="activeFolder = f.name">
+            <button v-for="f in folders" :key="f.path" class="cf-folder" :class="{ on: f.path === activeFolder }"
+              :style="{ paddingLeft: (10 + depthOf(f.path) * 14) + 'px' }" @click="activeFolder = f.path">
               <span class="cf-folder-name">📁 {{ f.name }}</span>
               <em>{{ f.files.length }}</em>
             </button>
@@ -25,7 +27,7 @@
 
           <section class="cf-main">
             <div v-if="newFolder.open" class="cf-new">
-              <div class="cf-new-title">新建文件夹</div>
+              <div class="cf-new-title">新建文件夹<span v-if="newFolder.parent" class="cf-new-parent">（在 {{ newFolder.parent }} 下）</span></div>
               <div class="cf-new-row">
                 <input v-model="newFolder.name" class="cf-input" placeholder="261026SJK-xxxx" @input="newFolder.manual = true" />
                 <button class="cf-btn primary" @click="createFolder" :disabled="creating">{{ creating ? '创建中…' : '创建' }}</button>
@@ -123,7 +125,7 @@ const today6 = computed(() => {
   return String(d.getFullYear()).slice(2) + p(d.getMonth() + 1) + p(d.getDate())
 })
 
-const newFolder = reactive({ open: false, code: '', suffix: '', name: '', manual: false })
+const newFolder = reactive({ open: false, code: '', suffix: '', name: '', parent: '', manual: false })
 const rename = reactive({ open: false, mode: 'file', from: '', value: '' })
 
 // 料号去重，附带名称方便辨认
@@ -139,19 +141,29 @@ const materialOptions = computed(() => {
   return out
 })
 
-const activeFiles = computed(() => folders.value.find(f => f.name === activeFolder.value)?.files || [])
+const activeFiles = computed(() => folders.value.find(f => f.path === activeFolder.value)?.files || [])
+function depthOf(p) { return String(p || '').split('/').length - 1 }
 
 function applyTemplate() {
   if (!newFolder.open) return
-  newFolder.name = today6.value + (newFolder.code || '') + (newFolder.suffix || '')
+  newFolder.name = (newFolder.parent ? newFolder.parent + '/' : '') + today6.value + (newFolder.code || '') + (newFolder.suffix || '')
   newFolder.manual = true
 }
 
 function startNew() {
   newFolder.open = true
+  newFolder.parent = ''
   newFolder.code = ''
   newFolder.suffix = ''
   newFolder.name = today6.value
+  newFolder.manual = false
+}
+function startSub() {
+  newFolder.open = true
+  newFolder.parent = activeFolder.value
+  newFolder.code = ''
+  newFolder.suffix = ''
+  newFolder.name = activeFolder.value + '/' + today6.value
   newFolder.manual = false
 }
 
@@ -161,8 +173,8 @@ async function load() {
   try {
     const r = await fetchCustomerFiles(props.customer)
     folders.value = r.data?.folders || []
-    if (!folders.value.find(f => f.name === activeFolder.value)) {
-      activeFolder.value = folders.value[0]?.name || ''
+    if (!folders.value.find(f => f.path === activeFolder.value)) {
+      activeFolder.value = folders.value[0]?.path || ''
     }
   } catch (e) {
     showToast('读取失败: ' + (e.message || '未知错误'))
@@ -220,7 +232,8 @@ function onPaste(e) {
 }
 
 function fileUrl(name) {
-  return `/api/cust/${encodeURIComponent(props.customer)}/${encodeURIComponent('客户文件')}/${encodeURIComponent(activeFolder.value)}/${encodeURIComponent(name)}`
+  const folderPath = String(activeFolder.value || '').split('/').map(encodeURIComponent).join('/')
+  return `/api/cust/${encodeURIComponent(props.customer)}/${encodeURIComponent('客户文件')}/${folderPath}/${encodeURIComponent(name)}`
 }
 
 function startRename(name) {
@@ -390,5 +403,8 @@ watch(() => props.customer, () => { if (props.show) load() })
 .cf-rename-btns { display: flex; gap: 8px; justify-content: flex-end; margin-top: 14px; }
 .cf-btn { border: 1px solid #d0d5dd; background: #fff; border-radius: 6px; padding: 6px 14px; font-size: 13px; cursor: pointer; }
 .cf-btn.primary { background: var(--color-primary, #00794f); border-color: var(--color-primary, #00794f); color: #fff; }
+
+
+.cf-new-parent { color: #98a2b3; font-size: 11px; font-weight: normal; margin-left: 4px; }
 
 </style>

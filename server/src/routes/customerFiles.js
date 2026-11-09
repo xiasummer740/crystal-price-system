@@ -35,13 +35,20 @@ function filesRoot(customer) {
   return A.ensureDir(path.join(A.customerDirAbs(customer), ROOT_NAME))
 }
 
+function folderSegments(raw) {
+  return String(raw || '')
+    .split(/[\\/]+/)
+    .map((s) => safeName(s))
+    .filter(Boolean)
+}
+
 function folderAbs(customer, folder) {
   const root = filesRoot(customer)
-  const name = safeName(folder)
-  if (!name) return null
-  const abs = path.join(root, name)
+  const segs = folderSegments(folder)
+  if (!segs.length) return null
+  const abs = path.join(root, ...segs)
   if (!abs.startsWith(root + path.sep)) return null
-  return { root, name, abs }
+  return { root, name: segs.join('/'), abs }
 }
 
 function uniquePath(dir, name) {
@@ -76,20 +83,28 @@ router.get('/', (req, res) => {
     if (!customer) return res.status(400).json({ code: 1, msg: '缺少客户' })
     const root = filesRoot(customer)
     const folders = []
-    for (const e of fs.readdirSync(root, { withFileTypes: true })) {
-      if (!e.isDirectory()) continue
-      const abs = path.join(root, e.name)
-      const files = []
-      for (const f of fs.readdirSync(abs, { withFileTypes: true })) {
-        if (!f.isFile() || f.name.startsWith('.')) continue
-        let st
-        try { st = fs.statSync(path.join(abs, f.name)) } catch { continue }
-        files.push({ name: f.name, size: st.size, mtime: st.mtime.toISOString() })
+    // 递归收集子文件夹（祥哥 2026-11-09：文件夹里还能再建文件夹）
+    const walk = (dir, rel) => {
+      let entries = []
+      try { entries = fs.readdirSync(dir, { withFileTypes: true }) } catch { return }
+      for (const e of entries) {
+        if (!e.isDirectory()) continue
+        const abs = path.join(dir, e.name)
+        const relPath = rel ? rel + '/' + e.name : e.name
+        const files = []
+        for (const f of fs.readdirSync(abs, { withFileTypes: true })) {
+          if (!f.isFile() || f.name.startsWith('.')) continue
+          let st
+          try { st = fs.statSync(path.join(abs, f.name)) } catch { continue }
+          files.push({ name: f.name, size: st.size, mtime: st.mtime.toISOString() })
+        }
+        files.sort((a, b) => String(b.mtime).localeCompare(String(a.mtime)))
+        folders.push({ name: e.name, path: relPath, files })
+        walk(abs, relPath)
       }
-      files.sort((a, b) => String(b.mtime).localeCompare(String(a.mtime)))
-      folders.push({ name: e.name, files })
     }
-    folders.sort((a, b) => String(b.name).localeCompare(String(a.name)))
+    walk(root, '')
+    folders.sort((a, b) => String(a.path).localeCompare(String(b.path), 'zh'))
     res.json({ code: 0, data: { folders, relRoot: path.join(A.DIR.customers, A.customerFolder(customer), ROOT_NAME) } })
   } catch (e) {
     res.status(500).json({ code: 1, msg: '读取客户文件失败: ' + e.message })
