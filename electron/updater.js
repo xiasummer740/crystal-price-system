@@ -329,6 +329,21 @@ async function directDownload(silent = false) {
   }
 }
 
+/**
+ * 静默安装参数：/S 不弹安装向导，/D= 保持原安装目录（必须是最后一个参数）。
+ * NSIS 的 /D 不能加引号；安装目录通常不含空格（%LOCALAPPDATA%\Programs\...）。
+ */
+function silentInstallerArgs() {
+  let dir = ''
+  try {
+    const { app } = _require('electron')
+    dir = path.dirname(app.getPath('exe'))
+  } catch {}
+  const args = ['/S', '--updated']
+  if (dir && !dir.includes('"')) args.push(`/D=${dir}`)
+  return args
+}
+
 export function quitAndInstall() {
   if (!readyToInstall) { LOG('quitAndInstall: 没有就绪的安装包，忽略'); return }
   const kind = readyToInstall
@@ -344,7 +359,7 @@ export function quitAndInstall() {
   }
   try {
     const { spawn } = _require('child_process')
-    spawn(directDownloadPath, ['--updated'], { detached: true, stdio: 'ignore' })
+    spawn(directDownloadPath, silentInstallerArgs(), { detached: true, stdio: 'ignore' })
     const { app } = _require('electron')
     app.quit()
   } catch (err) {
@@ -374,7 +389,7 @@ export function installOnQuit() {
       return true
     }
     const { spawn } = _require('child_process')
-    spawn(directDownloadPath, ['--updated'], { detached: true, stdio: 'ignore' })
+    spawn(directDownloadPath, silentInstallerArgs(), { detached: true, stdio: 'ignore' })
     return true
   } catch (err) {
     LOG(`installOnQuit error: ${err.message}`)

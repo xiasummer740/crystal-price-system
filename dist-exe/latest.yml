@@ -1,8 +1,8 @@
-version: 1.0.285
+version: 1.0.286
 files:
-  - url: crystal-price-system-setup-1.0.285.exe
-    sha512: nG44OpyZviwyF3Oxd/iAECQhyuNB+RJysdYE2I4m6Zjluhe3gIS5Y2kYco+u6zlWl4QbTTWi0OU3lyw4NI8nXw==
-    size: 144873600
-path: crystal-price-system-setup-1.0.285.exe
-sha512: nG44OpyZviwyF3Oxd/iAECQhyuNB+RJysdYE2I4m6Zjluhe3gIS5Y2kYco+u6zlWl4QbTTWi0OU3lyw4NI8nXw==
-releaseDate: '2026-11-09T04:43:37.936Z'
+  - url: crystal-price-system-setup-1.0.286.exe
+    sha512: ZPcrvQFho2Wo9y+RqOC+Q06s+n/I4Evdgn0OB8h9gmHFJrr1V0J3DDSGfMLRV7RzI6I2Zq+4ZB1oxtUrG8hcrQ==
+    size: 144873695
+path: crystal-price-system-setup-1.0.286.exe
+sha512: ZPcrvQFho2Wo9y+RqOC+Q06s+n/I4Evdgn0OB8h9gmHFJrr1V0J3DDSGfMLRV7RzI6I2Zq+4ZB1oxtUrG8hcrQ==
+releaseDate: '2026-11-09T05:29:57.383Z'
