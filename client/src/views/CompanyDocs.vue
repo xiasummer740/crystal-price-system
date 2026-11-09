@@ -255,6 +255,8 @@ async function uploadFiles(files, ownerType, ownerNameVal, category) {
 const dragging = ref(false)
 let dragDepth = 0
 function onDragOver(e) {
+  // 文件夹组件内部自己处理拖拽，父级不要再拦（否则会重复上传到「未分类」）
+  if (e.target?.closest?.('.cdf')) return
   // 只在真的拖了文件时才亮遮罩（拖选中文字不该触发）
   if (!e.dataTransfer?.types?.includes('Files')) return
   dragDepth++
@@ -265,6 +267,7 @@ function onDragLeave() {
   if (!dragDepth) dragging.value = false
 }
 function onDrop(e) {
+  if (e.target?.closest?.('.cdf')) return
   dragDepth = 0
   dragging.value = false
   const files = [...(e.dataTransfer?.files || [])]
@@ -277,6 +280,7 @@ const currentCompanyId = computed(() => companies.value.find(c => c.name === own
 
 // ===== 粘贴上传（微信截图 → Ctrl+V）=====
 function onPaste(e) {
+  if (e.target?.closest?.('.cdf')) return
   const items = [...(e.clipboardData?.items || [])]
   const files = []
   for (const it of items) {
