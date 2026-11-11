@@ -56,9 +56,9 @@
             <div class="cd-group" v-if="systemCustomers.length">
               <div class="cd-group-title">全系统客户</div>
               <div v-for="c in systemCustomers" :key="c.name" class="cd-item"
-                @mousedown.prevent="selectCustomer(c.name, customerQuery)">
-                <span class="cd-name">👤 {{ c.name }}</span>
-                <span class="cd-hint">新建</span>
+                @mousedown.prevent="selectCustomer(c.customer || c.name, customerQuery, c.name)">
+                <span class="cd-name">{{ c.is_title ? '🏷' : '👤' }} {{ c.name }}</span>
+                <span class="cd-hint">{{ c.is_title ? '抬头' : '新建' }}</span>
               </div>
             </div>
             <div v-if="!customerList.length && !systemCustomers.length" class="cd-empty">
@@ -1190,10 +1190,10 @@ function goMapAddresses() {
   router.push({ path: '/map-addresses', query: { q: selectedCustomer.value, from: 'materials', customer: selectedCustomer.value } })
 }
 
-function selectCustomer(name, carryKeyword) {
+function selectCustomer(name, carryKeyword, displayName) {
   selectedCustomer.value = name
   try { sessionStorage.setItem('mat_last_customer', name) } catch {}
-  customerQuery.value = name
+  customerQuery.value = displayName || name
   showCustomerDropdown.value = false
   systemCustomers.value = []
   page.value = 1
@@ -1205,7 +1205,8 @@ function selectCustomer(name, carryKeyword) {
   // 但若搜索词只是客户名的一部分（如只敲了公司名中间几个字，却选中了完整公司名），
   // 说明用户就是在搜客户 → 不带入，免得每次都要手动清空
   const q = (carryKeyword || '').trim()
-  keyword.value = (q && !name.includes(q)) ? q : ''
+  const shown = displayName || name
+  keyword.value = (q && !shown.includes(q) && !name.includes(q)) ? q : ''
   loadCustomerAddresses(name)
   loadFactories()
   load()
