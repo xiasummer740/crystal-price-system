@@ -10,7 +10,7 @@
 //   根本不会发。所以「退出时装上」由下面的 installOnQuit() 显式负责。
 
 import { createRequire } from 'module'
-import { appendFileSync, createWriteStream, unlinkSync, existsSync, statSync } from 'fs'
+import { appendFileSync, createWriteStream, unlinkSync, existsSync, statSync, openSync, closeSync, ftruncateSync, writeSync } from 'fs'
 import https from 'https'
 import path from 'path'
 const _require = createRequire(import.meta.url)
@@ -213,6 +213,68 @@ function downloadOnceNet(url, destFile, expectedSize = 0) {
   })
 }
 
+/**
+ * 多线程分段下载（走 Electron net / 系统代理）。
+ * 单连接被 GitHub/代理限速时，4 路 Range 并行通常能快 5-8 倍。
+ */
+async function downloadParallelNet(url, destFile, expectedSize, threads = 6) {
+  const { session } = _require('electron')
+  const fd = openSync(destFile, 'w')
+  ftruncateSync(fd, expectedSize)
+  const chunkSize = Math.ceil(expectedSize / threads)
+  let downloaded = 0
+  let lastTime = Date.now()
+  let lastBytes = 0
+
+  const writeAt = (buf, pos) => {
+    let off = 0
+    while (off < buf.length) off += writeSync(fd, buf, off, buf.length - off, pos + off)
+  }
+
+  try {
+    const jobs = []
+    for (let i = 0; i < threads; i++) {
+      const start = i * chunkSize
+      const end = Math.min(expectedSize - 1, start + chunkSize - 1)
+      if (start > end) break
+      jobs.push((async () => {
+        // 每个分片用独立 session，绕开 Chromium 单 session 的连接/并发限制
+        const ses = session.fromPartition('crystal-update-' + i)
+        const r = await ses.fetch(url, { headers: { Range: `bytes=${start}-${end}` } })
+        if (r.status !== 206) throw new Error(`分段下载 HTTP ${r.status}`)
+        const reader = r.body.getReader()
+        let pos = start
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+          const buf = Buffer.from(value)
+          writeAt(buf, pos)
+          pos += buf.length
+          downloaded += buf.length
+          const now = Date.now()
+          if (now - lastTime >= 1000) {
+            const bps = Math.round((downloaded - lastBytes) / ((now - lastTime) / 1000))
+            lastTime = now
+            lastBytes = downloaded
+            mainWindow?.webContents.send('update:progress', {
+              percent: Math.round(downloaded / expectedSize * 100),
+              bytesPerSecond: bps,
+              total: expectedSize,
+              transferred: downloaded,
+            })
+          }
+        }
+      })())
+    }
+    await Promise.all(jobs)
+    const finalSize = statSync(destFile).size
+    if (expectedSize > 0 && finalSize !== expectedSize) throw new Error(`分段下载校验失败: ${finalSize}/${expectedSize}`)
+    mainWindow?.webContents.send('update:progress', { percent: 100, bytesPerSecond: 0, total: expectedSize, transferred: expectedSize })
+  } finally {
+    try { closeSync(fd) } catch {}
+  }
+}
+
 // 直连下载核心（带断点续传 + 重试）
 // 中断后重试会带上 Range 头从已下载位置续传，不从头再来
 async function downloadWithRetry(url, destFile, expectedSize = 0, retries = 3) {
@@ -366,7 +428,17 @@ async function directDownload(silent = false) {
     }
 
     // 带断点续传 + 重试的下载（expectedSize 用于完整性校验）
-    await downloadWithRetry(assetInfo.url, destFile, assetInfo.size)
+    // 大文件先试 4 路并行（GitHub 单连接常被限速到 ~100KB/s）
+    let parallelOk = false
+    if (process.versions.electron && assetInfo.size > 20 * 1024 * 1024) {
+      try {
+        await downloadParallelNet(assetInfo.url, destFile, assetInfo.size, 6)
+        parallelOk = true
+      } catch (e) {
+        LOG(`并行下载失败: ${e.message}，回退单线程`)
+      }
+    }
+    if (!parallelOk) await downloadWithRetry(assetInfo.url, destFile, assetInfo.size)
 
     // 最终大小校验（防止续传误判为完成）
     const finalSize = statSync(destFile).size
