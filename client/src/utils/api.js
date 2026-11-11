@@ -106,6 +106,19 @@ export function deleteMaterialImage(url) {
 export function copyMaterialFile(url) {
   return http.post('/materials/copy-file', { url })
 }
+/** 客户抬头（同一客户下多家开票主体） */
+export function fetchCustomerTitles(customer) {
+  return http.get('/customer-titles', { params: { customer } })
+}
+export function createCustomerTitle(data) {
+  return http.post('/customer-titles', data)
+}
+export function updateCustomerTitle(id, data) {
+  return http.put(`/customer-titles/${id}`, data)
+}
+export function deleteCustomerTitle(id) {
+  return http.delete(`/customer-titles/${id}`)
+}
 /** 客户收货地址（地图地址页的收货点/联系人地址） */
 export function fetchCustomerAddresses(customer) {
   return http.get('/materials/customer-addresses', { params: { customer } })
