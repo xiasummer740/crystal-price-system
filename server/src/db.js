@@ -306,6 +306,12 @@ export async function initDb() {
     )
   `)
   try { db.run('CREATE INDEX IF NOT EXISTS idx_map_customers_name ON map_customers(name)') } catch {}
+  // 客户资料按抬头隔离（2026-11-11）
+  try { db.run("ALTER TABLE company_docs ADD COLUMN title TEXT DEFAULT ''") } catch {}
+  try { db.run("ALTER TABLE company_doc_folders ADD COLUMN title TEXT DEFAULT ''") } catch {}
+  try { db.run("ALTER TABLE company_docs ADD COLUMN billing_title TEXT DEFAULT ''") } catch {}
+  try { db.run("ALTER TABLE company_doc_folders ADD COLUMN billing_title TEXT DEFAULT ''") } catch {}
+
   // 客户抬头（同一客户/集团下可有多家开票主体，2026-11-11）
   db.run(`
     CREATE TABLE IF NOT EXISTS customer_titles (

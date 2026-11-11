@@ -83,7 +83,14 @@
           按类目建文件夹（默认名「当天日期-自定义」，例如 20261029-ISO9001）；文件支持 <b>拖入 / Ctrl+V 粘贴 / 点击选择</b>，
           证照和体系证书可以单独设过期时间。
         </p>
-        <CompanyDocFolders v-if="ownerName" owner-type="customer" :owner-name="ownerName" :can-copy="canCopyFile" @changed="loadSummary" />
+        <div v-if="ownerName" class="doc-title-filter">
+          <span class="dtf-label">抬头</span>
+          <span class="dtf-chip" :class="{ active: docTitleFilter === null }" @click="docTitleFilter = null">全部</span>
+          <span class="dtf-chip" :class="{ active: docTitleFilter === '' }" @click="docTitleFilter = ''">公共资料</span>
+          <span v-for="t in docTitles" :key="t.id" class="dtf-chip" :class="{ active: docTitleFilter === t.title }"
+            @click="docTitleFilter = t.title">{{ t.title }}</span>
+        </div>
+        <CompanyDocFolders v-if="ownerName" owner-type="customer" :owner-name="ownerName" :billing-title="docTitleFilter" :can-copy="canCopyFile" @changed="loadSummary" />
         <div v-else class="main-empty">请先在左边选择客户</div>
       </section>
     </div>
@@ -134,7 +141,7 @@ import CompanyDocFolders from '../components/CompanyDocFolders.vue'
 import {
   fetchCompanyDocs, fetchCompanyDocsSummary, deleteCompanyDoc, uploadCompanyDocs,
   fetchCompanyProfiles, saveCompanyProfile, deleteCompanyProfile, fetchMaterialCustomers,
-  copyCompanyDoc, openCompanyDoc
+  copyCompanyDoc, openCompanyDoc, fetchCustomerTitles
 } from '../utils/api.js'
 
 const route = useRoute()
@@ -200,8 +207,20 @@ async function loadDocs() {
     docs.value = r.data || []
   } catch (e) { showNotify({ type: 'danger', message: '读取资料失败：' + e.message }) }
 }
+const docTitles = ref([])
+const docTitleFilter = ref(null)
+async function loadDocTitles(name) {
+  docTitles.value = []
+  docTitleFilter.value = null
+  if (!name) return
+  try {
+    const r = await fetchCustomerTitles(name)
+    docTitles.value = r.data || []
+  } catch {}
+}
 async function selectCustomer(name) {
   ownerName.value = name
+  await loadDocTitles(name)
   await loadDocs()
 }
 /** 逐个主体拉各自的资料（主体通常就一两家，开销可忽略） */
@@ -482,4 +501,10 @@ onUnmounted(() => { document.removeEventListener('paste', onPaste) })
 .ce-foot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
 .ce-btn { height: 32px; padding: 0 14px; font-size: 13px; border: 1px solid #dcdee0; background: #fff; border-radius: 6px; cursor: pointer; color: #323233; }
 .ce-btn.primary { background: var(--color-primary, #1989fa); border-color: var(--color-primary, #1989fa); color: #fff; }
+
+.doc-title-filter { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin: 0 0 10px; font-size: 12px; }
+.dtf-label { color: #98a2b3; }
+.dtf-chip { border: 1px solid #d6e4ff; background: #f2f7ff; color: #1f2937; border-radius: 12px; padding: 2px 10px; cursor: pointer; }
+.dtf-chip.active { border-color: #1677ff; background: #e6f0ff; color: #0958d9; }
+
 </style>

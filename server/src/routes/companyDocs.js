@@ -101,6 +101,12 @@ export function fixFileName(name) {
 }
 
 /** 归属目录：客户 → 公司资料/客户/<客户名>；自己公司 → 公司资料/自己公司/<主体名> */
+function folderDir(ownerType, ownerName, title, name) {
+  const base = ownerDir(ownerType, ownerName)
+  const t = safeName(title || '', 60)
+  return t ? path.join(base, t, name) : path.join(base, name)
+}
+
 export function ownerDir(ownerType, ownerName) {
   const sub = ownerType === 'self' ? '自己公司' : '客户'
   return path.join(DOCS_ROOT, sub, safeName(ownerName))
@@ -125,11 +131,13 @@ const upload = multer({
       const ownerName = safeName(String(req.query?.owner_name || '').trim())
       const folderId = Number(req.query?.folder_id) || 0
       let sub = ''
+      let subTitle = String(req.query?.title || '')
       if (folderId) {
-        const f = queryOne('SELECT name FROM company_doc_folders WHERE id = ? AND owner_type = ? AND owner_name = ?', [folderId, ownerType, ownerName])
-        if (f) sub = safeName(f.name)
+        const f = queryOne('SELECT name, billing_title FROM company_doc_folders WHERE id = ? AND owner_type = ? AND owner_name = ?', [folderId, ownerType, ownerName])
+        if (f) { sub = safeName(f.name); subTitle = f.billing_title || '' }
       }
-      const dir = path.join(ownerDir(ownerType, ownerName), sub)
+      const dir = sub ? folderDir(ownerType, ownerName, subTitle, sub) : ownerDir(ownerType, ownerName)
+      req._docTitle = subTitle
       try { fs.mkdirSync(dir, { recursive: true }) } catch {}
       req._docType = ownerType
       req._docOwner = ownerName
@@ -168,6 +176,7 @@ const shape = (r) => ({
   size: r.size || 0,
   url: `/api/company-docs/file/${String(r.file_path || '').split('/').map(encodeURIComponent).join('/')}`,
   note: r.note || '',
+  billing_title: r.billing_title || '',
   folder_id: r.folder_id || 0,
   expires_at: r.expires_at || '',
   created_at: r.created_at || '',
@@ -187,6 +196,10 @@ router.get('/docs', (req, res) => {
     sql += ' AND folder_id = ?'
     params.push(Number(req.query.folder_id) || 0)
   }
+  if (req.query.title !== undefined && req.query.title !== null) {
+    sql += ' AND billing_title = ?'
+    params.push(String(req.query.title))
+  }
   sql += ' ORDER BY created_at DESC, id DESC'
   const rows = queryAll(sql, params)
   res.json({ code: 0, data: rows.map(shape), categories: DOC_CATEGORIES })
@@ -204,18 +217,22 @@ router.get('/folders', (req, res) => {
     const ownerType = req.query.owner_type === 'self' ? 'self' : 'customer'
     const ownerName = String(req.query.owner_name || '').trim()
     if (!ownerName) return res.status(400).json({ code: 1, msg: '缺少归属名' })
-    const folders = queryAll(
-      'SELECT * FROM company_doc_folders WHERE owner_type = ? AND owner_name = ? ORDER BY name DESC',
-      [ownerType, ownerName]
-    )
+    let folderSql = 'SELECT * FROM company_doc_folders WHERE owner_type = ? AND owner_name = ?'
+    const folderParams = [ownerType, ownerName]
+    const titleFilter = req.query.title !== undefined && req.query.title !== null ? String(req.query.title) : null
+    if (titleFilter !== null) { folderSql += ' AND billing_title = ?'; folderParams.push(titleFilter) }
+    folderSql += ' ORDER BY name DESC'
+    const folders = queryAll(folderSql, folderParams)
+    const statTitle = titleFilter !== null ? ' AND billing_title = ?' : ''
+    const statParams = titleFilter !== null ? [ownerType, ownerName, titleFilter] : [ownerType, ownerName]
     const stats = queryAll(
       `SELECT folder_id,
               COUNT(*) AS total,
               SUM(CASE WHEN expires_at <> '' AND expires_at < date('now') THEN 1 ELSE 0 END) AS expired,
               SUM(CASE WHEN expires_at <> '' AND expires_at >= date('now') AND expires_at <= date('now','+30 day') THEN 1 ELSE 0 END) AS expiring
-         FROM company_docs WHERE owner_type = ? AND owner_name = ?
+         FROM company_docs WHERE owner_type = ? AND owner_name = ?${statTitle}
         GROUP BY folder_id`,
-      [ownerType, ownerName]
+      statParams
     )
     const byId = new Map(stats.map(x => [Number(x.folder_id) || 0, x]))
     const out = folders.map(f => {
@@ -242,18 +259,19 @@ router.post('/folders', (req, res) => {
     const raw = String(req.body?.name || '').trim()
     if (!ownerName) return res.status(400).json({ code: 1, msg: '缺少归属名' })
     const name = safeName(raw || `${todayTag()}-新文件夹`, 80)
+    const title = safeName(String(req.body?.title || ''), 60)
     if (!name) return res.status(400).json({ code: 1, msg: '文件夹名不合法' })
     const exists = queryOne(
-      'SELECT id FROM company_doc_folders WHERE owner_type = ? AND owner_name = ? AND name = ?',
-      [ownerType, ownerName, name]
+      'SELECT id FROM company_doc_folders WHERE owner_type = ? AND owner_name = ? AND name = ? AND IFNULL(title, \'\') = ?',
+      [ownerType, ownerName, name, title]
     )
     if (exists) return res.status(400).json({ code: 1, msg: '文件夹「' + name + '」已存在' })
     const r = execute(
-      'INSERT INTO company_doc_folders (owner_type, owner_name, name) VALUES (?, ?, ?)',
-      [ownerType, ownerName, name]
+      'INSERT INTO company_doc_folders (owner_type, owner_name, name, billing_title) VALUES (?, ?, ?, ?)',
+      [ownerType, ownerName, name, title]
     )
     saveNow()
-    try { fs.mkdirSync(path.join(ownerDir(ownerType, ownerName), name), { recursive: true }) } catch {}
+    try { fs.mkdirSync(folderDir(ownerType, ownerName, title, name), { recursive: true }) } catch {}
     res.json({ code: 0, data: { id: r.lastInsertRowid, name } })
   } catch (e) {
     res.status(500).json({ code: 1, msg: '新建文件夹失败: ' + e.message })
@@ -270,7 +288,7 @@ router.delete('/folders/:id', (req, res) => {
     execute('DELETE FROM company_doc_folders WHERE id = ?', [id])
     saveNow()
     try {
-      const dir = path.join(ownerDir(f.owner_type, f.owner_name), f.name)
+      const dir = folderDir(f.owner_type, f.owner_name, f.billing_title, f.name)
       if (fs.existsSync(dir) && !fs.readdirSync(dir).length) fs.rmdirSync(dir)
     } catch {}
     res.json({ code: 0 })
@@ -305,14 +323,13 @@ router.post('/folders/:id/rename', (req, res) => {
     if (!name) return res.status(400).json({ code: 1, msg: '文件夹名不合法' })
     if (name === f.name) return res.json({ code: 0, data: { id, name } })
     const dup = queryOne(
-      'SELECT id FROM company_doc_folders WHERE owner_type = ? AND owner_name = ? AND name = ? AND id <> ?',
-      [f.owner_type, f.owner_name, name, id]
+      'SELECT id FROM company_doc_folders WHERE owner_type = ? AND owner_name = ? AND name = ? AND IFNULL(billing_title, \'\') = ? AND id <> ?',
+      [f.owner_type, f.owner_name, name, f.billing_title || '', id]
     )
     if (dup) return res.status(400).json({ code: 1, msg: '已经有同名文件夹了' })
 
-    const base = ownerDir(f.owner_type, f.owner_name)
-    const oldDir = path.join(base, f.name)
-    const newDir = path.join(base, name)
+    const oldDir = folderDir(f.owner_type, f.owner_name, f.billing_title, f.name)
+    const newDir = folderDir(f.owner_type, f.owner_name, f.billing_title, name)
     if (fs.existsSync(newDir)) return res.status(400).json({ code: 1, msg: '磁盘上已有同名文件夹' })
     if (fs.existsSync(oldDir)) {
       try { fs.renameSync(oldDir, newDir) }
@@ -343,6 +360,7 @@ router.post('/docs/:id/move', (req, res) => {
     const targetId = Number(req.body?.folder_id) || 0
     if (targetId === Number(doc.folder_id || 0)) return res.json({ code: 0, data: { id } })
     let targetName = ''
+    let targetTitle = ''
     if (targetId) {
       const tf = queryOne('SELECT * FROM company_doc_folders WHERE id = ?', [targetId])
       if (!tf) return res.status(404).json({ code: 1, msg: '目标文件夹不存在' })
@@ -350,10 +368,11 @@ router.post('/docs/:id/move', (req, res) => {
         return res.status(400).json({ code: 1, msg: '不能移到别的客户/主体的文件夹' })
       }
       targetName = tf.name
+      targetTitle = tf.billing_title || ''
     }
     const absOld = absOf(doc.file_path)
     if (!fs.existsSync(absOld)) return res.status(404).json({ code: 1, msg: '文件不存在（可能被手工删了）' })
-    const targetDir = path.join(ownerDir(doc.owner_type, doc.owner_name), targetName)
+    const targetDir = targetName ? folderDir(doc.owner_type, doc.owner_name, targetTitle, targetName) : ownerDir(doc.owner_type, doc.owner_name)
     fs.mkdirSync(targetDir, { recursive: true })
     let dest = path.join(targetDir, path.basename(absOld))
     const ext = path.extname(dest); const stem = path.basename(dest, ext)
@@ -379,11 +398,11 @@ router.post('/upload', upload.array('files', 9), (req, res) => {
     const original = fixFileName(f.originalname)   // 中文文件名还原（同上）
     const ext = extOf(original)
     const r = execute(
-      `INSERT INTO company_docs (owner_type, owner_name, category, title, file_name, file_path, ext, size, mime, note, folder_id, expires_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO company_docs (owner_type, owner_name, category, title, file_name, file_path, ext, size, mime, note, folder_id, expires_at, billing_title)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [req._docType, req._docOwner, category, original.slice(0, 200), original.slice(0, 200),
        relOf(f.path), ext, f.size || 0, f.mimetype || '', note,
-       Number(req.query?.folder_id) || 0, String(req.query?.expires_at || '').slice(0, 10)]
+       Number(req.query?.folder_id) || 0, String(req.query?.expires_at || '').slice(0, 10), req._docTitle || '']
     )
     out.push(shape(queryOne('SELECT * FROM company_docs WHERE id = ?', [r.lastInsertRowid])))
   }

@@ -133,6 +133,7 @@ import {
 const props = defineProps({
   ownerType: { type: String, default: 'customer' },
   ownerName: { type: String, default: '' },
+  billingTitle: { type: String, default: null },
   canCopy: { type: Boolean, default: false }
 })
 const emit = defineEmits(['changed'])
@@ -172,7 +173,7 @@ async function load() {
   if (!props.ownerName) { folders.value = []; return }
   loading.value = true
   try {
-    const r = await fetchDocFolders(props.ownerType, props.ownerName)
+    const r = await fetchDocFolders(props.ownerType, props.ownerName, props.billingTitle)
     folders.value = r.data?.folders || []
     uncategorized.value = r.data?.uncategorized || { id: 0, name: '未分类', total: 0, expired: 0, expiring: 0 }
     if (activeFolder.value && !activeFolder.value.virtual) {
@@ -199,7 +200,7 @@ function closeFolder() {
 async function loadFiles() {
   if (!activeFolder.value) return
   try {
-    const r = await fetchCompanyDocs(props.ownerType, props.ownerName, activeFolder.value.id)
+    const r = await fetchCompanyDocs(props.ownerType, props.ownerName, activeFolder.value.id, props.billingTitle)
     files.value = r.data || []
   } catch (e) {
     showNotify({ type: 'danger', message: '读取文件失败：' + (e.message || '未知错误') })
@@ -217,7 +218,7 @@ async function createFolder() {
   if (!name || name === `${todayTag()}-`) return showNotify({ type: 'danger', message: '请填文件夹名（日期后面加点内容）' })
   creating.value = true
   try {
-    const r = await createDocFolder(props.ownerType, props.ownerName, name)
+    const r = await createDocFolder(props.ownerType, props.ownerName, name, props.billingTitle || '')
     showSuccessToast('已创建「' + r.data.name + '」')
     showNew.value = false
     await load()
@@ -264,6 +265,7 @@ async function doUpload(list) {
       ownerType: props.ownerType,
       ownerName: props.ownerName,
       folderId: activeFolder.value.id,
+      billingTitle: props.billingTitle || '',
       files: list
     })
     showSuccessToast(`已上传 ${list.length} 个文件`)
@@ -397,6 +399,7 @@ function fmtSize(n) {
 }
 
 watch(() => props.ownerName, () => { closeFolder(); load() })
+watch(() => props.billingTitle, () => { closeFolder(); load() })
 onMounted(() => { load(); window.addEventListener('paste', onPaste) })
 onBeforeUnmount(() => window.removeEventListener('paste', onPaste))
 defineExpose({ load, closeFolder })
