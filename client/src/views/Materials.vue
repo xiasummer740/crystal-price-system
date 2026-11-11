@@ -73,6 +73,7 @@
              界面上找不到任何地方能删 —— 因为页面显示的是并集，只删名册没用。
              这个入口提供「删除（仅零引用）/ 合并到正确全名」，合并会把报价/客户物料/记事/地图
              里的写法一起改掉。） -->
+        <button v-if="selectedCustomer" class="registry-btn switch-btn" title="清空当前选择，回到客户列表重新选" @click="clearCustomer">切换客户</button>
         <button class="registry-btn" title="管理客户名册：删除没人用的名字 / 把简写合并到正确全名" @click="showRegistry = true">名册管理</button>
       </div>
 
@@ -1743,6 +1744,7 @@ onUnmounted(() => {
 /* 名册管理入口：低调一点，别和「客户」选择框抢注意力 */
 .registry-btn { flex-shrink: 0; height: 38px; padding: 0 12px; font-size: 12px; color: #576b95; background: #f5f6f8; border: 1px solid transparent; border-radius: 8px; cursor: pointer; white-space: nowrap; transition: all .2s; }
 .registry-btn:hover { background: #fff; border-color: var(--color-primary); color: var(--color-primary); }
+.switch-btn { color: #00794f; }
 .customer-select-wrap { position: relative; flex: 1; display: flex; align-items: center; gap: 6px; background: #f5f6f8; border-radius: 8px; padding: 0 10px; height: 38px; border: 1px solid transparent; transition: all .2s; }
 .customer-select-wrap.focused { border-color: var(--color-primary); background: #fff; box-shadow: 0 0 0 2px rgba(var(--color-primary-rgb),.1); }
 .cs-label { font-size: 12px; color: #888; white-space: nowrap; }
