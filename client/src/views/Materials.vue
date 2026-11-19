@@ -9,6 +9,7 @@
           <span class="result-badge" v-else-if="customerList.length">共 {{ customerList.length }} 个客户</span>
         </div>
         <div class="header-right">
+          <button class="action-btn" :disabled="!selectedCustomer" @click="goCommission" title="佣金/回扣计算与备案表">💰 佣金</button>
           <button class="action-btn" @click="handleBackup" title="导出 Excel 备份">📥 备份</button>
           <button class="action-btn" @click="handleImport" title="从 Excel 导入">📤 导入</button>
           <!-- 只在桌面端显示：手机浏览器没有「打开文件夹」这回事 -->
@@ -1269,6 +1270,10 @@ async function loadCustomerAddresses(name) {
 function goMapAddresses() {
   if (!selectedCustomer.value) return
   router.push({ path: '/map-addresses', query: { q: selectedCustomer.value, from: 'materials', customer: selectedCustomer.value } })
+}
+function goCommission() {
+  if (!selectedCustomer.value) return
+  router.push({ path: '/commission', query: { customer: selectedCustomer.value } })
 }
 
 function selectCustomer(name, carryKeyword, displayName) {

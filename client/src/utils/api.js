@@ -119,8 +119,33 @@ export function updateCustomerTitle(id, data) {
 export function deleteCustomerTitle(id) {
   return http.delete(`/customer-titles/${id}`)
 }
-/** 客户收货地址（地图地址页的收货点/联系人地址） */
-export function fetchCustomerAddresses(customer) {
+// ===== 佣金/回扣 =====
+export function fetchCommissionProfile(customer) {
+  return http.get('/commissions/profile', { params: { customer } })
+}
+export function saveCommissionProfile(data) {
+  return http.put('/commissions/profile', data)
+}
+export function fetchCommissionSheets(customer) {
+  return http.get('/commissions/sheets', { params: { customer } })
+}
+export function fetchCommissionSheet(id) {
+  return http.get(`/commissions/sheets/${id}`)
+}
+export function saveCommissionSheet(data) {
+  return http.post('/commissions/sheets', data)
+}
+export function deleteCommissionSheet(id) {
+  return http.delete(`/commissions/sheets/${id}`)
+}
+export function commissionXlsxUrl(id) {
+  return `/api/commissions/sheets/${id}/xlsx`
+}
+export function commissionDocxUrl(id) {
+  return `/api/commissions/sheets/${id}/docx`
+}
+
+/** 客户收货地址（地图地址页的收货点/联系人地址） */export function fetchCustomerAddresses(customer) {
   return http.get('/materials/customer-addresses', { params: { customer } })
 }
 /** 报价页面：按物料编码取最近一条报价 */

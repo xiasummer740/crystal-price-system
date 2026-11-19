@@ -22,6 +22,7 @@ import ordersRouter from './routes/orders.js'
 import customerFilesRouter from './routes/customerFiles.js'
 import quotesRouter from './routes/quotes.js'
 import customerTitlesRouter from './routes/customerTitles.js'
+import commissionsRouter from './routes/commissions.js'
 import { exportToExcel, importFromExcel, generateTemplate, generateSampleTemplate, generateNoteTemplate } from './utils/export.js'
 import { initDb, saveNow, queryAll, execute, flushDeferredDailyDbBackup } from './db.js'
 import { triggerBackup, flushPending } from './utils/excelBackup.js'
@@ -149,6 +150,7 @@ app.use('/api/customer-files', customerFilesRouter)
 // 生成报价单：客户管理/<客户>/报价单/，模板保真（docx + PDF）
 app.use('/api/quotes', quotesRouter)
 app.use('/api/customer-titles', customerTitlesRouter)
+app.use('/api/commissions', commissionsRouter)
 
 // 导出 Excel
 app.get('/api/export', (req, res) => {

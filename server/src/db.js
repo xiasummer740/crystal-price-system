@@ -331,6 +331,37 @@ export async function initDb() {
   // 客户物料：交期（祥哥 2026-11-06）
   try { db.run("ALTER TABLE customer_materials ADD COLUMN lead_time TEXT DEFAULT ''") } catch {}
 
+  // 佣金/回扣（2026-11-19）
+  db.run(`
+    CREATE TABLE IF NOT EXISTS commission_profiles (
+      customer     TEXT PRIMARY KEY,
+      points       REAL DEFAULT 3,
+      department   TEXT DEFAULT '代理部',
+      business     TEXT DEFAULT '夏祥',
+      bank_name    TEXT DEFAULT '深圳农商银行',
+      account_name TEXT DEFAULT '张建庭',
+      account_no   TEXT DEFAULT '6230 3518 8891 2769',
+      tax_rate     REAL DEFAULT 13,
+      updated_at   DATETIME DEFAULT (datetime('now','localtime'))
+    )
+  `)
+  db.run(`
+    CREATE TABLE IF NOT EXISTS commission_sheets (
+      id            INTEGER PRIMARY KEY AUTOINCREMENT,
+      customer      TEXT NOT NULL,
+      period_start  TEXT DEFAULT '',
+      period_end    TEXT DEFAULT '',
+      points        REAL DEFAULT 3,
+      tax_rate      REAL DEFAULT 13,
+      rows_json     TEXT DEFAULT '[]',
+      total_qty     REAL DEFAULT 0,
+      total_rebate  REAL DEFAULT 0,
+      status        TEXT DEFAULT '草稿',
+      created_at    DATETIME DEFAULT (datetime('now','localtime')),
+      updated_at    DATETIME DEFAULT (datetime('now','localtime'))
+    )
+  `)
+
   // 客户资料最近更新时间（列表排序用）
   try { db.run("ALTER TABLE map_customers ADD COLUMN updated_at TEXT DEFAULT ''") } catch {}
   // 地址变更历史（谁改的、什么时候）

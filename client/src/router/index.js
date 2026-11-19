@@ -32,6 +32,7 @@ const routes = [
   { path: '/reports/company/:customer', name: 'CompanyReport', component: CompanyReport, meta: { title: '公司记事汇总' } },
   { path: '/map-addresses', name: 'MapAddresses', component: () => import('../views/MapAddresses.vue'), meta: { title: '地图地址' } },
   { path: '/coverage', name: 'CoverageBoard', component: () => import('../views/CoverageBoard.vue'), meta: { title: '覆盖看板' } },
+  { path: '/commission', name: 'Commission', component: () => import('../views/Commission.vue'), meta: { title: '佣金回扣' } },
   { path: '/performance', name: 'Performance', component: () => import('../views/PerformanceReview.vue'), meta: { title: '绩效明细' } },
   { path: '/materials', name: 'Materials', component: () => import('../views/Materials.vue'), meta: { title: '客户物料' } },
   { path: '/trip-plans', name: 'TripPlans', component: () => import('../views/TripPlan.vue'), meta: { title: '行程规划' } },

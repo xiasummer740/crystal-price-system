@@ -1137,6 +1137,26 @@ ipcMain.handle('open-map-window', () => {
 ipcMain.handle('open-external', (_, url) => { shell.openExternal(url) })
 // 在资源管理器里精确选中文件（比 explorer /select 更稳，支持中文/空格路径）
 ipcMain.handle('reveal-path', (_, p) => { if (p) shell.showItemInFolder(String(p)) })
+// 把一段 HTML 渲染成 PNG（佣金明细表直接用，免装截图库）
+ipcMain.handle('capture-html', async (_, payload) => {
+  const { html, fileName } = payload || {}
+  if (!html) return ''
+  const win = new BrowserWindow({ show: false, width: 1400, height: 1000, webPreferences: { offscreen: true } })
+  try {
+    await win.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(html))
+    await new Promise(r => setTimeout(r, 600))
+    const img = await win.webContents.capturePage()
+    const def = path.join(app.getPath('pictures'), fileName || '佣金明细.png')
+    const r = await dialog.showSaveDialog({ defaultPath: def, filters: [{ name: 'PNG 图片', extensions: ['png'] }] })
+    if (r.canceled || !r.filePath) return ''
+    fs.writeFileSync(r.filePath, img.toPNG())
+    return r.filePath
+  } catch (e) {
+    return ''
+  } finally {
+    try { win.destroy() } catch {}
+  }
+})
 
 // === 复制图片到系统剪贴板 ===
 // 放主进程的理由：渲染进程在 Electron 里写图片剪贴板要过 secure-context 与权限两道，
