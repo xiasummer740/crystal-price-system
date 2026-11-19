@@ -28,6 +28,7 @@ function calcRow(r, points, defaultTax) {
     quote,
     tax_rate: tax,
     order_price: Math.round(order * 10000) / 10000,
+    total_amount: Math.round(order * qty * 100) / 100,
     rebate: Math.round(num(rebate) * 100) / 100
   }
 }
@@ -148,21 +149,22 @@ router.get('/sheets/:id/xlsx', async (req, res) => {
       { key: 'order_price', width: 12 },
       { key: 'quote', width: 12 },
       { key: 'tax_rate', width: 10 },
+      { key: 'total_amount', width: 14 },
       { key: 'rebate', width: 12 },
       { key: 'remark', width: 16 }
     ]
     const title = `${row.customer} 佣金明细`
     const period = [row.period_start, row.period_end].filter(Boolean).join(' ~ ')
-    ws.mergeCells('A1:G1')
+    ws.mergeCells('A1:H1')
     ws.getCell('A1').value = title
     ws.getCell('A1').font = { name: '微软雅黑', size: 16, bold: true }
     ws.getCell('A1').alignment = { horizontal: 'center', vertical: 'middle' }
     ws.getRow(1).height = 30
-    ws.mergeCells('A2:G2')
+    ws.mergeCells('A2:H2')
     ws.getCell('A2').value = `统计期间：${period || '-'}    点数：${row.points}%    税率：${row.tax_rate}%    制表日期：${new Date().toLocaleDateString('zh-CN')}`
     ws.getCell('A2').font = { name: '微软雅黑', size: 10, color: { argb: 'FF667085' } }
     ws.getCell('A2').alignment = { horizontal: 'center' }
-    const header = ['名称', '数量', '下单价格', '报价', '税率', '回扣', '备注']
+    const header = ['名称', '数量', '下单价格', '报价', '税率', '含税总金额', '回扣', '备注']
     const hr = ws.getRow(3)
     header.forEach((h, i) => {
       const c = hr.getCell(i + 1)
@@ -180,27 +182,29 @@ router.get('/sheets/:id/xlsx', async (req, res) => {
       row.getCell(3).value = r.order_price
       row.getCell(4).value = r.quote
       row.getCell(5).value = `${r.tax_rate}%`
-      row.getCell(6).value = r.rebate
-      row.getCell(7).value = r.remark || ''
+      row.getCell(6).value = r.total_amount ?? Math.round(num(r.order_price) * num(r.qty) * 100) / 100
+      row.getCell(7).value = r.rebate
+      row.getCell(8).value = r.remark || ''
       row.eachCell((c, col) => {
         c.font = { name: '微软雅黑', size: 10 }
-        c.alignment = { horizontal: col === 1 || col === 7 ? 'left' : 'center', vertical: 'middle', wrapText: col === 1 }
+        c.alignment = { horizontal: col === 1 || col === 8 ? 'left' : 'center', vertical: 'middle', wrapText: col === 1 }
         c.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } }
         if (col === 3 || col === 4) c.numFmt = '0.0000'
-        if (col === 6) c.numFmt = '#,##0.00'
+        if (col === 6 || col === 7) c.numFmt = '#,##0.00'
         if (col === 2) c.numFmt = '#,##0'
       })
     })
     const sumRow = ws.getRow(4 + rows.length)
     sumRow.getCell(1).value = '合计'
     sumRow.getCell(2).value = rows.reduce((s, r) => s + num(r.qty), 0)
-    sumRow.getCell(6).value = rows.reduce((s, r) => s + num(r.rebate), 0)
+    sumRow.getCell(6).value = rows.reduce((s, r) => s + num(r.total_amount ?? num(r.order_price) * num(r.qty)), 0)
+    sumRow.getCell(7).value = rows.reduce((s, r) => s + num(r.rebate), 0)
     sumRow.eachCell((c, col) => {
       c.font = { name: '微软雅黑', size: 10, bold: true }
       c.alignment = { horizontal: col === 1 ? 'left' : 'center' }
       c.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } }
       if (col === 2) c.numFmt = '#,##0'
-      if (col === 6) c.numFmt = '#,##0.00'
+      if (col === 6 || col === 7) c.numFmt = '#,##0.00'
     })
     ws.getColumn(1).alignment = { wrapText: true, vertical: 'middle' }
     const buf = await wb.xlsx.writeBuffer()

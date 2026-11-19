@@ -41,7 +41,8 @@
               <th style="width:12%">下单价格</th>
               <th style="width:12%">报价</th>
               <th style="width:9%">税率</th>
-              <th style="width:13%">回扣</th>
+              <th style="width:13%">含税总金额</th>
+              <th style="width:12%">回扣</th>
               <th>备注</th>
               <th style="width:44px"></th>
             </tr>
@@ -56,6 +57,7 @@
               </td>
               <td><input v-model.number="r.quote" type="number" step="0.0001" @input="autoOrder(r); recalcRow(r)" /></td>
               <td><input v-model.number="r.tax_rate" type="number" step="0.5" @input="r.tax_manual = true; recalcRow(r)" /></td>
+              <td><span class="cm-amount">{{ Number(r.total_amount || 0).toFixed(2) }}</span></td>
               <td>
                 <input v-model.number="r.rebate" type="number" step="0.01" :title="r.rebate_manual ? '手工回扣' : '(下单价-报价)×数量÷(1+税率)'"
                   @input="r.rebate_manual = true" />
@@ -64,14 +66,14 @@
               <td><button class="cm-del" @click="rows.splice(i, 1)">×</button></td>
             </tr>
             <tr v-if="!rows.length">
-              <td colspan="8" class="cm-empty">点「＋ 新增行」或「从物料添加」开始</td>
-            </tr>
+              <td colspan="8" class="cm-empty">点「＋ 新增行」或「从物料添加」开始</td>            </tr>
           </tbody>
           <tfoot>
             <tr>
               <td><b>合计</b></td>
               <td><b>{{ totalQty }}</b></td>
               <td colspan="3"></td>
+              <td><b>{{ totalAmount.toFixed(2) }}</b></td>
               <td><b class="cm-total">{{ totalRebate.toFixed(2) }}</b></td>
               <td colspan="2"></td>
             </tr>
@@ -155,6 +157,7 @@ const materials = ref([])
 const pickedIds = ref([])
 
 const totalQty = computed(() => rows.value.reduce((s, r) => s + Number(r.qty || 0), 0))
+const totalAmount = computed(() => rows.value.reduce((s, r) => s + Number(r.total_amount || 0), 0))
 const totalRebate = computed(() => rows.value.reduce((s, r) => s + Number(r.rebate || 0), 0))
 const filteredMaterials = computed(() => {
   const kw = materialKw.value.trim().toLowerCase()
@@ -174,6 +177,7 @@ function autoOrder(r) {
 }
 function recalcRow(r) {
   if (!r.order_manual) autoOrder(r)
+  r.total_amount = round2(num(r.order_price) * num(r.qty))
   if (!r.rebate_manual) {
     const tax = r.tax_rate === undefined || r.tax_rate === '' ? num(taxRate.value) : num(r.tax_rate)
     r.rebate = round2((num(r.order_price) - num(r.quote)) * num(r.qty) / (1 + tax / 100))
@@ -183,7 +187,7 @@ function recalcAll() {
   for (const r of rows.value) recalcRow(r)
 }
 function addRow() {
-  rows.value.push({ name: '', qty: 0, order_price: '', quote: '', tax_rate: taxRate.value, rebate: '', remark: '', order_manual: false, rebate_manual: false })
+  rows.value.push({ name: '', qty: 0, order_price: '', quote: '', tax_rate: taxRate.value, total_amount: 0, rebate: '', remark: '', order_manual: false, rebate_manual: false })
 }
 async function openMaterialPicker() {
   materialKw.value = ''
@@ -204,6 +208,7 @@ function addPickedMaterials() {
       order_price: Math.round(quote * (1 + num(points.value) / 100) * 100) / 100,
       quote,
       tax_rate: taxRate.value,
+      total_amount: 0,
       rebate: 0,
       remark: '',
       order_manual: false,
@@ -271,6 +276,7 @@ function buildPrintHtml() {
     <td>${Number(r.order_price || 0).toFixed(4)}</td>
     <td>${Number(r.quote || 0).toFixed(4)}</td>
     <td>${Number(r.tax_rate || 0)}%</td>
+    <td>${Number(r.total_amount || 0).toFixed(2)}</td>
     <td class="rebate">${Number(r.rebate || 0).toFixed(2)}</td>
     <td>${esc(r.remark || '')}</td>
   </tr>`).join('')
@@ -289,9 +295,9 @@ function buildPrintHtml() {
   <h2>${esc(customer.value)} 佣金明细</h2>
   <div class="meta">统计期间：${esc(periodStart.value || '-')} ~ ${esc(periodEnd.value || '-')}　点数：${points.value}%　税率：${taxRate.value}%　制表日期：${new Date().toLocaleDateString('zh-CN')}</div>
   <table>
-    <thead><tr><th style="width:32%">名称</th><th>数量</th><th>下单价格</th><th>报价</th><th>税率</th><th>回扣</th><th>备注</th></tr></thead>
+    <thead><tr><th style="width:30%">名称</th><th>数量</th><th>下单价格</th><th>报价</th><th>税率</th><th>含税总金额</th><th>回扣</th><th>备注</th></tr></thead>
     <tbody>${list}</tbody>
-    <tfoot><tr><td>合计</td><td>${totalQty.value}</td><td colspan="3"></td><td class="rebate">${totalRebate.value.toFixed(2)}</td><td></td></tr></tfoot>
+    <tfoot><tr><td>合计</td><td>${totalQty.value}</td><td colspan="3"></td><td>${totalAmount.value.toFixed(2)}</td><td class="rebate">${totalRebate.value.toFixed(2)}</td><td></td></tr></tfoot>
   </table>
   </body></html>`
 }
@@ -311,7 +317,12 @@ async function loadSheet(s) {
     periodEnd.value = d.period_end || ''
     points.value = d.points
     taxRate.value = d.tax_rate
-    rows.value = (d.rows || []).map(x => ({ ...x, order_manual: true, rebate_manual: true }))
+    rows.value = (d.rows || []).map(x => ({
+      ...x,
+      total_amount: x.total_amount ?? Math.round(Number(x.order_price || 0) * Number(x.qty || 0) * 100) / 100,
+      order_manual: true,
+      rebate_manual: true
+    }))
     showHistory.value = false
     showToast('已载入佣金单')
   } catch { showToast('载入失败') }
@@ -352,6 +363,7 @@ onMounted(async () => {
 .cm-table input:focus { border-color: #1677ff; background: #fff; border-radius: 4px; }
 .cm-del { border: none; background: #fff1f0; color: #d92d20; border-radius: 4px; width: 24px; height: 24px; cursor: pointer; }
 .cm-total { color: #d46b08; }
+.cm-amount { display: inline-block; padding: 5px 4px; color: #1f2937; }
 .cm-empty { text-align: center; color: #98a2b3; padding: 18px 0; }
 .cm-hint { color: #98a2b3; font-size: 12px; margin-top: 8px; }
 .cm-mask { position: fixed; inset: 0; background: rgba(15,23,42,.45); z-index: 4000; display: flex; align-items: center; justify-content: center; }
