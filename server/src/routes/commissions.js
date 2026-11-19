@@ -20,7 +20,8 @@ function calcRow(r, points, defaultTax) {
     : num(r.order_price)
   let rebate = r.rebate
   if (rebate === '' || rebate === undefined || rebate === null) {
-    rebate = (order - quote) * qty / (1 + tax / 100)
+    // 回扣 = 含税总金额 × 点数% ÷ (1 + 税率)
+    rebate = order * qty * num(points) / 100 / (1 + tax / 100)
   }
   return {
     ...r,
@@ -233,13 +234,13 @@ router.get('/sheets/:id/docx', async (req, res) => {
       account_name: prof.account_name || '',
       account_no: prof.account_no || '',
       rows: rows.map(r => {
-        const diff = Math.round((num(r.order_price) - num(r.quote)) * 10000) / 10000
+        const unit = Math.round(num(r.quote) * num(row.points) / 100 * 10000) / 10000
         return {
           name: r.name || '',
           taxable: true,
           quote: num(r.quote),
           order_price: num(r.order_price),
-          method: `${diff}/1.13`,
+          method: `${unit}/1.13`,
           remark: `${Number(row.points)}个点${r.remark ? '；' + r.remark : ''}`
         }
       })

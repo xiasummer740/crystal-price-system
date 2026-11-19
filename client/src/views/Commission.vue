@@ -81,7 +81,7 @@
         </table>
       </section>
 
-      <p class="cm-hint">下单价格默认 = 报价 × (1 + 点数%)，可手工改；回扣默认 = (下单价格 − 报价) × 数量 ÷ (1 + 税率)，也可手工改。</p>
+      <p class="cm-hint">下单价格默认 = 报价 × (1 + 点数%)，可手工改；回扣默认 = 含税总金额 × 点数% ÷ (1 + 税率)，也可手工改。</p>
     </main>
 
     <!-- 物料选择 -->
@@ -180,7 +180,7 @@ function recalcRow(r) {
   r.total_amount = round2(num(r.order_price) * num(r.qty))
   if (!r.rebate_manual) {
     const tax = r.tax_rate === undefined || r.tax_rate === '' ? num(taxRate.value) : num(r.tax_rate)
-    r.rebate = round2((num(r.order_price) - num(r.quote)) * num(r.qty) / (1 + tax / 100))
+    r.rebate = round2(num(r.total_amount) * num(points.value) / 100 / (1 + tax / 100))
   }
 }
 function recalcAll() {
@@ -321,8 +321,9 @@ async function loadSheet(s) {
       ...x,
       total_amount: x.total_amount ?? Math.round(Number(x.order_price || 0) * Number(x.qty || 0) * 100) / 100,
       order_manual: true,
-      rebate_manual: true
+      rebate_manual: false
     }))
+    recalcAll()
     showHistory.value = false
     showToast('已载入佣金单')
   } catch { showToast('载入失败') }
