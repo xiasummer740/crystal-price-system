@@ -16,7 +16,8 @@ export function buildRebateDocx(data) {
   return new Promise((resolve, reject) => {
     const customer = String(data.customer || '').trim()
     const dir = A.ensureDir(path.join(A.customerDirAbs(customer), '佣金'))
-    const stamp = new Date().toISOString().slice(0, 10)
+    const d0 = new Date()
+    const stamp = `${d0.getFullYear()}-${String(d0.getMonth() + 1).padStart(2, '0')}-${String(d0.getDate()).padStart(2, '0')}`
     const base = `${customer}-回扣备案-${stamp}`.replace(/[\\/:*?"<>|]/g, '_')
     const docxPath = path.join(dir, base + '.docx')
     const pdfPath = path.join(dir, base + '.pdf')

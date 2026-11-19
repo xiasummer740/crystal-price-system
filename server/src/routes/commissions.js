@@ -225,9 +225,11 @@ router.get('/sheets/:id/docx', async (req, res) => {
     if (!row) return res.status(404).json({ code: 1, msg: '佣金单不存在' })
     const rows = JSON.parse(row.rows_json || '[]')
     const prof = getProfile(row.customer)
+    const now = new Date()
+    const localDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
     const data = {
       customer: row.customer,
-      date: new Date().toISOString().slice(0, 10),
+      date: localDate,
       department: prof.department || '代理部',
       business: prof.business || '夏祥',
       bank_name: prof.bank_name || '',

@@ -9,8 +9,8 @@
         <button class="cm-btn" :disabled="!customer" @click="openMaterialPicker">📦 从物料添加</button>
         <button class="cm-btn" @click="showHistory = !showHistory">历史佣金单</button>
         <button class="cm-btn primary" :disabled="!customer || !rows.length" @click="saveSheet">保存</button>
-        <button class="cm-btn" :disabled="!sheetId" @click="exportExcel">📗 导出 Excel</button>
-        <button class="cm-btn" :disabled="!sheetId" @click="exportDocx">📄 回扣备案表</button>
+        <button class="cm-btn" :disabled="!rows.length" @click="exportExcel">📗 导出 Excel</button>
+        <button class="cm-btn" :disabled="!rows.length || docxBusy" @click="exportDocx">{{ docxBusy ? '生成中…' : '📄 回扣备案表' }}</button>
         <button class="cm-btn" :disabled="!rows.length" @click="exportImage">🖼 生成图片</button>
       </div>
     </header>
@@ -152,6 +152,7 @@ const rows = ref([])
 const sheets = ref([])
 const showHistory = ref(false)
 const showMaterials = ref(false)
+const docxBusy = ref(false)
 const materialKw = ref('')
 const materials = ref([])
 const pickedIds = ref([])
@@ -256,15 +257,36 @@ async function saveSheet() {
     sheetId.value = r.data.id
     showToast('已保存佣金单')
     loadSheets()
-  } catch (e) { showToast('保存失败: ' + (e?.response?.data?.msg || e.message)) }
+  } catch (e) { showToast('保存失败: ' + (e?.response?.data?.msg || e.message)); return 0 }
+  return sheetId.value
 }
-function exportExcel() {
-  if (!sheetId.value) return showToast('请先保存')
-  window.open(commissionXlsxUrl(sheetId.value), '_blank')
+function downloadUrl(url) {
+  const a = document.createElement('a')
+  a.href = url
+  a.download = ''
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
 }
-function exportDocx() {
-  if (!sheetId.value) return showToast('请先保存')
-  window.open(commissionDocxUrl(sheetId.value), '_blank')
+async function ensureSaved() {
+  if (sheetId.value) return sheetId.value
+  return await saveSheet()
+}
+async function exportExcel() {
+  const id = await ensureSaved()
+  if (!id) return
+  downloadUrl(commissionXlsxUrl(id))
+}
+async function exportDocx() {
+  const id = await ensureSaved()
+  if (!id) return
+  docxBusy.value = true
+  showToast('正在生成回扣备案表，约 10~20 秒…')
+  try {
+    downloadUrl(commissionDocxUrl(id))
+  } finally {
+    setTimeout(() => { docxBusy.value = false }, 3000)
+  }
 }
 function esc(s) {
   return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
