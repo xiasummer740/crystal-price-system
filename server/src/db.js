@@ -361,6 +361,14 @@ export async function initDb() {
       updated_at    DATETIME DEFAULT (datetime('now','localtime'))
     )
   `)
+  // 佣金表里对物料名称的自定义叫法（下次选到同一颗料自动带出）
+  db.run(`
+    CREATE TABLE IF NOT EXISTS commission_material_aliases (
+      material_id INTEGER PRIMARY KEY,
+      name        TEXT NOT NULL,
+      updated_at  DATETIME DEFAULT (datetime('now','localtime'))
+    )
+  `)
 
   // 客户资料最近更新时间（列表排序用）
   try { db.run("ALTER TABLE map_customers ADD COLUMN updated_at TEXT DEFAULT ''") } catch {}

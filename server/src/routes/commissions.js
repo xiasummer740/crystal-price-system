@@ -12,12 +12,15 @@ const num = (v) => {
 
 function calcRow(r, points, defaultTax) {
   const qty = num(r.qty)
-  const quote = num(r.quote)
   const tax = r.tax_rate === '' || r.tax_rate === undefined || r.tax_rate === null ? defaultTax : num(r.tax_rate)
-  // 下单价格：手工填了就用；没填按「报价 × (1 + 点数%)」自动带，保留 2 位
+  // 系统里的「报价」就是客户的下单价格；内部报价 = 下单价格 × (1 - 点数%)
   let order = r.order_price === '' || r.order_price === undefined || r.order_price === null
-    ? Math.round(quote * (1 + num(points) / 100) * 100) / 100
+    ? 0
     : num(r.order_price)
+  let quote = r.quote === '' || r.quote === undefined || r.quote === null
+    ? Math.round(order * (1 - num(points) / 100) * 10000) / 10000
+    : num(r.quote)
+  if (!order && quote) order = Math.round(quote / (1 - num(points) / 100) * 10000) / 10000
   let rebate = r.rebate
   if (rebate === '' || rebate === undefined || rebate === null) {
     // 回扣 = 含税总金额 × 点数% ÷ (1 + 税率)
@@ -135,6 +138,34 @@ router.delete('/sheets/:id', (req, res) => {
   res.json({ code: 0 })
 })
 
+// 物料名称自定义叫法（下次选到同一颗料自动带出）
+router.get('/aliases', (_req, res) => {
+  const rows = queryAll('SELECT material_id, name FROM commission_material_aliases')
+  const map = {}
+  for (const r of rows) map[r.material_id] = r.name
+  res.json({ code: 0, data: map })
+})
+
+router.post('/aliases', (req, res) => {
+  try {
+    const items = Array.isArray(req.body?.items) ? req.body.items : []
+    for (const it of items) {
+      const id = Number(it?.material_id)
+      const name = String(it?.name || '').trim()
+      if (!id || !name) continue
+      execute(
+        `INSERT INTO commission_material_aliases (material_id, name, updated_at)
+         VALUES (?, ?, datetime('now','localtime'))
+         ON CONFLICT(material_id) DO UPDATE SET name=excluded.name, updated_at=datetime('now','localtime')`,
+        [id, name]
+      )
+    }
+    res.json({ code: 0 })
+  } catch (e) {
+    res.status(500).json({ code: 1, msg: '保存名称失败: ' + e.message })
+  }
+})
+
 // 导出 Excel（打印友好）
 router.get('/sheets/:id/xlsx', async (req, res) => {
   try {
@@ -236,7 +267,7 @@ router.get('/sheets/:id/docx', async (req, res) => {
       account_name: prof.account_name || '',
       account_no: prof.account_no || '',
       rows: rows.map(r => {
-        const unit = Math.round(num(r.quote) * num(row.points) / 100 * 10000) / 10000
+        const unit = Math.round(num(r.order_price) * num(row.points) / 100 * 10000) / 10000
         return {
           name: r.name || '',
           taxable: true,

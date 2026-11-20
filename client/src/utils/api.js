@@ -144,6 +144,12 @@ export function commissionXlsxUrl(id) {
 export function commissionDocxUrl(id) {
   return `/api/commissions/sheets/${id}/docx`
 }
+export function fetchCommissionAliases() {
+  return http.get('/commissions/aliases')
+}
+export function saveCommissionAliases(items) {
+  return http.post('/commissions/aliases', { items })
+}
 
 /** 客户收货地址（地图地址页的收货点/联系人地址） */export function fetchCustomerAddresses(customer) {
   return http.get('/materials/customer-addresses', { params: { customer } })

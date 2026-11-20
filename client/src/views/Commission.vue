@@ -49,13 +49,13 @@
           </thead>
           <tbody>
             <tr v-for="(r, i) in rows" :key="i">
-              <td><input v-model="r.name" placeholder="规格型号 / 名称" /></td>
+              <td><input v-model="r.name" placeholder="规格型号 / 名称" @blur="saveAlias(r)" /></td>
               <td><input v-model.number="r.qty" type="number" min="0" @input="recalcRow(r)" /></td>
               <td>
-                <input v-model.number="r.order_price" type="number" step="0.0001" :title="r.order_manual ? '手工价格' : '报价 × (1+点数)'"
-                  @input="r.order_manual = true; recalcRow(r)" />
+                <input v-model.number="r.order_price" type="number" step="0.0001" title="客户下单价格（系统报价）"
+                  @input="recalcRow(r)" />
               </td>
-              <td><input v-model.number="r.quote" type="number" step="0.0001" @input="autoOrder(r); recalcRow(r)" /></td>
+              <td><input v-model.number="r.quote" type="number" step="0.0001" :title="r.quote_manual ? '手工报价' : '下单价格 × (1-点数%)'" @input="r.quote_manual = true; recalcRow(r)" /></td>
               <td><input v-model.number="r.tax_rate" type="number" step="0.5" @input="r.tax_manual = true; recalcRow(r)" /></td>
               <td><span class="cm-amount">{{ Number(r.total_amount || 0).toFixed(2) }}</span></td>
               <td>
@@ -81,7 +81,7 @@
         </table>
       </section>
 
-      <p class="cm-hint">下单价格默认 = 报价 × (1 + 点数%)，可手工改；回扣默认 = 含税总金额 × 点数% ÷ (1 + 税率)，也可手工改。</p>
+      <p class="cm-hint">下单价格 = 系统里的报价（客户下单价格）；内部报价默认 = 下单价格 × (1 − 点数%)，可手工改；回扣默认 = 含税总金额 × 点数% ÷ (1 + 税率)。</p>
     </main>
 
     <!-- 物料选择 -->
@@ -131,6 +131,7 @@ import { showToast } from 'vant'
 import {
   fetchCommissionProfile, saveCommissionProfile,
   fetchCommissionSheets, fetchCommissionSheet, saveCommissionSheet, deleteCommissionSheet, commissionXlsxUrl, commissionDocxUrl,
+  fetchCommissionAliases, saveCommissionAliases,
   fetchMaterials
 } from '../utils/api.js'
 
@@ -156,6 +157,7 @@ const docxBusy = ref(false)
 const materialKw = ref('')
 const materials = ref([])
 const pickedIds = ref([])
+const aliases = ref({})
 
 const totalQty = computed(() => rows.value.reduce((s, r) => s + Number(r.qty || 0), 0))
 const totalAmount = computed(() => rows.value.reduce((s, r) => s + Number(r.total_amount || 0), 0))
@@ -172,12 +174,13 @@ const num = (v) => {
 }
 const round2 = (n) => Math.round(n * 100) / 100
 
-function autoOrder(r) {
-  if (r.order_manual) return
-  r.order_price = Math.round(num(r.quote) * (1 + num(points.value) / 100) * 100) / 100
+function autoQuote(r) {
+  if (r.quote_manual) return
+  // 系统报价 = 客户下单价格，内部报价 = 下单价格 × (1 - 点数%)
+  r.quote = Math.round(num(r.order_price) * (1 - num(points.value) / 100) * 10000) / 10000
 }
 function recalcRow(r) {
-  if (!r.order_manual) autoOrder(r)
+  autoQuote(r)
   r.total_amount = round2(num(r.order_price) * num(r.qty))
   if (!r.rebate_manual) {
     const tax = r.tax_rate === undefined || r.tax_rate === '' ? num(taxRate.value) : num(r.tax_rate)
@@ -188,7 +191,7 @@ function recalcAll() {
   for (const r of rows.value) recalcRow(r)
 }
 function addRow() {
-  rows.value.push({ name: '', qty: 0, order_price: '', quote: '', tax_rate: taxRate.value, total_amount: 0, rebate: '', remark: '', order_manual: false, rebate_manual: false })
+  rows.value.push({ name: '', qty: 0, order_price: '', quote: '', tax_rate: taxRate.value, total_amount: 0, rebate: '', remark: '', material_id: 0, order_manual: false, quote_manual: false, rebate_manual: false })
 }
 async function openMaterialPicker() {
   materialKw.value = ''
@@ -202,22 +205,32 @@ async function openMaterialPicker() {
 function addPickedMaterials() {
   const picked = materials.value.filter(m => pickedIds.value.includes(m.id))
   for (const m of picked) {
-    const quote = num(m.price)
+    const order = num(m.price)
+    const quote = Math.round(order * (1 - num(points.value) / 100) * 10000) / 10000
     rows.value.push({
-      name: m.material_name || m.material_code || '',
+      name: aliases.value[m.id] || m.material_name || m.material_code || '',
       qty: 0,
-      order_price: Math.round(quote * (1 + num(points.value) / 100) * 100) / 100,
+      order_price: order,
       quote,
       tax_rate: taxRate.value,
       total_amount: 0,
       rebate: 0,
       remark: '',
-      order_manual: false,
+      material_id: m.id,
+      order_manual: true,
+      quote_manual: false,
       rebate_manual: false
     })
   }
   showMaterials.value = false
   showToast(`已添加 ${picked.length} 条`)
+}
+async function saveAlias(r) {
+  if (!r?.material_id || !String(r.name || '').trim()) return
+  try {
+    await saveCommissionAliases([{ material_id: r.material_id, name: String(r.name).trim() }])
+    aliases.value[r.material_id] = String(r.name).trim()
+  } catch {}
 }
 function goBack() { router.back() }
 
@@ -255,6 +268,9 @@ async function saveSheet() {
       rows: rows.value
     })
     sheetId.value = r.data.id
+    const items = rows.value.filter(x => x.material_id && String(x.name || '').trim())
+      .map(x => ({ material_id: x.material_id, name: String(x.name).trim() }))
+    if (items.length) saveCommissionAliases(items).catch(() => {})
     showToast('已保存佣金单')
     loadSheets()
   } catch (e) { showToast('保存失败: ' + (e?.response?.data?.msg || e.message)); return 0 }
@@ -298,28 +314,22 @@ function buildPrintHtml() {
     <td>${Number(r.order_price || 0).toFixed(4)}</td>
     <td>${Number(r.quote || 0).toFixed(4)}</td>
     <td>${Number(r.tax_rate || 0)}%</td>
-    <td>${Number(r.total_amount || 0).toFixed(2)}</td>
     <td class="rebate">${Number(r.rebate || 0).toFixed(2)}</td>
-    <td>${esc(r.remark || '')}</td>
   </tr>`).join('')
   return `<!doctype html><html><head><meta charset="utf-8"><style>
-    @page { size: A4; margin: 12mm; }
-    body { font-family: "Microsoft YaHei", "微软雅黑", sans-serif; color: #1f2937; margin: 0; padding: 10px 18px; background: #fff; }
-    h2 { text-align: center; font-size: 20px; margin: 0 0 6px; }
-    .meta { text-align: center; color: #667085; font-size: 12px; margin-bottom: 12px; }
-    table { width: 100%; border-collapse: collapse; font-size: 12px; }
-    th, td { border: 1px solid #98a2b3; padding: 6px 8px; text-align: center; }
+    html, body { margin: 0; padding: 0; background: #fff; display: inline-block; overflow: hidden; }
+    body { font-family: "Microsoft YaHei", "微软雅黑", sans-serif; color: #1f2937; }
+    table { border-collapse: collapse; font-size: 11px; width: auto; }
+    th, td { border: 1px solid #98a2b3; padding: 2px 5px; text-align: center; white-space: nowrap; }
     th { background: #eaf2ff; font-weight: 600; }
-    td.name { text-align: left; }
+    td.name { text-align: left; white-space: normal; max-width: 200px; }
     td.rebate { color: #d46b08; font-weight: 600; }
     tfoot td { font-weight: 700; background: #fafafa; }
   </style></head><body>
-  <h2>${esc(customer.value)} 佣金明细</h2>
-  <div class="meta">统计期间：${esc(periodStart.value || '-')} ~ ${esc(periodEnd.value || '-')}　点数：${points.value}%　税率：${taxRate.value}%　制表日期：${new Date().toLocaleDateString('zh-CN')}</div>
   <table>
-    <thead><tr><th style="width:30%">名称</th><th>数量</th><th>下单价格</th><th>报价</th><th>税率</th><th>含税总金额</th><th>回扣</th><th>备注</th></tr></thead>
+    <thead><tr><th>名称</th><th>数量</th><th>下单价格</th><th>报价</th><th>税率</th><th>回扣</th></tr></thead>
     <tbody>${list}</tbody>
-    <tfoot><tr><td>合计</td><td>${totalQty.value}</td><td colspan="3"></td><td>${totalAmount.value.toFixed(2)}</td><td class="rebate">${totalRebate.value.toFixed(2)}</td><td></td></tr></tfoot>
+    <tfoot><tr><td>合计</td><td>${totalQty.value}</td><td colspan="3"></td><td class="rebate">${totalRebate.value.toFixed(2)}</td></tr></tfoot>
   </table>
   </body></html>`
 }
@@ -343,6 +353,7 @@ async function loadSheet(s) {
       ...x,
       total_amount: x.total_amount ?? Math.round(Number(x.order_price || 0) * Number(x.qty || 0) * 100) / 100,
       order_manual: true,
+      quote_manual: true,
       rebate_manual: false
     }))
     recalcAll()
@@ -355,6 +366,10 @@ async function removeSheet(s) {
 }
 
 onMounted(async () => {
+  try {
+    const r = await fetchCommissionAliases()
+    aliases.value = r.data || {}
+  } catch {}
   if (customer.value) {
     await loadProfile()
     await loadSheets()

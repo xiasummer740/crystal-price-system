@@ -1145,7 +1145,13 @@ ipcMain.handle('capture-html', async (_, payload) => {
   try {
     await win.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(html))
     await new Promise(r => setTimeout(r, 600))
-    const img = await win.webContents.capturePage()
+    // 按内容实际大小裁图，别留一大片白边（祥哥要把图贴到报销单上）
+    const size = await win.webContents.executeJavaScript('({ w: Math.max(1, Math.ceil(document.body.scrollWidth)), h: Math.max(1, Math.ceil(document.body.scrollHeight)) })')
+    const w = Math.min(size.w, 2000)
+    const h = Math.min(size.h, 2000)
+    win.setContentSize(Math.min(w + 20, 2000), Math.min(h + 20, 2000))
+    await new Promise(r => setTimeout(r, 200))
+    const img = await win.webContents.capturePage({ x: 0, y: 0, width: w, height: h })
     const def = path.join(app.getPath('pictures'), fileName || '佣金明细.png')
     const r = await dialog.showSaveDialog({ defaultPath: def, filters: [{ name: 'PNG 图片', extensions: ['png'] }] })
     if (r.canceled || !r.filePath) return ''
