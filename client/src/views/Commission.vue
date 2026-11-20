@@ -179,7 +179,7 @@ function mergedRows() {
     const key = [r.name, r.order_price, r.quote, r.tax_rate].join('|')
     const cur = map.get(key)
     if (!cur) {
-      map.set(key, { ...r })
+      map.set(key, { ...r, full_name: r.full_name || r.name || '' })
     } else {
       cur.qty = Number(cur.qty || 0) + Number(r.qty || 0)
       cur.total_amount = round2(Number(cur.total_amount || 0) + Number(r.total_amount || 0))
@@ -224,7 +224,7 @@ function recalcAll() {
   for (const r of rows.value) recalcRow(r)
 }
 function addRow() {
-  rows.value.push({ name: '', qty: 0, order_price: '', quote: '', tax_rate: taxRate.value, total_amount: 0, rebate: '', remark: '', material_id: 0, order_manual: false, quote_manual: false, rebate_manual: false })
+  rows.value.push({ name: '', qty: 0, order_price: '', quote: '', tax_rate: taxRate.value, total_amount: 0, rebate: '', remark: '', material_id: 0, full_name: '', order_manual: false, quote_manual: false, rebate_manual: false })
 }
 async function openMaterialPicker() {
   materialKw.value = ''
@@ -242,6 +242,7 @@ function addPickedMaterials() {
     const quote = Math.round(order * (1 - num(points.value) / 100) * 10000) / 10000
     rows.value.push({
       name: aliases.value[m.id] || m.material_name || m.material_code || '',
+      full_name: m.material_name || m.material_code || '',
       qty: 0,
       order_price: order,
       quote,
@@ -360,10 +361,10 @@ function buildPrintHtml() {
     html, body { margin: 0; padding: 0; background: #fff; display: inline-block; overflow: hidden; }
     body { font-family: "Microsoft YaHei", "微软雅黑", sans-serif; color: #1f2937; }
     .cap { font-size: 12px; font-weight: 600; text-align: center; padding: 2px 6px 3px; border-bottom: 1px solid #1f2937; }
-    table { border-collapse: collapse; font-size: 11px; width: auto; }
-    th, td { border: 1px solid #98a2b3; padding: 2px 5px; text-align: center; white-space: nowrap; }
+    table { border-collapse: collapse; font-size: 10px; width: auto; }
+    th, td { border: 1px solid #98a2b3; padding: 1px 4px; text-align: center; white-space: nowrap; }
     th { background: #eaf2ff; font-weight: 600; }
-    td.name { text-align: left; white-space: normal; max-width: 200px; }
+    td.name { text-align: left; white-space: normal; max-width: 190px; }
     td.rebate { color: #d46b08; font-weight: 600; }
     tfoot td { font-weight: 700; background: #fafafa; }
   </style></head><body>

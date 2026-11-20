@@ -174,45 +174,43 @@ router.get('/sheets/:id/xlsx', async (req, res) => {
     const rows = JSON.parse(row.rows_json || '[]')
     const wb = new ExcelJS.Workbook()
     const ws = wb.addWorksheet('佣金明细')
-    ws.pageSetup = { paperSize: 9, orientation: 'portrait', fitToPage: true, fitToWidth: 1, fitToHeight: 0, margins: { left: 0.4, right: 0.4, top: 0.5, bottom: 0.5, header: 0.2, footer: 0.2 } }
+    ws.pageSetup = {
+      paperSize: 9, orientation: 'portrait', fitToPage: true, fitToWidth: 1, fitToHeight: 0,
+      margins: { left: 0, right: 0.3937, top: 0, bottom: 0.5118, header: 0.2, footer: 0.2 }
+    }
+    // 尺寸完全按祥哥手动调好的版本（2026-11-20）
     ws.columns = [
-      { key: 'name', width: 26 },
-      { key: 'qty', width: 7 },
-      { key: 'order_price', width: 9 },
-      { key: 'quote', width: 9 },
-      { key: 'tax_rate', width: 7 },
-      { key: 'total_amount', width: 11 },
-      { key: 'rebate', width: 9 },
-      { key: 'remark', width: 11 }
+      { key: 'name', width: 24.62 },
+      { key: 'qty', width: 6.12 },
+      { key: 'order_price', width: 6.75 },
+      { key: 'quote', width: 6.25 },
+      { key: 'tax_rate', width: 5.62 },
+      { key: 'total_amount', width: 8.38 },
+      { key: 'rebate', width: 6.75 }
     ]
     const fmtShort = (v) => {
       const m = String(v || '').match(/^(\d{4})-(\d{2})-(\d{2})$/)
       return m ? `${Number(m[2])}/${Number(m[3])}` : (v || '')
     }
     const periodShort = [fmtShort(row.period_start), fmtShort(row.period_end)].filter(Boolean).join('-')
-    const title = `${row.customer} 佣金明细`
-    ws.mergeCells('A1:H1')
-    ws.getCell('A1').value = title
-    ws.getCell('A1').font = { name: '微软雅黑', size: 14, bold: true }
-    ws.getCell('A1').alignment = { horizontal: 'center', vertical: 'middle' }
+    ws.mergeCells('A1:G1')
+    ws.getCell('A1').value = `${row.customer} ${periodShort}　${row.points}个点　税率${row.tax_rate}%`
+    ws.getCell('A1').font = { name: '微软雅黑', size: 12 }
+    ws.getCell('A1').alignment = { horizontal: 'center', vertical: 'center' }
     ws.getRow(1).height = 24
-    ws.mergeCells('A2:H2')
-    ws.getCell('A2').value = `${periodShort ? periodShort + '　' : ''}${row.points}个点　税率${row.tax_rate}%`
-    ws.getCell('A2').font = { name: '微软雅黑', size: 9, color: { argb: 'FF475467' } }
-    ws.getCell('A2').alignment = { horizontal: 'center' }
-    const header = ['名称', '数量', '下单价格', '报价', '税率', '含税总金额', '回扣', '备注']
-    const hr = ws.getRow(3)
+    const header = ['名称', '数量', '下单价格', '报价', '税率', '含税总金额', '回扣']
+    const hr = ws.getRow(2)
     header.forEach((h, i) => {
       const c = hr.getCell(i + 1)
       c.value = h
       c.font = { name: '微软雅黑', size: 9, bold: true }
-      c.alignment = { horizontal: 'center', vertical: 'middle' }
+      c.alignment = { horizontal: 'center', vertical: 'center' }
       c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEAF2FF' } }
       c.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } }
     })
     hr.height = 18
     rows.forEach((r, idx) => {
-      const row = ws.getRow(4 + idx)
+      const row = ws.getRow(3 + idx)
       row.height = 18
       row.getCell(1).value = r.name || ''
       row.getCell(2).value = r.qty
@@ -221,29 +219,29 @@ router.get('/sheets/:id/xlsx', async (req, res) => {
       row.getCell(5).value = `${r.tax_rate}%`
       row.getCell(6).value = r.total_amount ?? Math.round(num(r.order_price) * num(r.qty) * 100) / 100
       row.getCell(7).value = r.rebate
-      row.getCell(8).value = r.remark || ''
       row.eachCell((c, col) => {
         c.font = { name: '微软雅黑', size: 9 }
-        c.alignment = { horizontal: col === 1 || col === 8 ? 'left' : 'center', vertical: 'middle', wrapText: col === 1 }
+        c.alignment = { horizontal: col === 1 ? 'left' : 'center', vertical: 'center' }
         c.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } }
         if (col === 3 || col === 4) c.numFmt = '0.0000'
         if (col === 6 || col === 7) c.numFmt = '#,##0.00'
         if (col === 2) c.numFmt = '#,##0'
       })
     })
-    const sumRow = ws.getRow(4 + rows.length)
+    const sumRow = ws.getRow(3 + rows.length)
+    sumRow.height = 15.75
     sumRow.getCell(1).value = '合计'
     sumRow.getCell(2).value = rows.reduce((s, r) => s + num(r.qty), 0)
     sumRow.getCell(6).value = rows.reduce((s, r) => s + num(r.total_amount ?? num(r.order_price) * num(r.qty)), 0)
     sumRow.getCell(7).value = rows.reduce((s, r) => s + num(r.rebate), 0)
     sumRow.eachCell((c, col) => {
       c.font = { name: '微软雅黑', size: 9, bold: true }
-      c.alignment = { horizontal: col === 1 ? 'left' : 'center' }
+      c.alignment = { horizontal: 'center', vertical: 'center' }
       c.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } }
       if (col === 2) c.numFmt = '#,##0'
       if (col === 6 || col === 7) c.numFmt = '#,##0.00'
     })
-    ws.getColumn(1).alignment = { wrapText: true, vertical: 'middle' }
+    ws.pageSetup.printArea = `A1:G${3 + rows.length}`
     const buf = await wb.xlsx.writeBuffer()
     const fileName = `佣金明细-${row.customer}-${periodShort || '未填期间'}.xlsx`.replace(/[\\/:*?"<>|]/g, '_')
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
@@ -272,13 +270,19 @@ router.get('/sheets/:id/docx', async (req, res) => {
       account_name: prof.account_name || '',
       account_no: prof.account_no || '',
       rows: rows.map(r => {
-        const unit = Math.round(num(r.order_price) * num(row.points) / 100 * 10000) / 10000
+        const diff = Math.round((num(r.order_price) - num(r.quote)) * 10000) / 10000
+        // 备案表用完整规格型号：优先 full_name，其次按 material_id 回查物料；老数据只有简写
+        let fullName = r.full_name || ''
+        if (!fullName && r.material_id) {
+          const m = queryOne('SELECT material_name FROM customer_materials WHERE id = ?', [Number(r.material_id)])
+          fullName = m?.material_name || ''
+        }
         return {
-          name: r.name || '',
+          name: fullName || r.name || '',
           taxable: true,
           quote: num(r.quote),
           order_price: num(r.order_price),
-          method: `${unit}/1.13`,
+          method: `${diff}/1.13`,
           remark: `${Number(row.points)}个点${r.remark ? '；' + r.remark : ''}`
         }
       })
