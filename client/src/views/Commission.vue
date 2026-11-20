@@ -6,6 +6,7 @@
       <span class="cm-customer">{{ customer || '未选择客户' }}</span>
       <div class="cm-actions">
         <button class="cm-btn" @click="addRow">＋ 新增行</button>
+        <button class="cm-btn" @click="mergeSameRows" title="名称、下单价、报价、税率都相同的行合并，数量/回扣相加">合并相同物料</button>
         <button class="cm-btn" :disabled="!customer" @click="openMaterialPicker">📦 从物料添加</button>
         <button class="cm-btn" @click="showHistory = !showHistory">历史佣金单</button>
         <button class="cm-btn primary" :disabled="!customer || !rows.length" @click="saveSheet">保存</button>
@@ -162,6 +163,38 @@ const aliases = ref({})
 const totalQty = computed(() => rows.value.reduce((s, r) => s + Number(r.qty || 0), 0))
 const totalAmount = computed(() => rows.value.reduce((s, r) => s + Number(r.total_amount || 0), 0))
 const totalRebate = computed(() => rows.value.reduce((s, r) => s + Number(r.rebate || 0), 0))
+const periodShort = computed(() => {
+  const f = (v) => {
+    if (!v) return ''
+    const m = String(v).match(/^(\d{4})-(\d{2})-(\d{2})$/)
+    return m ? `${Number(m[2])}/${Number(m[3])}` : v
+  }
+  const a = f(periodStart.value)
+  const b = f(periodEnd.value)
+  return a && b ? `${a}-${b}` : (a || b)
+})
+function mergedRows() {
+  const map = new Map()
+  for (const r of rows.value) {
+    const key = [r.name, r.order_price, r.quote, r.tax_rate].join('|')
+    const cur = map.get(key)
+    if (!cur) {
+      map.set(key, { ...r })
+    } else {
+      cur.qty = Number(cur.qty || 0) + Number(r.qty || 0)
+      cur.total_amount = round2(Number(cur.total_amount || 0) + Number(r.total_amount || 0))
+      cur.rebate = round2(Number(cur.rebate || 0) + Number(r.rebate || 0))
+    }
+  }
+  return [...map.values()]
+}
+function mergeSameRows() {
+  const before = rows.value.length
+  const merged = mergedRows()
+  rows.value = merged
+  if (before > merged.length) showToast(`已合并 ${before - merged.length} 行相同物料`)
+  else showToast('没有可合并的相同物料')
+}
 const filteredMaterials = computed(() => {
   const kw = materialKw.value.trim().toLowerCase()
   if (!kw) return materials.value
@@ -289,7 +322,9 @@ async function ensureSaved() {
   return await saveSheet()
 }
 async function exportExcel() {
-  const id = await ensureSaved()
+  // 导出前先把相同物料合并，Excel 和图片口径一致
+  mergeSameRows()
+  const id = await saveSheet()
   if (!id) return
   downloadUrl(commissionXlsxUrl(id))
 }
@@ -308,17 +343,23 @@ function esc(s) {
   return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 }
 function buildPrintHtml() {
-  const list = rows.value.map(r => `<tr>
+  const listData = mergedRows()
+  const qtySum = listData.reduce((s, r) => s + Number(r.qty || 0), 0)
+  const amountSum = listData.reduce((s, r) => s + Number(r.total_amount || 0), 0)
+  const rebateSum = listData.reduce((s, r) => s + Number(r.rebate || 0), 0)
+  const list = listData.map(r => `<tr>
     <td class="name">${esc(r.name)}</td>
     <td>${Number(r.qty || 0)}</td>
     <td>${Number(r.order_price || 0).toFixed(4)}</td>
     <td>${Number(r.quote || 0).toFixed(4)}</td>
     <td>${Number(r.tax_rate || 0)}%</td>
+    <td>${Number(r.total_amount || 0).toFixed(2)}</td>
     <td class="rebate">${Number(r.rebate || 0).toFixed(2)}</td>
   </tr>`).join('')
   return `<!doctype html><html><head><meta charset="utf-8"><style>
     html, body { margin: 0; padding: 0; background: #fff; display: inline-block; overflow: hidden; }
     body { font-family: "Microsoft YaHei", "微软雅黑", sans-serif; color: #1f2937; }
+    .cap { font-size: 12px; font-weight: 600; text-align: center; padding: 2px 6px 3px; border-bottom: 1px solid #1f2937; }
     table { border-collapse: collapse; font-size: 11px; width: auto; }
     th, td { border: 1px solid #98a2b3; padding: 2px 5px; text-align: center; white-space: nowrap; }
     th { background: #eaf2ff; font-weight: 600; }
@@ -326,10 +367,11 @@ function buildPrintHtml() {
     td.rebate { color: #d46b08; font-weight: 600; }
     tfoot td { font-weight: 700; background: #fafafa; }
   </style></head><body>
+  <div class="cap">${esc(customer.value)} ${esc(periodShort.value)}　${points.value}个点</div>
   <table>
-    <thead><tr><th>名称</th><th>数量</th><th>下单价格</th><th>报价</th><th>税率</th><th>回扣</th></tr></thead>
+    <thead><tr><th>名称</th><th>数量</th><th>下单价格</th><th>报价</th><th>税率</th><th>含税总金额</th><th>回扣</th></tr></thead>
     <tbody>${list}</tbody>
-    <tfoot><tr><td>合计</td><td>${totalQty.value}</td><td colspan="3"></td><td class="rebate">${totalRebate.value.toFixed(2)}</td></tr></tfoot>
+    <tfoot><tr><td>合计</td><td>${qtySum}</td><td colspan="3"></td><td>${amountSum.toFixed(2)}</td><td class="rebate">${rebateSum.toFixed(2)}</td></tr></tfoot>
   </table>
   </body></html>`
 }

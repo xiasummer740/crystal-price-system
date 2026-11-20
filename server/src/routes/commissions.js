@@ -176,39 +176,44 @@ router.get('/sheets/:id/xlsx', async (req, res) => {
     const ws = wb.addWorksheet('佣金明细')
     ws.pageSetup = { paperSize: 9, orientation: 'portrait', fitToPage: true, fitToWidth: 1, fitToHeight: 0, margins: { left: 0.4, right: 0.4, top: 0.5, bottom: 0.5, header: 0.2, footer: 0.2 } }
     ws.columns = [
-      { key: 'name', width: 34 },
-      { key: 'qty', width: 10 },
-      { key: 'order_price', width: 12 },
-      { key: 'quote', width: 12 },
-      { key: 'tax_rate', width: 10 },
-      { key: 'total_amount', width: 14 },
-      { key: 'rebate', width: 12 },
-      { key: 'remark', width: 16 }
+      { key: 'name', width: 26 },
+      { key: 'qty', width: 7 },
+      { key: 'order_price', width: 9 },
+      { key: 'quote', width: 9 },
+      { key: 'tax_rate', width: 7 },
+      { key: 'total_amount', width: 11 },
+      { key: 'rebate', width: 9 },
+      { key: 'remark', width: 11 }
     ]
+    const fmtShort = (v) => {
+      const m = String(v || '').match(/^(\d{4})-(\d{2})-(\d{2})$/)
+      return m ? `${Number(m[2])}/${Number(m[3])}` : (v || '')
+    }
+    const periodShort = [fmtShort(row.period_start), fmtShort(row.period_end)].filter(Boolean).join('-')
     const title = `${row.customer} 佣金明细`
-    const period = [row.period_start, row.period_end].filter(Boolean).join(' ~ ')
     ws.mergeCells('A1:H1')
     ws.getCell('A1').value = title
-    ws.getCell('A1').font = { name: '微软雅黑', size: 16, bold: true }
+    ws.getCell('A1').font = { name: '微软雅黑', size: 14, bold: true }
     ws.getCell('A1').alignment = { horizontal: 'center', vertical: 'middle' }
-    ws.getRow(1).height = 30
+    ws.getRow(1).height = 24
     ws.mergeCells('A2:H2')
-    ws.getCell('A2').value = `统计期间：${period || '-'}    点数：${row.points}%    税率：${row.tax_rate}%    制表日期：${new Date().toLocaleDateString('zh-CN')}`
-    ws.getCell('A2').font = { name: '微软雅黑', size: 10, color: { argb: 'FF667085' } }
+    ws.getCell('A2').value = `${periodShort ? periodShort + '　' : ''}${row.points}个点　税率${row.tax_rate}%`
+    ws.getCell('A2').font = { name: '微软雅黑', size: 9, color: { argb: 'FF475467' } }
     ws.getCell('A2').alignment = { horizontal: 'center' }
     const header = ['名称', '数量', '下单价格', '报价', '税率', '含税总金额', '回扣', '备注']
     const hr = ws.getRow(3)
     header.forEach((h, i) => {
       const c = hr.getCell(i + 1)
       c.value = h
-      c.font = { name: '微软雅黑', size: 10, bold: true }
+      c.font = { name: '微软雅黑', size: 9, bold: true }
       c.alignment = { horizontal: 'center', vertical: 'middle' }
       c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEAF2FF' } }
       c.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } }
     })
-    hr.height = 22
+    hr.height = 18
     rows.forEach((r, idx) => {
       const row = ws.getRow(4 + idx)
+      row.height = 18
       row.getCell(1).value = r.name || ''
       row.getCell(2).value = r.qty
       row.getCell(3).value = r.order_price
@@ -218,7 +223,7 @@ router.get('/sheets/:id/xlsx', async (req, res) => {
       row.getCell(7).value = r.rebate
       row.getCell(8).value = r.remark || ''
       row.eachCell((c, col) => {
-        c.font = { name: '微软雅黑', size: 10 }
+        c.font = { name: '微软雅黑', size: 9 }
         c.alignment = { horizontal: col === 1 || col === 8 ? 'left' : 'center', vertical: 'middle', wrapText: col === 1 }
         c.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } }
         if (col === 3 || col === 4) c.numFmt = '0.0000'
@@ -232,7 +237,7 @@ router.get('/sheets/:id/xlsx', async (req, res) => {
     sumRow.getCell(6).value = rows.reduce((s, r) => s + num(r.total_amount ?? num(r.order_price) * num(r.qty)), 0)
     sumRow.getCell(7).value = rows.reduce((s, r) => s + num(r.rebate), 0)
     sumRow.eachCell((c, col) => {
-      c.font = { name: '微软雅黑', size: 10, bold: true }
+      c.font = { name: '微软雅黑', size: 9, bold: true }
       c.alignment = { horizontal: col === 1 ? 'left' : 'center' }
       c.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } }
       if (col === 2) c.numFmt = '#,##0'
@@ -240,7 +245,7 @@ router.get('/sheets/:id/xlsx', async (req, res) => {
     })
     ws.getColumn(1).alignment = { wrapText: true, vertical: 'middle' }
     const buf = await wb.xlsx.writeBuffer()
-    const fileName = `佣金明细-${row.customer}-${period || '未填期间'}.xlsx`.replace(/[\\/:*?"<>|]/g, '_')
+    const fileName = `佣金明细-${row.customer}-${periodShort || '未填期间'}.xlsx`.replace(/[\\/:*?"<>|]/g, '_')
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
     res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(fileName)}`)
     res.send(Buffer.from(buf))
